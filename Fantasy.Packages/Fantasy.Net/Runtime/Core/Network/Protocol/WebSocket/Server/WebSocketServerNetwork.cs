@@ -19,22 +19,22 @@ public class WebSocketServerNetwork : ANetwork
     private HttpListener _httpListener;
     private readonly Dictionary<uint, INetworkChannel> _connectionChannel = new Dictionary<uint, INetworkChannel>();
 
-    public void Initialize(NetworkTarget networkTarget, int port)
+    public void Initialize(NetworkTarget networkTarget, string bindIp, int port)
     {
         base.Initialize(NetworkType.Server, NetworkProtocolType.WebSocket, networkTarget, false);
-        
+
         try
         {
             _random = new Random();
             _httpListener = new HttpListener();
-            StartAcceptAsync(port).Coroutine();
+            StartAcceptAsync(bindIp, port).Coroutine();
         }
         catch (HttpListenerException e)
         {
             if (e.ErrorCode == 5)
             {
                 throw new Exception($"如果看下如下错误请尝试下面的办法:" +
-                                    $"1.用管理员运行CMD 输入命令: netsh http add urlacl url=http://+:8080/ user=Everyone。" +
+                                    $"1.用管理员运行CMD 输入命令: netsh http add urlacl url=http://{bindIp}:{port}/ user=Everyone。" +
                                     $"2.用管理员身份运行编辑器或者程序。", e);
             }
 
@@ -156,9 +156,9 @@ public class WebSocketServerNetwork : ANetwork
         return false;
     }
 
-    private async FTask StartAcceptAsync(int port)
+    private async FTask StartAcceptAsync(string bindIp, int port)
     {
-        var listenUrl = $"http://+:{port}/";
+        var listenUrl = $"http://{bindIp}:{port}/";
         _httpListener.Prefixes.Add(listenUrl);
         _httpListener.Start();
         Log.Info($"SceneConfigId = {Scene.SceneConfigId} WebSocketServer Listen {listenUrl}");

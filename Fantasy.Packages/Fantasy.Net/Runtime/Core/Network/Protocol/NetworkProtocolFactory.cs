@@ -40,7 +40,7 @@ namespace Fantasy.Network
                 case NetworkProtocolType.WebSocket:
                 {
                     var network = Entity.Create<WebSocketServerNetwork>(scene, false, true);
-                    network.Initialize(networkTarget, port);
+                    network.Initialize(networkTarget, bindIp, port);
                     return network;
                 }
                 case NetworkProtocolType.HTTP:
