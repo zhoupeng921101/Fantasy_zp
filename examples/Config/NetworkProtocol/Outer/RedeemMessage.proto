@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+// RedeemMessage.proto
+// 兑换码裁决协议（服务端权威）。
+// 设计基线：design-docs/30-redeem-code-server.md §三 行为级协议契约。
+// 玩家身份由服务端从联网会话取，请求不携带账号字段（防冒充，见 §3.1）。
+
+/// 兑换裁决结果码
+enum RedeemResultCode
+{
+	/// 成功并已授权发奖（响应附奖励列表）
+	Success = 0,
+	/// 码不存在或规整后为空
+	InvalidCode = 1,
+	/// 本账号已兑过此码（响应不附奖励列表）
+	AlreadyRedeemed = 2,
+	/// 码已过期（服务端时钟判定）
+	Expired = 3,
+	/// 全局限量已满
+	LimitReached = 4,
+	/// 服务不可用（无法建立身份 / 无法处理），客户端应提示重试、码保持可兑
+	ServiceUnavailable = 5
+}
+
+/// 兑换奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
+message RedeemRewardItem
+{
+	int32 ItemId = 1; /// 道具 id
+	int32 Count = 2; /// 数量
+}
+
+/// 客户端提交兑换码请求（玩家身份从会话取，不在请求中携带账号）
+message C2G_RedeemCodeRequest // IRequest,G2C_RedeemCodeResponse
+{
+	string Code = 1; /// 玩家提交的兑换码字符串（规整权威在服务端：服务端 trim + 转大写后查表）
+}
+/// 服务端兑换裁决响应
+message G2C_RedeemCodeResponse // IResponse
+{
+	RedeemResultCode ResultCode = 1; /// 裁决结果码
+	repeated RedeemRewardItem Rewards = 2; /// 仅 ResultCode=Success 时非空：本次应发奖励（道具 id × 数量）
+}

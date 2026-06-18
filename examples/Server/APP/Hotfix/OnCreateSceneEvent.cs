@@ -64,6 +64,8 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
             case SceneType.Gate:
             {
                 scene.AddComponent<AccountManageComponent>();
+                // 兑换码服务端权威组件:持有码表/防重记录/全局计数的 MongoDB 集合句柄。
+                scene.AddComponent<RedeemServiceComponent>();
 
                 var unit = Entity.Create<Unit>(scene);
                 
