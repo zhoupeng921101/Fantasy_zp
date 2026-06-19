@@ -1,0 +1,347 @@
+using System;
+using System.Collections.Generic;
+using Fantasy.Async;
+using Fantasy.Helper;
+using MongoDB.Driver;
+
+namespace Fantasy;
+
+/// <summary>
+/// 邮件裁决核心逻辑(服务端唯一权威)。
+/// 拉列表:该账号应收 = 活跃广播模板 + 该账号定向邮件,滤过期(服务端时钟),附每封领取态。
+/// 领取:定位邮件 → 过期(服务端时钟) → 无奖励短路 → 按账号防重(原子唯一写) → 服务端按附件库 id 抽礼包随机库。
+/// 并发原子性:
+///   - 按账号防重:mail_record 以 _id="{account}|{mailId}" 唯一,重复插入抛 DuplicateKey(SV4/SV5 不双领)。
+///     「检查未领过 + 记录已领」合并为单次原子写;抽奖在记录成功之后(记录成功才认领、才抽奖发奖),
+///     不做「先抽奖发响应、再记录」(那会并发双领,设计 §五)。
+/// 失败/边界分支不写记录、不抛异常,以结果码回包(SV8/SV11)。
+/// 设计基线:design-docs/32-mail-server.md §二/§三/§五。
+/// </summary>
+public static class MailDecisionHelper
+{
+    /// <summary>MongoDB 重复键错误码。</summary>
+    private const int DuplicateKeyErrorCode = 11000;
+
+    /// <summary>对外邮件标识前缀:广播模板。</summary>
+    private const string BroadcastPrefix = "t";
+
+    /// <summary>对外邮件标识前缀:定向邮件。</summary>
+    private const string DirectedPrefix = "d";
+
+    // ── 拉邮件列表 ──────────────────────────────────────────────
+
+    /// <summary>
+    /// 拉一个账号应收的邮件列表。account 为服务端从会话取得的设备账号(非客户端自报)。
+    /// 应收 = 活跃广播模板(全服) + 该账号定向邮件,均滤掉已过期(服务端时钟);每封附该账号领取态。
+    /// 返回结果码(Success / ServiceUnavailable) + 邮件列表项。
+    /// </summary>
+    public static async FTask<(MailClaimResultCode resultCode, List<MailListItem> mails)> List(
+        MailServiceComponent self, string account)
+    {
+        var emptyMails = new List<MailListItem>();
+
+        // 服务未就绪(MongoDB 不可达):返「服务不可用」,客户端显示空列表 / 提示,不阻断玩法(设计 §四)。
+        if (self.Templates == null || self.Directed == null || self.Records == null)
+        {
+            return (MailClaimResultCode.ServiceUnavailable, emptyMails);
+        }
+
+        var nowMs = TimeHelper.Now;
+
+        // 该账号已领记录:一次查出,供列表标领取态(O(1) 命中,不逐封查库)。
+        var claimedSet = await QueryClaimedSet(self.Records, account);
+
+        var mails = new List<MailListItem>();
+
+        // 广播模板(全服应收):缓存遍历,滤过期。
+        foreach (var template in self.TemplateCache.Values)
+        {
+            if (IsExpired(template.SendUnixMs, template.ExpireDays, self.GlobalRetainDays, nowMs))
+            {
+                continue; // 已过期不下发(SV2)。
+            }
+            var mailId = BroadcastPrefix + template.TemplateId;
+            mails.Add(BuildListItem(
+                mailId, template.SenderTextId, template.TitleTextId, template.ContentTextId,
+                template.SendUnixMs, template.RewardId, claimedSet.Contains(mailId)));
+        }
+
+        // 定向邮件(仅该账号应收):按 Account 查,滤过期。
+        var directedFilter = Builders<MailDirectedDoc>.Filter.Eq(x => x.Account, account);
+        var directedDocs = await self.Directed.Find(directedFilter).ToListAsync();
+        foreach (var doc in directedDocs)
+        {
+            if (IsExpired(doc.SendUnixMs, doc.ExpireDays, self.GlobalRetainDays, nowMs))
+            {
+                continue;
+            }
+            var mailId = DirectedPrefix + doc.DirectedId;
+            mails.Add(BuildListItem(
+                mailId, doc.SenderTextId, doc.TitleTextId, doc.ContentTextId,
+                doc.SendUnixMs, doc.RewardId, claimedSet.Contains(mailId)));
+        }
+
+        return (MailClaimResultCode.Success, mails);
+    }
+
+    /// <summary>查该账号全部已领邮件标识集合(供列表标领取态)。</summary>
+    private static async FTask<HashSet<string>> QueryClaimedSet(IMongoCollection<MailClaimRecordDoc> records, string account)
+    {
+        var filter = Builders<MailClaimRecordDoc>.Filter.Eq(x => x.Account, account);
+        var docs = await records.Find(filter).ToListAsync();
+        var set = new HashSet<string>();
+        foreach (var d in docs)
+        {
+            set.Add(d.MailId);
+        }
+        return set;
+    }
+
+    /// <summary>列表项走对象池 Create():随响应一起发送,响应 Dispose 时归还池(零 GC 范式)。</summary>
+    private static MailListItem BuildListItem(
+        string mailId, int senderTextId, int titleTextId, int contentTextId,
+        long sendUnixMs, int rewardId, bool claimed)
+    {
+        var item = MailListItem.Create();
+        item.MailId = mailId;
+        item.SenderTextId = senderTextId;
+        item.TitleTextId = titleTextId;
+        item.ContentTextId = contentTextId;
+        item.SendUnixMs = sendUnixMs;
+        item.HasReward = rewardId != 0;
+        item.Claimed = claimed;
+        return item;
+    }
+
+    // ── 领取奖励 ──────────────────────────────────────────────
+
+    /// <summary>
+    /// 裁决一次领取。account 为服务端从会话取得的设备账号(非客户端自报)。mailId 为对外邮件标识(含 t/d 前缀)。
+    /// 返回结果码 + 成功时的奖励列表(失败时奖励列表为空)。
+    /// 顺序:定位(存在 + 属于该账号) → 过期(服务端时钟) → 无奖励短路 → 原子防重写 → 服务端抽奖。
+    /// </summary>
+    public static async FTask<(MailClaimResultCode resultCode, List<MailRewardItem> rewards)> Claim(
+        MailServiceComponent self, string account, string mailId)
+    {
+        var emptyRewards = new List<MailRewardItem>();
+
+        // 服务未就绪:返「服务不可用」,不发奖、邮件保持可领(设计 §四,不可本地放行)。
+        if (self.Templates == null || self.Directed == null || self.Records == null)
+        {
+            return (MailClaimResultCode.ServiceUnavailable, emptyRewards);
+        }
+        var records = self.Records;
+
+        // 1. 定位邮件(存在 + 属于该账号):取该邮件的有效期 + 附件库 id。定位不到 → 邮件不存在(SV8)。
+        var located = await Locate(self, account, mailId);
+        if (located == null)
+        {
+            return (MailClaimResultCode.MailNotFound, emptyRewards);
+        }
+        var (sendUnixMs, expireDays, rewardId) = located.Value;
+
+        // 2. 过期判定以服务端时钟为准(SV7),下发已滤过期但下发后到期再领须再判一次。
+        if (IsExpired(sendUnixMs, expireDays, self.GlobalRetainDays, TimeHelper.Now))
+        {
+            return (MailClaimResultCode.Expired, emptyRewards);
+        }
+
+        // 3. 无奖励邮件(附件库 id=0):纯通知,不发奖、不记录(无奖励可双领, SV6)。
+        if (rewardId == 0)
+        {
+            return (MailClaimResultCode.NoReward, emptyRewards);
+        }
+
+        // 4. 按账号防重:原子唯一写。重复即「已领过」(SV4/SV5/SV11)。
+        //    记录在抽奖之前:记录成功才认领、才抽奖发奖(防并发双领, 设计 §五)。
+        if (!await TryWriteRecord(records, account, mailId))
+        {
+            return (MailClaimResultCode.AlreadyClaimed, emptyRewards);
+        }
+
+        // 5. 服务端按附件库 id 抽礼包随机库一次,裁定奖励(客户端不申报, §五)。
+        //    库 id 未登记(抽取查无)→ 奖励列表为空但仍 Success(SV6 边界)。
+        var rewards = DrawRewards(self, rewardId);
+        return (MailClaimResultCode.Success, rewards);
+    }
+
+    /// <summary>
+    /// 定位邮件:按对外标识(t=广播 / d=定向)取该邮件的(发件时间, 有效期天数, 附件库 id)。
+    /// 广播取缓存模板;定向查库且校验属于该账号(不属于该账号 → 视作不存在,防领他人邮件, SV8/SV9)。
+    /// 定位不到返回 null。
+    /// </summary>
+    private static async FTask<(long sendUnixMs, int expireDays, int rewardId)?> Locate(
+        MailServiceComponent self, string account, string mailId)
+    {
+        if (string.IsNullOrEmpty(mailId) || mailId.Length < 2)
+        {
+            return null;
+        }
+
+        var prefix = mailId.Substring(0, 1);
+        var rawId = mailId.Substring(1);
+
+        if (prefix == BroadcastPrefix)
+        {
+            if (self.TemplateCache.TryGetValue(rawId, out var template))
+            {
+                return (template.SendUnixMs, template.ExpireDays, template.RewardId);
+            }
+            return null;
+        }
+
+        if (prefix == DirectedPrefix && self.Directed != null)
+        {
+            var filter = Builders<MailDirectedDoc>.Filter.And(
+                Builders<MailDirectedDoc>.Filter.Eq(x => x.DirectedId, rawId),
+                Builders<MailDirectedDoc>.Filter.Eq(x => x.Account, account));
+            var doc = await self.Directed.Find(filter).FirstOrDefaultAsync();
+            if (doc != null)
+            {
+                return (doc.SendUnixMs, doc.ExpireDays, doc.RewardId);
+            }
+            return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 原子写入按账号领取记录:_id="{account}|{mailId}" 唯一。
+    /// 首次写入返回 true(可发奖);重复(DuplicateKey)返回 false(= 已领过)。
+    /// 这一步合并了「检查未领过 + 记录已领」,是并发防重领的原子点(SV5)。
+    /// </summary>
+    private static async FTask<bool> TryWriteRecord(IMongoCollection<MailClaimRecordDoc> records, string account, string mailId)
+    {
+        var doc = new MailClaimRecordDoc
+        {
+            UniqueKey = $"{account}|{mailId}",
+            Account = account,
+            MailId = mailId,
+            ClaimedUnixMs = TimeHelper.Now
+        };
+
+        try
+        {
+            await records.InsertOneAsync(doc);
+            return true;
+        }
+        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return false;
+        }
+        catch (MongoCommandException e) when (e.Code == DuplicateKeyErrorCode)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 服务端按礼包随机库 id 抽一次,返回「道具 id × 数量」。
+    /// 按 Rate 权重在同 Index 的条目中抽一条(抽中概率 = rate / 同 Index 全部 rate 之和)。
+    /// 库 id 未登记(缓存查无)或奖池为空 → 返回空列表(SV6 边界,不抛)。
+    /// 奖励项走对象池 Create():随响应发送,响应 Dispose 时归还池(零 GC 范式)。
+    /// </summary>
+    private static List<MailRewardItem> DrawRewards(MailServiceComponent self, int rewardId)
+    {
+        var rewards = new List<MailRewardItem>();
+        if (!self.GiftPoolCache.TryGetValue(rewardId, out var pool) || pool.Count == 0)
+        {
+            return rewards; // 库 id 未登记 / 空奖池 → 奖励列表为空(SV6)。
+        }
+
+        var picked = WeightedPick(pool);
+        if (picked != null)
+        {
+            var item = MailRewardItem.Create();
+            item.ItemId = picked.ItemId;
+            item.Count = picked.Num;
+            rewards.Add(item);
+        }
+        return rewards;
+    }
+
+    /// <summary>按 Rate 权重抽一条;全部 rate&lt;=0 时回退取第一条;空池返回 null。</summary>
+    private static GiftPoolEntryDoc? WeightedPick(List<GiftPoolEntryDoc> pool)
+    {
+        var totalRate = 0L;
+        foreach (var e in pool)
+        {
+            if (e.Rate > 0)
+            {
+                totalRate += e.Rate;
+            }
+        }
+        if (totalRate <= 0)
+        {
+            return pool[0]; // 无有效权重时取第一条(配置兜底,不抛)。
+        }
+
+        // [1, totalRate] 内取一个点,落在哪个区间即抽中(用 Random.Shared 避免同毫秒重复种子)。
+        var roll = (long)(Random.Shared.NextDouble() * totalRate) + 1;
+        if (roll > totalRate)
+        {
+            roll = totalRate;
+        }
+        var cumulative = 0L;
+        foreach (var e in pool)
+        {
+            if (e.Rate <= 0)
+            {
+                continue;
+            }
+            cumulative += e.Rate;
+            if (roll <= cumulative)
+            {
+                return e;
+            }
+        }
+        return pool[pool.Count - 1];
+    }
+
+    // ── 进程内发奖入口(设计 §3.5) ────────────────────────────
+
+    /// <summary>
+    /// 服务端进程内发奖入口:给某账号投一封定向邮件(初始未领),供未来排行榜服务端结算复用(SV10)。
+    /// 走与运营邮件同一套领取 / 防重 / 抽奖机制——只往 mail_directed 插一条,该账号下次拉列表即可见、可领。
+    /// 返回投递的对外邮件标识("d{guid}");服务不可用(MongoDB 未就绪)返回 null(调用方据此重试)。
+    /// 注:发奖入口只负责「投一封」;结算幂等(同一次结算只投一次)是调用方的责任(设计 §五),不在本入口。
+    /// </summary>
+    public static async FTask<string?> SendMailTo(
+        MailServiceComponent self, string account,
+        int senderTextId, int titleTextId, int contentTextId, int expireDays, int rewardId)
+    {
+        if (self.Directed == null)
+        {
+            return null;
+        }
+
+        var directedId = Guid.NewGuid().ToString("N");
+        var doc = new MailDirectedDoc
+        {
+            DirectedId = directedId,
+            Account = account,
+            SenderTextId = senderTextId,
+            TitleTextId = titleTextId,
+            ContentTextId = contentTextId,
+            ExpireDays = expireDays,
+            RewardId = rewardId,
+            SendUnixMs = TimeHelper.Now
+        };
+        await self.Directed.InsertOneAsync(doc);
+        return DirectedPrefix + directedId;
+    }
+
+    // ── 工具 ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// 过期判定(服务端时钟):now &gt; 发件时间 + 有效期天数。
+    /// 有效期 &lt;=0 用全局 retain_days 兜底(设计决策, mail_global retain_days=30)。
+    /// </summary>
+    private static bool IsExpired(long sendUnixMs, int expireDays, int globalRetainDays, long nowMs)
+    {
+        var effectiveDays = expireDays > 0 ? expireDays : globalRetainDays;
+        var expireAtMs = sendUnixMs + (long)effectiveDays * 24 * 60 * 60 * 1000;
+        return nowMs > expireAtMs;
+    }
+}

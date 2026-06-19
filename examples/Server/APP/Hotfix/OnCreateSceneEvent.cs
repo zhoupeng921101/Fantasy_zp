@@ -68,6 +68,8 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
                 scene.AddComponent<RedeemServiceComponent>();
                 // 排行榜服务端权威组件:持有全服分数集合句柄与榜定义缓存。
                 scene.AddComponent<RankServiceComponent>();
+                // 邮件服务端权威组件:持有运营模板/定向邮件/领取记录/礼包库的 MongoDB 集合句柄。
+                scene.AddComponent<MailServiceComponent>();
 
                 var unit = Entity.Create<Unit>(scene);
                 

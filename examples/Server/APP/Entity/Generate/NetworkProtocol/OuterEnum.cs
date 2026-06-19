@@ -4,6 +4,37 @@
 namespace Fantasy
 {
 	/// <summary>
+	/// 领取奖励裁决结果码（§3.4）
+	/// </summary>
+	public enum MailClaimResultCode
+	{
+		/// <summary>
+		/// 成功并已授权发奖（响应附奖励列表；库 id 未登记时奖励列表为空但仍 Success，见 SV6）
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 按邮件标识 + 会话账号定位不到这封邮件（不崩，以结果码回包）
+		/// </summary>
+		MailNotFound = 1,
+		/// <summary>
+		/// 该邮件无附件（附件库 id = 0，纯通知邮件）；不发奖
+		/// </summary>
+		NoReward = 2,
+		/// <summary>
+		/// 本账号已领过此邮件（响应不附奖励列表）
+		/// </summary>
+		AlreadyClaimed = 3,
+		/// <summary>
+		/// 邮件有有效期且服务端时钟已超过（过期判定用服务端时钟）
+		/// </summary>
+		Expired = 4,
+		/// <summary>
+		/// 服务不可用（无法建立身份 / 无法处理）；客户端提示重试、邮件保持可领、不本地放行（§四）
+		/// </summary>
+		ServiceUnavailable = 5
+	}
+
+	/// <summary>
 	/// 上报成绩裁决结果码（§3.2）
 	/// </summary>
 	public enum RankSubmitResultCode

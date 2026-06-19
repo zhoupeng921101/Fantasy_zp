@@ -510,6 +510,346 @@ namespace Fantasy
         [ProtoMember(3)]
         public Position Pos { get; set; }
     }
+    /// <summary>
+    /// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class MailListItem : AMessage, IDisposable
+    {
+        public static MailListItem Create(bool autoReturn = true)
+        {
+            var mailListItem = MessageObjectPool<MailListItem>.Rent();
+            mailListItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                mailListItem.SetIsPool(false);
+            }
+            
+            return mailListItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MailId = default;
+            SenderTextId = default;
+            TitleTextId = default;
+            ContentTextId = default;
+            SendUnixMs = default;
+            HasReward = default;
+            Claimed = default;
+            MessageObjectPool<MailListItem>.Return(this);
+        }
+        /// <summary>
+        /// 邮件标识（领取时回传定位；广播邮件与定向邮件用同一标识空间，客户端无需区分）
+        /// </summary>
+        [ProtoMember(1)]
+        public string MailId { get; set; }
+        /// <summary>
+        /// 发件人（多语言 textId 占位）
+        /// </summary>
+        [ProtoMember(2)]
+        public int SenderTextId { get; set; }
+        /// <summary>
+        /// 标题（多语言 textId 占位）
+        /// </summary>
+        [ProtoMember(3)]
+        public int TitleTextId { get; set; }
+        /// <summary>
+        /// 正文（多语言 textId 占位）
+        /// </summary>
+        [ProtoMember(4)]
+        public int ContentTextId { get; set; }
+        /// <summary>
+        /// 收件/发件时间（服务端 Unix 毫秒）
+        /// </summary>
+        [ProtoMember(5)]
+        public long SendUnixMs { get; set; }
+        /// <summary>
+        /// 是否有附件（附件库 id != 0；客户端据此画领取按钮/红点）
+        /// </summary>
+        [ProtoMember(6)]
+        public bool HasReward { get; set; }
+        /// <summary>
+        /// 该账号对此邮件的领取态（已领=true / 未领=false）
+        /// </summary>
+        [ProtoMember(7)]
+        public bool Claimed { get; set; }
+    }
+    /// <summary>
+    /// 领取响应内单条奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class MailRewardItem : AMessage, IDisposable
+    {
+        public static MailRewardItem Create(bool autoReturn = true)
+        {
+            var mailRewardItem = MessageObjectPool<MailRewardItem>.Rent();
+            mailRewardItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                mailRewardItem.SetIsPool(false);
+            }
+            
+            return mailRewardItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ItemId = default;
+            Count = default;
+            MessageObjectPool<MailRewardItem>.Return(this);
+        }
+        /// <summary>
+        /// 道具 id
+        /// </summary>
+        [ProtoMember(1)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 数量
+        /// </summary>
+        [ProtoMember(2)]
+        public int Count { get; set; }
+    }
+    /// <summary>
+    /// 客户端拉邮件列表请求（无业务字段:身份从会话取,不携带账号;触发时机由客户端定）（§3.1）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_MailListRequest : AMessage, IRequest
+    {
+        public static C2G_MailListRequest Create(bool autoReturn = true)
+        {
+            var c2G_MailListRequest = MessageObjectPool<C2G_MailListRequest>.Rent();
+            c2G_MailListRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_MailListRequest.SetIsPool(false);
+            }
+            
+            return c2G_MailListRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_MailListRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_MailListRequest; } 
+        [ProtoIgnore]
+        public G2C_MailListResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端拉列表响应（该账号应收、未过期的邮件 + 每封领取态）（§3.2）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_MailListResponse : AMessage, IResponse
+    {
+        public static G2C_MailListResponse Create(bool autoReturn = true)
+        {
+            var g2C_MailListResponse = MessageObjectPool<G2C_MailListResponse>.Rent();
+            g2C_MailListResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_MailListResponse.SetIsPool(false);
+            }
+            
+            return g2C_MailListResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            foreach (var __t in Mails) __t.Dispose();
+            Mails.Clear();
+            MessageObjectPool<G2C_MailListResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_MailListResponse; } 
+        [ProtoMember(3)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 拉列表只有 Success / ServiceUnavailable 两种
+        /// </summary>
+        [ProtoMember(1)]
+        public MailClaimResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 该账号应收（活跃广播 + 定向）且未过期的邮件；已过期不下发（服务端时钟已滤）
+        /// </summary>
+        [ProtoMember(2)]
+        public List<MailListItem> Mails { get; set; } = new List<MailListItem>();
+    }
+    /// <summary>
+    /// 客户端领取一封邮件请求（身份从会话取，不携带账号）（§3.3）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_MailClaimRequest : AMessage, IRequest
+    {
+        public static C2G_MailClaimRequest Create(bool autoReturn = true)
+        {
+            var c2G_MailClaimRequest = MessageObjectPool<C2G_MailClaimRequest>.Rent();
+            c2G_MailClaimRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_MailClaimRequest.SetIsPool(false);
+            }
+            
+            return c2G_MailClaimRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MailId = default;
+            MessageObjectPool<C2G_MailClaimRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_MailClaimRequest; } 
+        [ProtoIgnore]
+        public G2C_MailClaimResponse ResponseType { get; set; }
+        /// <summary>
+        /// 要领取的那封邮件标识（来自拉列表响应）；定位不到按「邮件不存在」返
+        /// </summary>
+        [ProtoMember(1)]
+        public string MailId { get; set; }
+    }
+    /// <summary>
+    /// 服务端领取裁决响应（结果码 + 成功时奖励列表）（§3.4）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_MailClaimResponse : AMessage, IResponse
+    {
+        public static G2C_MailClaimResponse Create(bool autoReturn = true)
+        {
+            var g2C_MailClaimResponse = MessageObjectPool<G2C_MailClaimResponse>.Rent();
+            g2C_MailClaimResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_MailClaimResponse.SetIsPool(false);
+            }
+            
+            return g2C_MailClaimResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            foreach (var __t in Rewards) __t.Dispose();
+            Rewards.Clear();
+            MessageObjectPool<G2C_MailClaimResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_MailClaimResponse; } 
+        [ProtoMember(3)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public MailClaimResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 仅 ResultCode=Success 时非空：服务端按该邮件附件库 id 抽礼包随机库一次的产物（道具 id × 数量）
+        /// </summary>
+        [ProtoMember(2)]
+        public List<MailRewardItem> Rewards { get; set; } = new List<MailRewardItem>();
+    }
     [Serializable]
     [ProtoContract]
     public partial class C2G_TestEmptyMessage : AMessage, IMessage

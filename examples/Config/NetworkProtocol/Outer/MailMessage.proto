@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+// MailMessage.proto
+// 邮件运营来源 + 领奖裁决协议（服务端权威）。
+// 设计基线：design-docs/32-mail-server.md §三 行为级协议契约。
+// 玩家身份由服务端从联网会话取，请求不携带账号字段（防领他人/拉他人收件箱，见 §3.1 / §3.3）。
+// 本增量只做运营推送来源 + 领奖校验（防重 + 服务端抽奖 + 过期）；收件箱表现（排序/已读/删除/红点）留客户端（§读前必看 第 5 条）。
+
+/// 领取奖励裁决结果码（§3.4）
+enum MailClaimResultCode
+{
+	/// 成功并已授权发奖（响应附奖励列表；库 id 未登记时奖励列表为空但仍 Success，见 SV6）
+	Success = 0,
+	/// 按邮件标识 + 会话账号定位不到这封邮件（不崩，以结果码回包）
+	MailNotFound = 1,
+	/// 该邮件无附件（附件库 id = 0，纯通知邮件）；不发奖
+	NoReward = 2,
+	/// 本账号已领过此邮件（响应不附奖励列表）
+	AlreadyClaimed = 3,
+	/// 邮件有有效期且服务端时钟已超过（过期判定用服务端时钟）
+	Expired = 4,
+	/// 服务不可用（无法建立身份 / 无法处理）；客户端提示重试、邮件保持可领、不本地放行（§四）
+	ServiceUnavailable = 5
+}
+
+/// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
+message MailListItem
+{
+	string MailId = 1; /// 邮件标识（领取时回传定位；广播邮件与定向邮件用同一标识空间，客户端无需区分）
+	int32 SenderTextId = 2; /// 发件人（多语言 textId 占位）
+	int32 TitleTextId = 3; /// 标题（多语言 textId 占位）
+	int32 ContentTextId = 4; /// 正文（多语言 textId 占位）
+	int64 SendUnixMs = 5; /// 收件/发件时间（服务端 Unix 毫秒）
+	bool HasReward = 6; /// 是否有附件（附件库 id != 0；客户端据此画领取按钮/红点）
+	bool Claimed = 7; /// 该账号对此邮件的领取态（已领=true / 未领=false）
+}
+
+/// 领取响应内单条奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
+message MailRewardItem
+{
+	int32 ItemId = 1; /// 道具 id
+	int32 Count = 2; /// 数量
+}
+
+/// 客户端拉邮件列表请求（无业务字段:身份从会话取,不携带账号;触发时机由客户端定）（§3.1）
+message C2G_MailListRequest // IRequest,G2C_MailListResponse
+{
+
+}
+/// 服务端拉列表响应（该账号应收、未过期的邮件 + 每封领取态）（§3.2）
+message G2C_MailListResponse // IResponse
+{
+	MailClaimResultCode ResultCode = 1; /// 拉列表只有 Success / ServiceUnavailable 两种
+	repeated MailListItem Mails = 2; /// 该账号应收（活跃广播 + 定向）且未过期的邮件；已过期不下发（服务端时钟已滤）
+}
+
+/// 客户端领取一封邮件请求（身份从会话取，不携带账号）（§3.3）
+message C2G_MailClaimRequest // IRequest,G2C_MailClaimResponse
+{
+	string MailId = 1; /// 要领取的那封邮件标识（来自拉列表响应）；定位不到按「邮件不存在」返
+}
+/// 服务端领取裁决响应（结果码 + 成功时奖励列表）（§3.4）
+message G2C_MailClaimResponse // IResponse
+{
+	MailClaimResultCode ResultCode = 1; /// 裁决结果码
+	repeated MailRewardItem Rewards = 2; /// 仅 ResultCode=Success 时非空：服务端按该邮件附件库 id 抽礼包随机库一次的产物（道具 id × 数量）
+}
