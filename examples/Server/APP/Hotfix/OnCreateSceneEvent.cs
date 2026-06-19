@@ -66,6 +66,8 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
                 scene.AddComponent<AccountManageComponent>();
                 // 兑换码服务端权威组件:持有码表/防重记录/全局计数的 MongoDB 集合句柄。
                 scene.AddComponent<RedeemServiceComponent>();
+                // 排行榜服务端权威组件:持有全服分数集合句柄与榜定义缓存。
+                scene.AddComponent<RankServiceComponent>();
 
                 var unit = Entity.Create<Unit>(scene);
                 

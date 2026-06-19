@@ -2878,6 +2878,293 @@ namespace Fantasy
         public TestMemoryPackInfo Info { get; set; }
     }
     /// <summary>
+    /// 榜单一条条目：名次 + 玩家展示名 + 分数（§3.5）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class RankEntryItem : AMessage, IDisposable
+    {
+        public static RankEntryItem Create(bool autoReturn = true)
+        {
+            var rankEntryItem = MessageObjectPool<RankEntryItem>.Rent();
+            rankEntryItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                rankEntryItem.SetIsPool(false);
+            }
+            
+            return rankEntryItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Rank = default;
+            PlayerName = default;
+            Score = default;
+            MessageObjectPool<RankEntryItem>.Return(this);
+        }
+        /// <summary>
+        /// 服务端算好的名次（1 起，顺序名次，同分各占唯一名次）
+        /// </summary>
+        [ProtoMember(1)]
+        public int Rank { get; set; }
+        /// <summary>
+        /// 玩家展示名：本增量回账号标识占位，客户端有本地昵称则替换（§3.5 注 / O5）
+        /// </summary>
+        [ProtoMember(2)]
+        public string PlayerName { get; set; }
+        /// <summary>
+        /// 该条目的最佳成绩
+        /// </summary>
+        [ProtoMember(3)]
+        public long Score { get; set; }
+    }
+    /// <summary>
+    /// 客户端上报一次成绩请求（玩法结束提交；身份从会话取，不携带账号）（§3.1）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_RankSubmitScoreRequest : AMessage, IRequest
+    {
+        public static C2G_RankSubmitScoreRequest Create(bool autoReturn = true)
+        {
+            var c2G_RankSubmitScoreRequest = MessageObjectPool<C2G_RankSubmitScoreRequest>.Rent();
+            c2G_RankSubmitScoreRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_RankSubmitScoreRequest.SetIsPool(false);
+            }
+            
+            return c2G_RankSubmitScoreRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            RankId = default;
+            Score = default;
+            MessageObjectPool<C2G_RankSubmitScoreRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_RankSubmitScoreRequest; } 
+        [ProtoIgnore]
+        public G2C_RankSubmitScoreResponse ResponseType { get; set; }
+        /// <summary>
+        /// 这次成绩提交到哪个榜（设计 22 的榜唯一 id）
+        /// </summary>
+        [ProtoMember(1)]
+        public int RankId { get; set; }
+        /// <summary>
+        /// 客户端玩法这一局算出的成绩值（容纳 rank_condition 同量级 long；负/0 由服务端按入榜要求过滤）
+        /// </summary>
+        [ProtoMember(2)]
+        public long Score { get; set; }
+    }
+    /// <summary>
+    /// 服务端上报裁决响应（结果码 + 当前最佳）（§3.2）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_RankSubmitScoreResponse : AMessage, IResponse
+    {
+        public static G2C_RankSubmitScoreResponse Create(bool autoReturn = true)
+        {
+            var g2C_RankSubmitScoreResponse = MessageObjectPool<G2C_RankSubmitScoreResponse>.Rent();
+            g2C_RankSubmitScoreResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_RankSubmitScoreResponse.SetIsPool(false);
+            }
+            
+            return g2C_RankSubmitScoreResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            BestScore = default;
+            MessageObjectPool<G2C_RankSubmitScoreResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_RankSubmitScoreResponse; } 
+        [ProtoMember(3)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public RankSubmitResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 此账号该榜当前最佳成绩（便于客户端显示「你的最佳分」；无成绩为 0）
+        /// </summary>
+        [ProtoMember(2)]
+        public long BestScore { get; set; }
+    }
+    /// <summary>
+    /// 客户端查榜请求（不分页，返展示上限条数；身份从会话取，不携带账号）（§3.4）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_RankQueryRequest : AMessage, IRequest
+    {
+        public static C2G_RankQueryRequest Create(bool autoReturn = true)
+        {
+            var c2G_RankQueryRequest = MessageObjectPool<C2G_RankQueryRequest>.Rent();
+            c2G_RankQueryRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_RankQueryRequest.SetIsPool(false);
+            }
+            
+            return c2G_RankQueryRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            RankId = default;
+            MessageObjectPool<C2G_RankQueryRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_RankQueryRequest; } 
+        [ProtoIgnore]
+        public G2C_RankQueryResponse ResponseType { get; set; }
+        /// <summary>
+        /// 查哪个榜
+        /// </summary>
+        [ProtoMember(1)]
+        public int RankId { get; set; }
+    }
+    /// <summary>
+    /// 服务端查榜响应（前 N 名条目 + 自己名次 + 自己分数）（§3.5）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_RankQueryResponse : AMessage, IResponse
+    {
+        public static G2C_RankQueryResponse Create(bool autoReturn = true)
+        {
+            var g2C_RankQueryResponse = MessageObjectPool<G2C_RankQueryResponse>.Rent();
+            g2C_RankQueryResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_RankQueryResponse.SetIsPool(false);
+            }
+            
+            return g2C_RankQueryResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            foreach (var __t in Entries) __t.Dispose();
+            Entries.Clear();
+            MyRank = default;
+            MyScore = default;
+            MessageObjectPool<G2C_RankQueryResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_RankQueryResponse; } 
+        [ProtoMember(5)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public RankQueryResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 已按分数降序 + 同分达到时间升序排好、截到展示上限（show_count_max）的条目
+        /// </summary>
+        [ProtoMember(2)]
+        public List<RankEntryItem> Entries { get; set; } = new List<RankEntryItem>();
+        /// <summary>
+        /// 请求者（会话账号）在全服的名次；未入榜（无成绩/低于入榜要求/超入榜上限）= 0
+        /// </summary>
+        [ProtoMember(3)]
+        public int MyRank { get; set; }
+        /// <summary>
+        /// 请求者当前最佳成绩；无成绩 = 0（名次 0 时分数照回供「距上榜差值」显示）
+        /// </summary>
+        [ProtoMember(4)]
+        public long MyScore { get; set; }
+    }
+    /// <summary>
     /// 兑换奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
     /// </summary>
     [Serializable]

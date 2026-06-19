@@ -67,8 +67,12 @@ namespace Fantasy
         public const uint G2C_MapUnsubscribeSphereEventResponse = 402663196;
         public const uint C2G_TestMemoryPackRequest = 285222685;
         public const uint G2C_TestMemoryPackResponse = 419440413;
-        public const uint C2G_RedeemCodeRequest = 268445470;
-        public const uint G2C_RedeemCodeResponse = 402663198;
+        public const uint C2G_RankSubmitScoreRequest = 268445470;
+        public const uint G2C_RankSubmitScoreResponse = 402663198;
+        public const uint C2G_RankQueryRequest = 268445471;
+        public const uint G2C_RankQueryResponse = 402663199;
+        public const uint C2G_RedeemCodeRequest = 268445472;
+        public const uint G2C_RedeemCodeResponse = 402663200;
         public const uint C2G_TestEnumMessage = 134227737;
     }
 }

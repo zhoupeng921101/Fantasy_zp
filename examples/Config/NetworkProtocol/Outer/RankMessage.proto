@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+// RankMessage.proto
+// 排行榜全服数据源协议（服务端权威）。
+// 设计基线：design-docs/31-rank-server.md §三 行为级协议契约。
+// 玩家身份由服务端从联网会话取，请求不携带账号字段（防顶替/冒充，见 §3.1 / §3.4）。
+// 本增量只做数据源（上报 + 查询），不消费榜的奖励/结算字段、不发邮件（§读前必看 第 4 条）。
+
+/// 上报成绩裁决结果码（§3.2）
+enum RankSubmitResultCode
+{
+	/// 够入榜要求且高于已存最佳 → 服务端已更新为新最佳（响应 BestScore = 本次成绩）
+	BestRefreshed = 0,
+	/// 够入榜要求但不高于已存最佳 → 接受请求但不更新（响应 BestScore = 已存最佳）
+	BestNotRefreshed = 1,
+	/// 低于该榜入榜要求 → 不进榜、不写存储（响应 BestScore = 已存最佳，无成绩则为 0）
+	BelowEnterRequirement = 2,
+	/// 榜 id 在服务端榜配置查不到（不崩，以结果码回包）
+	RankNotFound = 3,
+	/// 服务不可用（无法建立身份 / 无法处理）；客户端不阻断玩法、稍后重连可重报（§四）
+	ServiceUnavailable = 4
+}
+
+/// 查榜结果码（§3.5）
+enum RankQueryResultCode
+{
+	/// 查询成功（条目列表 + 我的名次 + 我的分数有效）
+	Success = 0,
+	/// 榜 id 在服务端榜配置查不到
+	RankNotFound = 1,
+	/// 服务不可用；客户端回退设计 22 本地源、不伪造全服名次（§四）
+	ServiceUnavailable = 2
+}
+
+/// 榜单一条条目：名次 + 玩家展示名 + 分数（§3.5）
+message RankEntryItem
+{
+	int32 Rank = 1; /// 服务端算好的名次（1 起，顺序名次，同分各占唯一名次）
+	string PlayerName = 2; /// 玩家展示名：本增量回账号标识占位，客户端有本地昵称则替换（§3.5 注 / O5）
+	int64 Score = 3; /// 该条目的最佳成绩
+}
+
+/// 客户端上报一次成绩请求（玩法结束提交；身份从会话取，不携带账号）（§3.1）
+message C2G_RankSubmitScoreRequest // IRequest,G2C_RankSubmitScoreResponse
+{
+	int32 RankId = 1; /// 这次成绩提交到哪个榜（设计 22 的榜唯一 id）
+	int64 Score = 2; /// 客户端玩法这一局算出的成绩值（容纳 rank_condition 同量级 long；负/0 由服务端按入榜要求过滤）
+}
+/// 服务端上报裁决响应（结果码 + 当前最佳）（§3.2）
+message G2C_RankSubmitScoreResponse // IResponse
+{
+	RankSubmitResultCode ResultCode = 1; /// 裁决结果码
+	int64 BestScore = 2; /// 此账号该榜当前最佳成绩（便于客户端显示「你的最佳分」；无成绩为 0）
+}
+
+/// 客户端查榜请求（不分页，返展示上限条数；身份从会话取，不携带账号）（§3.4）
+message C2G_RankQueryRequest // IRequest,G2C_RankQueryResponse
+{
+	int32 RankId = 1; /// 查哪个榜
+}
+/// 服务端查榜响应（前 N 名条目 + 自己名次 + 自己分数）（§3.5）
+message G2C_RankQueryResponse // IResponse
+{
+	RankQueryResultCode ResultCode = 1; /// 结果码
+	repeated RankEntryItem Entries = 2; /// 已按分数降序 + 同分达到时间升序排好、截到展示上限（show_count_max）的条目
+	int32 MyRank = 3; /// 请求者（会话账号）在全服的名次；未入榜（无成绩/低于入榜要求/超入榜上限）= 0
+	int64 MyScore = 4; /// 请求者当前最佳成绩；无成绩 = 0（名次 0 时分数照回供「距上榜差值」显示）
+}
