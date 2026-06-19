@@ -69,14 +69,22 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
     ///   - ItemId ← gift_random item_id   (奖品道具 id)
     ///   - Num    ← gift_random num        (数量)
     ///   - Rate   ← gift_random rate        (权重)
-    /// 本增量 1 个奖池 Index=6001(4 条),供 SV3 实物抽奖验证。
+    /// gift_pool 是奖励礼包库的共享注册表;邮件/排行榜结算的发奖都经 SendMailTo→领取→DrawRewards 读本库缓存。
+    /// 奖池 Index=6001(4 条,与客户端 gift_random 同源)供邮件 SV3 实物抽奖验证。
+    /// 排行榜结算名次档 reward 库 id(1005/1006)在客户端 gift_random 当前未登记;为使排行榜结算 SV3/SV9 能观测实物抽奖,
+    /// 此处注册验证奖池 1005/1006(同邮件播 100-102 验证样例的先例,生产可删)。
+    /// 不注册 1002:邮件运营模板(id 1-5)用 reward_id=1002 验证「库未登记→领取成功但奖励空」(邮件 SV6),
+    /// 故排行榜第 1 名档(1002)结算后领取亦走该空奖励边界(SV5),不与邮件 SV6 冲突。
     /// </summary>
     private static readonly IReadOnlyList<GiftPoolEntryDoc> GiftPoolSeeds = new List<GiftPoolEntryDoc>
     {
         new GiftPoolEntryDoc { AutoId = 1, Index = 6001, ItemId = 30001, Num = 1, Rate = 50 },
         new GiftPoolEntryDoc { AutoId = 2, Index = 6001, ItemId = 30002, Num = 1, Rate = 30 },
         new GiftPoolEntryDoc { AutoId = 3, Index = 6001, ItemId = 30004, Num = 1, Rate = 15 },
-        new GiftPoolEntryDoc { AutoId = 4, Index = 6001, ItemId = 30003, Num = 2, Rate = 5 }
+        new GiftPoolEntryDoc { AutoId = 4, Index = 6001, ItemId = 30003, Num = 2, Rate = 5 },
+        // 排行榜结算名次档验证奖池(生产可删):2-10 名档库 1005、11-100 名档库 1006。
+        new GiftPoolEntryDoc { AutoId = 1005001, Index = 1005, ItemId = 30002, Num = 2, Rate = 100 },
+        new GiftPoolEntryDoc { AutoId = 1006001, Index = 1006, ItemId = 30001, Num = 1, Rate = 100 }
     };
 
     protected override void Awake(MailServiceComponent self)

@@ -15,10 +15,16 @@ public sealed class RankServiceComponent : Entity
     /// <summary>全服分数集合(rank_score),_id 为 "{account}|{rankId}" 唯一键。Init 前 / MongoDB 不可达时为 null。</summary>
     public IMongoCollection<RankScoreDoc>? Scores;
 
+    /// <summary>结算幂等标记集合(rank_settle),_id = 榜 id。Init 前 / MongoDB 不可达时为 null。原子条件写防同周期重复结算(设计 33 §3.3)。</summary>
+    public IMongoCollection<RankSettleMarkDoc>? SettleMarks;
+
     /// <summary>
-    /// 榜定义缓存(榜 id → 入榜要求/上限)。启动时从 rank_def 集合载入,运行时只读裁决用。
-    /// 缓存仅服务「榜存在性 / 入榜要求 / 入榜上限 / 展示上限」这类静态配置查询;
-    /// 全服分数的权威永远走 MongoDB 原子操作,不读缓存(避免并发判断走偏)。
+    /// 榜定义缓存(榜 id → 榜级配置 + 结算字段 + 名次档)。启动时从 rank_def 集合载入,运行时只读裁决/结算用。
+    /// 缓存仅服务「榜存在性 / 入榜要求 / 上限 / 结算时机 / 名次档」这类静态配置查询;
+    /// 全服分数与结算幂等的权威永远走 MongoDB 原子操作,不读缓存(避免并发判断走偏)。
     /// </summary>
     public readonly Dictionary<int, RankDefDoc> DefCache = new Dictionary<int, RankDefDoc>();
+
+    /// <summary>结算节律重复定时器 id(进程内调度,设计 33 §3.4);Destroy 时取消。0 = 未起。</summary>
+    public long SettleTimerId;
 }
