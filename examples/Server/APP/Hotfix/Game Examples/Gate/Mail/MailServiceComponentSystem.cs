@@ -84,7 +84,13 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
         new GiftPoolEntryDoc { AutoId = 4, Index = 6001, ItemId = 30003, Num = 2, Rate = 5 },
         // 排行榜结算名次档验证奖池(生产可删):2-10 名档库 1005、11-100 名档库 1006。
         new GiftPoolEntryDoc { AutoId = 1005001, Index = 1005, ItemId = 30002, Num = 2, Rate = 100 },
-        new GiftPoolEntryDoc { AutoId = 1006001, Index = 1006, ItemId = 30001, Num = 1, Rate = 100 }
+        new GiftPoolEntryDoc { AutoId = 1006001, Index = 1006, ItemId = 30001, Num = 1, Rate = 100 },
+        // EVENT 头像解锁礼包(Tier 4 第 2 子单,设计 40 §3.4):
+        //   Index=6101 单项必中 ItemId=30101(EVENT 解锁道具 = 头像 id=3 avt_star)× 1。
+        //   30101 是「客户端段下一刀解析 UseEffect=5 EVENT 调 AvatarUnlockService.GrantUnlock」的道具 id 共识;
+        //   服务端工程无 Luban,只守「(道具 id 30101, 数量 1)」抵达邮件附件,不解析 UseEffect 自身。
+        //   客户端 luban item.xlsx 须含 id=30101 行(plan §3.3,本子单 server 段不交付,客户端段下一刀处理)。
+        new GiftPoolEntryDoc { AutoId = 6101001, Index = 6101, ItemId = 30101, Num = 1, Rate = 100 }
     };
 
     protected override void Awake(MailServiceComponent self)

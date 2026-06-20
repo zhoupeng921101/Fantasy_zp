@@ -15,19 +15,23 @@ namespace Fantasy;
 public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivityServiceComponent>
 {
     /// <summary>
-    /// 服务端权威活动配置表(单一来源)。本子单仅 1 条 = 每日登录奖示例(设计 39 §3.6 跑通)。
+    /// 服务端权威活动配置表(单一来源)。
     /// 字段口径(服务端权威,无 Luban 同源):
     ///   - ActivityId    ← activity.xlsx activity_id
     ///   - NameTextId    ← activity.xlsx name_text_id
     ///   - DescTextId    ← activity.xlsx desc_text_id
     ///   - Type          ← activity.xlsx type(1=Login,本子单仅接此)
-    ///   - Cycle         ← activity.xlsx cycle(1=Daily 跨日重置)
-    ///   - Target        ← activity.xlsx target(1 = 登录一次即达标)
-    ///   - Reward        ← activity.xlsx reward(礼包随机库 id;指向 gift_pool 的 Index,1005 与排行榜 2-10 名档复用同库验奖)
-    ///   - 邮件字段(展开 mail_def):SenderTextId=110700(同 mail 占位) / TitleTextId=110730 / ContentTextId=110740 /
-    ///     ExpireDays=14(同 mail 运营默认)。验收期 textId 未必有多语言条目,客户端展示落空值,不影响 SV9 真往返(看 mails 集合 + 抽奖落地)。
+    ///   - Cycle         ← activity.xlsx cycle(1=Daily 跨日重置 / 3=OneShot 永发一次性)
+    ///   - Target        ← activity.xlsx target(达标阈值)
+    ///   - Reward        ← activity.xlsx reward(礼包随机库 id;指向 gift_pool 的 Index)
+    ///   - 邮件字段(展开 mail_def):SenderTextId / TitleTextId / ContentTextId / ExpireDays
+    ///     验收期 textId 未必有多语言条目,客户端展示落空值,不影响 SV 真往返(看 mails 集合 + 抽奖落地)。
     ///   - StartAtMs=0 / EndAtMs=0(永远开放)
-    /// 后续 8 套活动 / 未来 N 套 = 加新条 + 必要时在 ActivityEvalHelper 加新 Type 分支触发钩子(设计 39 §3.5)。
+    /// 行 1 = 每日登录奖(Tier 4 第 1 子单 PASS 基线,设计 39)。
+    /// 行 2 = EVENT 头像解锁活动(Tier 4 第 2 子单,设计 40):累计登录 7 次永久解锁限定头像 avt_star。
+    ///        Reward=6101 EVENT 礼包(MailServiceComponentSystem.GiftPoolSeeds 已注册,单项必中 ItemId=30101 × 1)。
+    ///        Cycle=OneShot 一次性永发(达标后 LastClaimedCycleKey=1 永远 ≥ 1,沿 §3.3)。
+    /// 后续 N 套活动 = 加新条 + 必要时在 ActivityEvalHelper 加新 Type 分支触发钩子(设计 39 §3.5)。
     /// 生产可直接以本表运营(运营改 textId / Reward id 改本声明 + 重启 → ReconcileDefs upsert 写入已存 MongoDB 文档)。
     /// </summary>
     private static readonly IReadOnlyList<ActivityDefDoc> AuthoritativeDefs = new List<ActivityDefDoc>
@@ -44,6 +48,22 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             SenderTextId = 110700,
             TitleTextId = 110732,
             ContentTextId = 110733,
+            ExpireDays = 14,
+            StartAtMs = 0,
+            EndAtMs = 0
+        },
+        new ActivityDefDoc
+        {
+            ActivityId = 2,
+            NameTextId = 390003,  // EVENT 活动名 textId(占位,沿 §3.5)
+            DescTextId = 390004,  // EVENT 活动描述 textId(占位,沿 §3.5)
+            Type = 1,             // Login(每次登录 +1)
+            Cycle = 3,            // OneShot(永发一次性)
+            Target = 7,           // 累计登录 7 次达标
+            Reward = 6101,        // EVENT 礼包 id(GiftPoolSeeds 已注册:Index=6101 → ItemId=30101 × 1, Rate=100 单项必中)
+            SenderTextId = 110700,// 沿 mail 系统占位发件人 textId(同 activity 1)
+            TitleTextId = 390003, // EVENT 活动结算邮件标题 textId(占位,运营后续配多语言)
+            ContentTextId = 390004,
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
@@ -79,7 +99,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         // 载入配置缓存(只读裁决用,进度判定的权威始终走 MongoDB 原子操作)。
         await ReloadCache(self);
 
-        Log.Info($"ActivityServiceComponent 初始化完成,活动配置缓存条目数={self.DefCache.Count}(本子单仅含每日登录奖 activity_id=1)。");
+        Log.Info($"ActivityServiceComponent 初始化完成,活动配置缓存条目数={self.DefCache.Count}(activity_id=1 每日登录奖 + activity_id=2 EVENT 头像解锁活动)。");
     }
 
     /// <summary>
