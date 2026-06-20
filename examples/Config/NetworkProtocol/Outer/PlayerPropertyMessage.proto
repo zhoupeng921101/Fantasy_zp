@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+// PlayerPropertyMessage.proto
+// 玩家属性服务端权威协议(Tier 2 第 1 子单:金币 / 钻石 / 体力)。
+// 设计基线:design-docs/37-player-attr-server.md §3.3 行为级协议契约。
+// 玩家身份由服务端从联网会话取(GateAccountFlagComponent → Account.Name = UUID),
+// 请求不携带账号、不携带绝对余额字段(反作弊红线:服务端永不信客户端传入绝对数值,见 §3.3.2)。
+// handler 仅消费类型 + delta + reason 三字段(Code Review SV17 必拦)。
+
+/// 属性类型(本子单三类)
+enum PropertyType
+{
+	Coin = 0,        /// 金币
+	Diamond = 1,     /// 钻石
+	Stamina = 2,     /// 体力
+}
+
+/// 属性变更裁决结果码(§3.3.2 + §3.4)
+enum PropertyChangeResultCode
+{
+	/// 成功并已写库 + 推送(响应附变更后该属性余额)
+	Success = 0,
+	/// 会话未挂账号身份(35 登录失败 / 链路异常)→ 客户端段下一刀重登
+	NotLoggedIn = 1,
+	/// 类型枚举未知(协议非法)
+	UnknownType = 2,
+	/// delta 范围非法(超出 [-类型上界, +类型上界],防 Int 极值绕过校验)
+	InvalidRequest = 3,
+	/// 余额不足(当前 + delta < 0,响应 NewAmount = 当前实际余额便于客户端 toast)
+	NotEnough = 4,
+	/// 类型上界溢出(当前 + delta > 上界,响应 NewAmount = 当前实际余额)
+	OverLimit = 5,
+	/// 服务不可用(MongoDB 不可达 / 写入异常)→ 客户端段下一刀提示重试,变更未生效
+	ServiceUnavailable = 6,
+}
+
+/// 单条属性余额项(初始快照下发用,可复用)
+message PropertyAmount
+{
+	PropertyType Type = 1;     /// 属性类型
+	int64 Amount = 2;          /// 当前余额(服务端权威值)
+}
+
+/// 客户端发起属性变更声明请求(只声明相对增量 + 原因,身份从会话取)(§3.3.2)
+message C2G_PropertyChangeRequest // IRequest,G2C_PropertyChangeResponse
+{
+	PropertyType Type = 1;     /// 要变更的属性类型
+	int64 Delta = 2;           /// 有符号增量(正 = 增加 / 负 = 减少 / 消费;变长编码下 long 体积可接受,不强求 sint64 zigzag,Fantasy 导出工具不识别 sint64)
+	string Reason = 3;         /// 变更来源标识(如 "shop_item_123" / "mail_claim_456" / "stamina_consume_level_789",供后续 ledger 审计)
+}
+
+/// 服务端属性变更裁决响应(§3.3.2)
+message G2C_PropertyChangeResponse // IResponse
+{
+	PropertyChangeResultCode ResultCode = 1;   /// 裁决结果码
+	PropertyType Type = 2;                     /// 回声请求的类型(便于客户端段下一刀路由更新到对应字段)
+	int64 NewAmount = 3;                       /// 成功 = 变更后该属性新余额;NotEnough / OverLimit = 当前实际余额(供 toast「需要 X,你有 Y」);其它失败 = 0
+}
+
+/// 服务端登录后下发属性初始快照(服务端主动 push,本子单选独立 push message 而非登录响应捎带,
+/// 形态与 G2C_PropertyDeltaPush 对齐,客户端段下一刀同一处订阅)(§3.3.1 + plan D3 + O4)
+message G2C_PropertyInitSnapshot // IMessage
+{
+	repeated PropertyAmount Properties = 1;    /// 三属性当前余额(每登录一次完整下发,客户端段下一刀作初视图)
+	int32 SchemaVersion = 2;                   /// schema 版本(本子单 = 1;Tier 2+ 加字段时升版,客户端段据此识别)
+}
+
+/// 服务端属性变更主动推送(每次写库成功后服务端起,推送目标 = 该 UUID 在线全部会话,§3.3.3 + §5.4)
+/// 推送是「绝对余额快照」非「相对变更流水」,丢失 = 下次登录拉快照对齐(O6 不重试)
+message G2C_PropertyDeltaPush // IMessage
+{
+	PropertyType Type = 1;     /// 变更的属性类型
+	int64 NewAmount = 2;       /// 变更后该属性新余额(绝对值,客户端段下一刀直接覆盖本地视图)
+	string Reason = 3;         /// 变更来源标识(回声触发方传入的 reason,供客户端段下一刀做 toast / 弹奖动画的来源识别)
+}

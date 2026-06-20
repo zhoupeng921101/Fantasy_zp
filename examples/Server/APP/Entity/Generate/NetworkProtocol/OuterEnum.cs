@@ -35,6 +35,60 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 属性类型(本子单三类)
+	/// </summary>
+	public enum PropertyType
+	{
+		/// <summary>
+		/// 金币
+		/// </summary>
+		Coin = 0,
+		/// <summary>
+		/// 钻石
+		/// </summary>
+		Diamond = 1,
+		/// <summary>
+		/// 体力
+		/// </summary>
+		Stamina = 2
+	}
+
+	/// <summary>
+	/// 属性变更裁决结果码(§3.3.2 + §3.4)
+	/// </summary>
+	public enum PropertyChangeResultCode
+	{
+		/// <summary>
+		/// 成功并已写库 + 推送(响应附变更后该属性余额)
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号身份(35 登录失败 / 链路异常)→ 客户端段下一刀重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 类型枚举未知(协议非法)
+		/// </summary>
+		UnknownType = 2,
+		/// <summary>
+		/// delta 范围非法(超出 [-类型上界, +类型上界],防 Int 极值绕过校验)
+		/// </summary>
+		InvalidRequest = 3,
+		/// <summary>
+		/// 余额不足(当前 + delta < 0,响应 NewAmount = 当前实际余额便于客户端 toast)
+		/// </summary>
+		NotEnough = 4,
+		/// <summary>
+		/// 类型上界溢出(当前 + delta > 上界,响应 NewAmount = 当前实际余额)
+		/// </summary>
+		OverLimit = 5,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 写入异常)→ 客户端段下一刀提示重试,变更未生效
+		/// </summary>
+		ServiceUnavailable = 6
+	}
+
+	/// <summary>
 	/// 上报成绩裁决结果码（§3.2）
 	/// </summary>
 	public enum RankSubmitResultCode

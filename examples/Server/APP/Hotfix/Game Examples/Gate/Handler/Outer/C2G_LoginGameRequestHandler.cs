@@ -33,6 +33,16 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
             return;
         }
 
+        // 玩家属性账本 setOnInsert + 读快照(设计 37 §3.2 处理顺序步骤 4):
+        // 首登 → insert 三属性初始值;重登 → update 路径不动余额、读当前值。
+        // 失败 → 返登录失败,短路后续(不挂会话身份,沿 35 + 30 「服务不可用不本地放行」基线)。
+        var (propErrorCode, propSnapshot) = await PlayerPropertyServiceHelper.InitOrLoad(session.Scene, accountName);
+        if (propErrorCode != 0)
+        {
+            response.ErrorCode = propErrorCode;
+            return;
+        }
+
         if (!AccountManageHelper.Add(session.Scene, accountName, out var account))
         {
             response.ErrorCode = 1;
@@ -44,5 +54,11 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         session.AddComponent<GateAccountFlagComponent>().Account = account;
         // 执行上线流程
         await AccountHelper.Online(session, account);
+
+        // 上线流程完成后,下发属性初始快照到该会话(设计 37 §3.3.1 + plan D3 + O4)。
+        // 形态选独立 G2C_PropertyInitSnapshot push message(非登录响应捎带),与 G2C_PropertyDeltaPush 对齐;
+        // 客户端段下一刀同一处订阅快照 + 推送两条消息,Player 模块作初视图。
+        // 放 Online 之后:确保 GateAccountFlagComponent + account.Session 都已挂全,推送通路稳。
+        PlayerPropertyServiceHelper.SendInitSnapshotTo(session, propSnapshot);
     }
 }

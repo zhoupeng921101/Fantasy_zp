@@ -3218,6 +3218,296 @@ namespace Fantasy
         public TestMemoryPackInfo Info { get; set; }
     }
     /// <summary>
+    /// 单条属性余额项(初始快照下发用,可复用)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class PropertyAmount : AMessage, IDisposable
+    {
+        public static PropertyAmount Create(bool autoReturn = true)
+        {
+            var propertyAmount = MessageObjectPool<PropertyAmount>.Rent();
+            propertyAmount.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                propertyAmount.SetIsPool(false);
+            }
+            
+            return propertyAmount;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Type = default;
+            Amount = default;
+            MessageObjectPool<PropertyAmount>.Return(this);
+        }
+        /// <summary>
+        /// 属性类型
+        /// </summary>
+        [ProtoMember(1)]
+        public PropertyType Type { get; set; }
+        /// <summary>
+        /// 当前余额(服务端权威值)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Amount { get; set; }
+    }
+    /// <summary>
+    /// 客户端发起属性变更声明请求(只声明相对增量 + 原因,身份从会话取)(§3.3.2)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_PropertyChangeRequest : AMessage, IRequest
+    {
+        public static C2G_PropertyChangeRequest Create(bool autoReturn = true)
+        {
+            var c2G_PropertyChangeRequest = MessageObjectPool<C2G_PropertyChangeRequest>.Rent();
+            c2G_PropertyChangeRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_PropertyChangeRequest.SetIsPool(false);
+            }
+            
+            return c2G_PropertyChangeRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Type = default;
+            Delta = default;
+            Reason = default;
+            MessageObjectPool<C2G_PropertyChangeRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_PropertyChangeRequest; } 
+        [ProtoIgnore]
+        public G2C_PropertyChangeResponse ResponseType { get; set; }
+        /// <summary>
+        /// 要变更的属性类型
+        /// </summary>
+        [ProtoMember(1)]
+        public PropertyType Type { get; set; }
+        /// <summary>
+        /// 有符号增量(正 = 增加 / 负 = 减少 / 消费;变长编码下 long 体积可接受,不强求 sint64 zigzag,Fantasy 导出工具不识别 sint64)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Delta { get; set; }
+        /// <summary>
+        /// 变更来源标识(如 "shop_item_123" / "mail_claim_456" / "stamina_consume_level_789",供后续 ledger 审计)
+        /// </summary>
+        [ProtoMember(3)]
+        public string Reason { get; set; }
+    }
+    /// <summary>
+    /// 服务端属性变更裁决响应(§3.3.2)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_PropertyChangeResponse : AMessage, IResponse
+    {
+        public static G2C_PropertyChangeResponse Create(bool autoReturn = true)
+        {
+            var g2C_PropertyChangeResponse = MessageObjectPool<G2C_PropertyChangeResponse>.Rent();
+            g2C_PropertyChangeResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_PropertyChangeResponse.SetIsPool(false);
+            }
+            
+            return g2C_PropertyChangeResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Type = default;
+            NewAmount = default;
+            MessageObjectPool<G2C_PropertyChangeResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_PropertyChangeResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public PropertyChangeResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 回声请求的类型(便于客户端段下一刀路由更新到对应字段)
+        /// </summary>
+        [ProtoMember(2)]
+        public PropertyType Type { get; set; }
+        /// <summary>
+        /// 成功 = 变更后该属性新余额;NotEnough / OverLimit = 当前实际余额(供 toast「需要 X,你有 Y」);其它失败 = 0
+        /// </summary>
+        [ProtoMember(3)]
+        public long NewAmount { get; set; }
+    }
+    /// <summary>
+    /// 服务端登录后下发属性初始快照(服务端主动 push,本子单选独立 push message 而非登录响应捎带,
+    /// 形态与 G2C_PropertyDeltaPush 对齐,客户端段下一刀同一处订阅)(§3.3.1 + plan D3 + O4)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_PropertyInitSnapshot : AMessage, IMessage
+    {
+        public static G2C_PropertyInitSnapshot Create(bool autoReturn = true)
+        {
+            var g2C_PropertyInitSnapshot = MessageObjectPool<G2C_PropertyInitSnapshot>.Rent();
+            g2C_PropertyInitSnapshot.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_PropertyInitSnapshot.SetIsPool(false);
+            }
+            
+            return g2C_PropertyInitSnapshot;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            foreach (var __t in Properties) __t.Dispose();
+            Properties.Clear();
+            SchemaVersion = default;
+            MessageObjectPool<G2C_PropertyInitSnapshot>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_PropertyInitSnapshot; } 
+        /// <summary>
+        /// 三属性当前余额(每登录一次完整下发,客户端段下一刀作初视图)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<PropertyAmount> Properties { get; set; } = new List<PropertyAmount>();
+        /// <summary>
+        /// schema 版本(本子单 = 1;Tier 2+ 加字段时升版,客户端段据此识别)
+        /// </summary>
+        [ProtoMember(2)]
+        public int SchemaVersion { get; set; }
+    }
+    /// <summary>
+    /// 服务端属性变更主动推送(每次写库成功后服务端起,推送目标 = 该 UUID 在线全部会话,§3.3.3 + §5.4)
+    /// 推送是「绝对余额快照」非「相对变更流水」,丢失 = 下次登录拉快照对齐(O6 不重试)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_PropertyDeltaPush : AMessage, IMessage
+    {
+        public static G2C_PropertyDeltaPush Create(bool autoReturn = true)
+        {
+            var g2C_PropertyDeltaPush = MessageObjectPool<G2C_PropertyDeltaPush>.Rent();
+            g2C_PropertyDeltaPush.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_PropertyDeltaPush.SetIsPool(false);
+            }
+            
+            return g2C_PropertyDeltaPush;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Type = default;
+            NewAmount = default;
+            Reason = default;
+            MessageObjectPool<G2C_PropertyDeltaPush>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_PropertyDeltaPush; } 
+        /// <summary>
+        /// 变更的属性类型
+        /// </summary>
+        [ProtoMember(1)]
+        public PropertyType Type { get; set; }
+        /// <summary>
+        /// 变更后该属性新余额(绝对值,客户端段下一刀直接覆盖本地视图)
+        /// </summary>
+        [ProtoMember(2)]
+        public long NewAmount { get; set; }
+        /// <summary>
+        /// 变更来源标识(回声触发方传入的 reason,供客户端段下一刀做 toast / 弹奖动画的来源识别)
+        /// </summary>
+        [ProtoMember(3)]
+        public string Reason { get; set; }
+    }
+    /// <summary>
     /// 榜单一条条目：名次 + 玩家展示名 + 分数（§3.5）
     /// </summary>
     [Serializable]

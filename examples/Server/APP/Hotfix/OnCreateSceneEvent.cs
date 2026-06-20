@@ -68,6 +68,10 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
                 // 首连自动注册 + 重连刷新末次登录(设计 35),由 LoginGameHandler 经
                 // AccountServiceHelper.RegisterOrLogin 在挂会话身份前调用。
                 scene.AddComponent<AccountServiceComponent>();
+                // 玩家属性账本服务端权威组件:持有玩家属性集合(players)句柄 + 三属性运营配置(初始值 / 上界)。
+                // 首登 setOnInsert + 通用变更入口 + 服务端进程内 API + 主动推送(设计 37 第 1 子单),
+                // 由 LoginGameHandler 在 RegisterOrLogin 之后调用 PlayerPropertyServiceHelper.InitOrLoad。
+                scene.AddComponent<PlayerPropertyServiceComponent>();
                 // 兑换码服务端权威组件:持有码表/防重记录/全局计数的 MongoDB 集合句柄。
                 scene.AddComponent<RedeemServiceComponent>();
                 // 排行榜服务端权威组件:持有全服分数集合句柄与榜定义缓存。
