@@ -64,6 +64,10 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
             case SceneType.Gate:
             {
                 scene.AddComponent<AccountManageComponent>();
+                // 账号账本服务端权威组件:持有账号集合(accounts)句柄;
+                // 首连自动注册 + 重连刷新末次登录(设计 35),由 LoginGameHandler 经
+                // AccountServiceHelper.RegisterOrLogin 在挂会话身份前调用。
+                scene.AddComponent<AccountServiceComponent>();
                 // 兑换码服务端权威组件:持有码表/防重记录/全局计数的 MongoDB 集合句柄。
                 scene.AddComponent<RedeemServiceComponent>();
                 // 排行榜服务端权威组件:持有全服分数集合句柄与榜定义缓存。

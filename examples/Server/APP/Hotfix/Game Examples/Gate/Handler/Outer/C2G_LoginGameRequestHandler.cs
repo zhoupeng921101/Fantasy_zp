@@ -22,7 +22,17 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
             response.ErrorCode = 1;
             return;
         }
-        
+
+        // 账号账本 upsert(设计 35 §3.2):必须在挂会话身份之前。
+        // 单条原子 upsert:不存在则 insert 首次注册时间 / 末次登录时间 / 状态=0(首连自动注册);
+        // 存在则仅 update 末次登录时间(重连)。失败 → 返登录失败,短路后续(不挂会话身份)。
+        var accountUpsertErrorCode = await AccountServiceHelper.RegisterOrLogin(session.Scene, accountName);
+        if (accountUpsertErrorCode != 0)
+        {
+            response.ErrorCode = accountUpsertErrorCode;
+            return;
+        }
+
         if (!AccountManageHelper.Add(session.Scene, accountName, out var account))
         {
             response.ErrorCode = 1;
