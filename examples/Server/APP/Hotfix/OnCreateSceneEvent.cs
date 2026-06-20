@@ -78,6 +78,11 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
                 scene.AddComponent<RankServiceComponent>();
                 // 邮件服务端权威组件:持有运营模板/定向邮件/领取记录/礼包库的 MongoDB 集合句柄。
                 scene.AddComponent<MailServiceComponent>();
+                // 活动系统服务端权威组件:持有活动配置/活动进度的 MongoDB 集合句柄 + 配置内存缓存。
+                // 登录触发达标判定(设计 39 §3.5 Login 类),由 LoginGameHandler 在 Online 之后调
+                // ActivityEvalHelper.OnLogin(遍历 Type=Login 活动 → counter+1 → 抢占周期键 → 调 32 SendMailTo)。
+                // 挂载顺序在 MailServiceComponent 之后:OnLogin 内依赖 MailServiceComponent 投活动结算邮件。
+                scene.AddComponent<ActivityServiceComponent>();
 
                 var unit = Entity.Create<Unit>(scene);
                 

@@ -60,5 +60,13 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         // 客户端段下一刀同一处订阅快照 + 推送两条消息,Player 模块作初视图。
         // 放 Online 之后:确保 GateAccountFlagComponent + account.Session 都已挂全,推送通路稳。
         PlayerPropertyServiceHelper.SendInitSnapshotTo(session, propSnapshot);
+
+        // 活动系统登录触发(设计 39 §3.5 Login 类节律):遍历 Type=Login 活动各自 counter+1 + 判达标 + 抢占 + 发邮件。
+        // 不写入 response、不影响 G2C_LoginGameResponse 契约(零客户端协议改);
+        // MongoDB / 活动配置 / Mail 服务任一未就绪都静默跳过、不抛、不影响登录链路(设计 39 §四 + §3.4)。
+        // 协程化:不阻塞登录响应返回(响应在 Run 协程退出时由框架自动 reply,这里挂出后台协程继续跑活动判定)。
+        var activitySvc = session.Scene.GetComponent<ActivityServiceComponent>();
+        var mailSvc = session.Scene.GetComponent<MailServiceComponent>();
+        ActivityEvalHelper.OnLogin(activitySvc, mailSvc, accountName, Fantasy.Helper.TimeHelper.Now).Coroutine();
     }
 }
