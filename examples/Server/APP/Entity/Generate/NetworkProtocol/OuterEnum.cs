@@ -89,6 +89,25 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 查询 ledger 流水裁决结果码(§3.3)
+	/// </summary>
+	public enum AttrLedgerQueryResultCode
+	{
+		/// <summary>
+		/// 查询成功(含返空数组的成功:limit=0 / 账号无 ledger / 过滤后无匹配)
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 参数非法(kind 整数未知 / sinceTs 负数 / limit 负数);limit 超 100 钳制不报错
+		/// </summary>
+		InvalidRequest = 1,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 查询抛 Mongo 异常)
+		/// </summary>
+		ServiceUnavailable = 2
+	}
+
+	/// <summary>
 	/// 上报成绩裁决结果码（§3.2）
 	/// </summary>
 	public enum RankSubmitResultCode

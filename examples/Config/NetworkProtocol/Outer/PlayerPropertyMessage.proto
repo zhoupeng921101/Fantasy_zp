@@ -73,3 +73,50 @@ message G2C_PropertyDeltaPush // IMessage
 	int64 NewAmount = 2;       /// 变更后该属性新余额(绝对值,客户端段下一刀直接覆盖本地视图)
 	string Reason = 3;         /// 变更来源标识(回声触发方传入的 reason,供客户端段下一刀做 toast / 弹奖动画的来源识别)
 }
+
+// =========================================================================
+// 属性变更流水查询(Tier 2 第 3 子单 · server 段 + 客户端协议生成物)。
+// 设计基线:design-docs/45-player-attr-ledger-query.md §三 行为级协议契约。
+// 身份从会话取(不携带账号);服务端只读 player_attr_ledger 集合(44 已建)+ 字段裁剪 7 字段白名单
+// (不暴露 ObjectId / SchemaVersion / Account)。
+// =========================================================================
+
+/// 查询 ledger 流水裁决结果码(§3.3)
+enum AttrLedgerQueryResultCode
+{
+	/// 查询成功(含返空数组的成功:limit=0 / 账号无 ledger / 过滤后无匹配)
+	Success = 0,
+	/// 参数非法(kind 整数未知 / sinceTs 负数 / limit 负数);limit 超 100 钳制不报错
+	InvalidRequest = 1,
+	/// 服务不可用(MongoDB 不可达 / 查询抛 Mongo 异常)
+	ServiceUnavailable = 2
+}
+
+/// 单条 ledger 流水项(白名单 7 字段,不暴露 ObjectId / SchemaVersion / Account)(§3.2)
+message AttrLedgerEntry
+{
+	int64 Timestamp = 1;         /// 该笔变更的应用端时刻(Unix 毫秒 UTC,= 44 Timestamp 同源)
+	PropertyType Kind = 2;       /// 属性种类(沿 37 PropertyType 枚举)
+	int64 BalanceBefore = 3;     /// 变更前余额(非负)
+	int64 BalanceAfter = 4;      /// 变更后余额(非负,= BalanceBefore + Delta)
+	int64 Delta = 5;             /// 相对变更量(有符号)
+	int32 Source = 6;            /// 变更来源枚举码(= 服务端 AttrChangeSource 整数;客户端段下一刀映射为人类可读文本)
+	string ReasonRaw = 7;        /// 调用方原始 reason 字符串(供运营 ad-hoc 查子分类如 mailId / codeId / rankIdx)
+}
+
+/// 客户端拉 ledger 流水请求(身份从会话取,不携带账号)(§3.1)
+/// limit 必填(本子单不设默认);服务端钳制 [0, 100],超上限钳为 100 不报错(降级语义)。
+message C2G_QueryAttrLedger // IRequest,G2C_QueryAttrLedgerResponse
+{
+	int32 Kind = 1;              /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina,值与 PropertyType 整数同源,未知值返 InvalidRequest)
+	int64 SinceTs = 2;           /// 时间下界(只返 Timestamp > SinceTs 的行;0 = 不过滤;负数返 InvalidRequest)
+	int32 Limit = 3;             /// 单次最多返回行数(服务端钳制 [0, 100];Limit=0 返空 entries[];负数返 InvalidRequest)
+}
+
+/// 服务端查询响应(§3.2)
+message G2C_QueryAttrLedgerResponse // IResponse
+{
+	AttrLedgerQueryResultCode ResultCode = 1;   /// 裁决结果码
+	repeated AttrLedgerEntry Entries = 2;       /// 按 (Account, Timestamp DESC) 索引取出的 ledger 行,按 Timestamp DESC 排(最新在前);失败或返空时为空数组
+	bool HasMore = 3;                           /// 是否还有更旧的行(true = 取到 Limit 条且存在 Timestamp 比最后一行更早的行)
+}

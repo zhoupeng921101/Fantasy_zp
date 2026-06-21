@@ -75,12 +75,14 @@ namespace Fantasy
         public const uint G2C_PropertyChangeResponse = 402663200;
         public const uint G2C_PropertyInitSnapshot = 134227737;
         public const uint G2C_PropertyDeltaPush = 134227738;
-        public const uint C2G_RankSubmitScoreRequest = 268445473;
-        public const uint G2C_RankSubmitScoreResponse = 402663201;
-        public const uint C2G_RankQueryRequest = 268445474;
-        public const uint G2C_RankQueryResponse = 402663202;
-        public const uint C2G_RedeemCodeRequest = 268445475;
-        public const uint G2C_RedeemCodeResponse = 402663203;
+        public const uint C2G_QueryAttrLedger = 268445473;
+        public const uint G2C_QueryAttrLedgerResponse = 402663201;
+        public const uint C2G_RankSubmitScoreRequest = 268445474;
+        public const uint G2C_RankSubmitScoreResponse = 402663202;
+        public const uint C2G_RankQueryRequest = 268445475;
+        public const uint G2C_RankQueryResponse = 402663203;
+        public const uint C2G_RedeemCodeRequest = 268445476;
+        public const uint G2C_RedeemCodeResponse = 402663204;
         public const uint C2G_TestEnumMessage = 134227739;
     }
 }

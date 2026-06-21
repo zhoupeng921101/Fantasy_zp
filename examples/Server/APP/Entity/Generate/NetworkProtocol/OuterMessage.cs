@@ -3508,6 +3508,213 @@ namespace Fantasy
         public string Reason { get; set; }
     }
     /// <summary>
+    /// 单条 ledger 流水项(白名单 7 字段,不暴露 ObjectId / SchemaVersion / Account)(§3.2)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class AttrLedgerEntry : AMessage, IDisposable
+    {
+        public static AttrLedgerEntry Create(bool autoReturn = true)
+        {
+            var attrLedgerEntry = MessageObjectPool<AttrLedgerEntry>.Rent();
+            attrLedgerEntry.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                attrLedgerEntry.SetIsPool(false);
+            }
+            
+            return attrLedgerEntry;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Timestamp = default;
+            Kind = default;
+            BalanceBefore = default;
+            BalanceAfter = default;
+            Delta = default;
+            Source = default;
+            ReasonRaw = default;
+            MessageObjectPool<AttrLedgerEntry>.Return(this);
+        }
+        /// <summary>
+        /// 该笔变更的应用端时刻(Unix 毫秒 UTC,= 44 Timestamp 同源)
+        /// </summary>
+        [ProtoMember(1)]
+        public long Timestamp { get; set; }
+        /// <summary>
+        /// 属性种类(沿 37 PropertyType 枚举)
+        /// </summary>
+        [ProtoMember(2)]
+        public PropertyType Kind { get; set; }
+        /// <summary>
+        /// 变更前余额(非负)
+        /// </summary>
+        [ProtoMember(3)]
+        public long BalanceBefore { get; set; }
+        /// <summary>
+        /// 变更后余额(非负,= BalanceBefore + Delta)
+        /// </summary>
+        [ProtoMember(4)]
+        public long BalanceAfter { get; set; }
+        /// <summary>
+        /// 相对变更量(有符号)
+        /// </summary>
+        [ProtoMember(5)]
+        public long Delta { get; set; }
+        /// <summary>
+        /// 变更来源枚举码(= 服务端 AttrChangeSource 整数;客户端段下一刀映射为人类可读文本)
+        /// </summary>
+        [ProtoMember(6)]
+        public int Source { get; set; }
+        /// <summary>
+        /// 调用方原始 reason 字符串(供运营 ad-hoc 查子分类如 mailId / codeId / rankIdx)
+        /// </summary>
+        [ProtoMember(7)]
+        public string ReasonRaw { get; set; }
+    }
+    /// <summary>
+    /// 客户端拉 ledger 流水请求(身份从会话取,不携带账号)(§3.1)
+    /// limit 必填(本子单不设默认);服务端钳制 [0, 100],超上限钳为 100 不报错(降级语义)。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_QueryAttrLedger : AMessage, IRequest
+    {
+        public static C2G_QueryAttrLedger Create(bool autoReturn = true)
+        {
+            var c2G_QueryAttrLedger = MessageObjectPool<C2G_QueryAttrLedger>.Rent();
+            c2G_QueryAttrLedger.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_QueryAttrLedger.SetIsPool(false);
+            }
+            
+            return c2G_QueryAttrLedger;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Kind = default;
+            SinceTs = default;
+            Limit = default;
+            MessageObjectPool<C2G_QueryAttrLedger>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_QueryAttrLedger; } 
+        [ProtoIgnore]
+        public G2C_QueryAttrLedgerResponse ResponseType { get; set; }
+        /// <summary>
+        /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina,值与 PropertyType 整数同源,未知值返 InvalidRequest)
+        /// </summary>
+        [ProtoMember(1)]
+        public int Kind { get; set; }
+        /// <summary>
+        /// 时间下界(只返 Timestamp > SinceTs 的行;0 = 不过滤;负数返 InvalidRequest)
+        /// </summary>
+        [ProtoMember(2)]
+        public long SinceTs { get; set; }
+        /// <summary>
+        /// 单次最多返回行数(服务端钳制 [0, 100];Limit=0 返空 entries[];负数返 InvalidRequest)
+        /// </summary>
+        [ProtoMember(3)]
+        public int Limit { get; set; }
+    }
+    /// <summary>
+    /// 服务端查询响应(§3.2)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_QueryAttrLedgerResponse : AMessage, IResponse
+    {
+        public static G2C_QueryAttrLedgerResponse Create(bool autoReturn = true)
+        {
+            var g2C_QueryAttrLedgerResponse = MessageObjectPool<G2C_QueryAttrLedgerResponse>.Rent();
+            g2C_QueryAttrLedgerResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_QueryAttrLedgerResponse.SetIsPool(false);
+            }
+            
+            return g2C_QueryAttrLedgerResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            foreach (var __t in Entries) __t.Dispose();
+            Entries.Clear();
+            HasMore = default;
+            MessageObjectPool<G2C_QueryAttrLedgerResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_QueryAttrLedgerResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public AttrLedgerQueryResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 按 (Account, Timestamp DESC) 索引取出的 ledger 行,按 Timestamp DESC 排(最新在前);失败或返空时为空数组
+        /// </summary>
+        [ProtoMember(2)]
+        public List<AttrLedgerEntry> Entries { get; set; } = new List<AttrLedgerEntry>();
+        /// <summary>
+        /// 是否还有更旧的行(true = 取到 Limit 条且存在 Timestamp 比最后一行更早的行)
+        /// </summary>
+        [ProtoMember(3)]
+        public bool HasMore { get; set; }
+    }
+    /// <summary>
     /// 榜单一条条目：名次 + 玩家展示名 + 分数（§3.5）
     /// </summary>
     [Serializable]
