@@ -28,7 +28,7 @@ public sealed class PlayerAttrLedgerDoc
     /// <summary>账号 id(= UUID,与 accounts._id / players._id 同源)。索引字段。</summary>
     public string Account { get; set; } = string.Empty;
 
-    /// <summary>属性种类(沿 37 PropertyType 枚举:Coin=1 / Diamond=2 / Stamina=3,SV10)。</summary>
+    /// <summary>属性种类(沿 37 PropertyType 枚举:Coin=0 / Diamond=1 / Stamina=2)。协议层 kind 整数错开一位(1/2/3 对应 Coin/Diamond/Stamina,0 留作 sentinel 表「不过滤」,见 AttrLedgerQueryHelper.cs:32 解释)。</summary>
     public PropertyType Kind { get; set; }
 
     /// <summary>变更前余额(非负;= 37 FindOneAndUpdate 后余额 - delta,等价 returnDocument Before)。</summary>
