@@ -90,7 +90,18 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
         //   30101 是「客户端段下一刀解析 UseEffect=5 EVENT 调 AvatarUnlockService.GrantUnlock」的道具 id 共识;
         //   服务端工程无 Luban,只守「(道具 id 30101, 数量 1)」抵达邮件附件,不解析 UseEffect 自身。
         //   客户端 luban item.xlsx 须含 id=30101 行(plan §3.3,本子单 server 段不交付,客户端段下一刀处理)。
-        new GiftPoolEntryDoc { AutoId = 6101001, Index = 6101, ItemId = 30101, Num = 1, Rate = 100 }
+        new GiftPoolEntryDoc { AutoId = 6101001, Index = 6101, ItemId = 30101, Num = 1, Rate = 100 },
+        // ── Tier 4 第 3 子单(设计 43 §3.3)新增两套累计登录类活动的奖励礼包 ──
+        // 活动 3「累计 7 天大奖」礼包:Index=5003 单项必中 ItemId=30002(材料 × 1)。
+        //   设计 §3.3 plan O5「视现状」:client 工程 item.xlsx 当前货币道具(useEffect=1)未配,
+        //   服务端 GiftPool 取已存在 ItemId(沿 6001/1005/1006 等验证奖池范式,生产可改为钻石道具行 id)。
+        //   领奖路径走 32 §3.4 既有抽奖 + 客户端 16 useEffect 解析,辉煌钻石上线时改本行 ItemId + Num 即可,不动活动配置。
+        new GiftPoolEntryDoc { AutoId = 5003001, Index = 5003, ItemId = 30002, Num = 1, Rate = 100 },
+        // 活动 4「周累计 5 天周奖」礼包:Index=5004 多项加权(金币占位 / 体力占位 各 50%)。
+        //   plan O4 默认多项加权(验 [16 §3.6 多项权重抽样] 在活动 reward 路径仍走通,沿 [16] 礼包随机库范式);
+        //   暂用 ItemId=30001 + 30003 作金币/体力占位,等同 6001 奖池多项加权范式(沿设计 43 §3.3 + O5)。
+        new GiftPoolEntryDoc { AutoId = 5004001, Index = 5004, ItemId = 30001, Num = 1, Rate = 50 },
+        new GiftPoolEntryDoc { AutoId = 5004002, Index = 5004, ItemId = 30003, Num = 1, Rate = 50 }
     };
 
     protected override void Awake(MailServiceComponent self)

@@ -89,9 +89,17 @@ public static class ActivityEvalHelper
 
             try
             {
-                // 1. counter+1(每次登录都计;Daily/Weekly 跨周期清零另起,见旁注)。
+                // 1. Weekly 类需要 Counter 跨周清零(Daily 类靠 LastClaimedCycleKey 守幂等、Counter 不清零无碍;
+                //    OneShot 类 Counter 累加是「累计 N 次」语义、不清零;Always 本子单不接)。设计 43 §3.2 旁注 + SV6。
+                //    跨周判定借力既有 LastUpdatedAt 字段:LastUpdatedAt < 本周一 0:00 ticks → 上周或更早 +1,本次跨周首登 → 清零。
+                //    零 schema 字段加(守设计 39 §3.2 不变量),原子条件写避免并发两连接重复清零。
+                if (def.Cycle == CycleWeekly)
+                {
+                    await ResetCounterIfCrossedWeek(self, account, def.ActivityId, nowMs);
+                }
+                // 2. counter+1(每次登录都计)。
                 await Increment(self, account, def.ActivityId, 1, nowMs);
-                // 2. 判达标 + 抢占周期键 + 发邮件。
+                // 3. 判达标 + 抢占周期键 + 发邮件。
                 await EvaluateAndClaim(self, mail, account, def, nowMs);
             }
             catch (Exception e)
@@ -144,6 +152,43 @@ public static class ActivityEvalHelper
         {
             await self.Progress.UpdateOneAsync(filter, update, options);
         }
+    }
+
+    // ── Weekly 跨周 Counter 清零(设计 43 §3.2 旁注) ─────────────
+
+    /// <summary>
+    /// 若 (account, activityId) 的进度文档存在且 LastUpdatedAt &lt; 本周一 0:00 UTC ticks → Counter 清零(原子条件写)。
+    /// 沿用既有 LastUpdatedAt 字段判跨周(它在每次 Increment 时被 $set 为 nowMs),零 schema 字段加(守设计 39 §3.2 不变量)。
+    /// 文档不存在时 filter 不匹配 → 无操作(Increment 紧随其后会 upsert 建文档,Counter=1)。
+    /// 并发两连接同时跨周首登:两次条件写都看到 LastUpdatedAt &lt; 本周一 ticks(Increment 还没写)→ 两次都通过 set Counter=0,
+    ///   后续两次 $inc(Counter,1) 顺序串行 → Counter=2,语义 = 「本周 2 次登录」(正确,非双倍);
+    ///   达标判 + 周期键抢占仍由 EvaluateAndClaim 单独原子守,不会因 Counter=2 双发周奖。
+    /// Counter 清零必须发生在 Increment 之前,避免「未清零先 +1 = 跨周累计 +1」误判达标。
+    /// </summary>
+    private static async FTask ResetCounterIfCrossedWeek(ActivityServiceComponent self, string account, int activityId, long nowMs)
+    {
+        if (self.Progress == null)
+        {
+            return;
+        }
+
+        // 算本周一 0:00 UTC ticks(与 ComputeCurrentCycleKey(Weekly) 同口径)。
+        var thisMondayMs = ComputeCurrentCycleKey(CycleWeekly, nowMs);
+        if (thisMondayMs == null)
+        {
+            return;
+        }
+
+        var uniqueKey = BuildKey(account, activityId);
+        var filter = Builders<ActivityProgressDoc>.Filter.And(
+            Builders<ActivityProgressDoc>.Filter.Eq(x => x.UniqueKey, uniqueKey),
+            // LastUpdatedAt < 本周一 ticks → 上周或更早 +1,本次属本周首登(含 LastUpdatedAt=0 的首次场景)。
+            Builders<ActivityProgressDoc>.Filter.Lt(x => x.LastUpdatedAt, thisMondayMs.Value));
+        var update = Builders<ActivityProgressDoc>.Update
+            .Set(x => x.Counter, 0L);
+        // IsUpsert=false:文档不存在时不操作(Increment 紧随其后会建文档,Counter=delta=1)。
+        var options = new UpdateOptions { IsUpsert = false };
+        await self.Progress.UpdateOneAsync(filter, update, options);
     }
 
     // ── 判达标 + 抢占周期键 + 发邮件 ─────────────────────────────

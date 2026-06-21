@@ -67,6 +67,46 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
+        },
+        // ── Tier 4 第 3 子单(设计 43)新增两套累计登录类活动,验证「同 type=Login 节律支撑多活动并存」架构能力 ──
+        // 活动 3:累计 7 天登录大奖(OneShot 永发一次性)。
+        //   与活动 2(EVENT 头像 OneShot/target=7)同周期、同阈值但 reward 不同 → 第 7 次登录玩家邮箱同时 +2 封;
+        //   复合主键 {account}_{activityId} 天然隔离(§3.2),各自独立抢占 OneShot key=1 互不干涉。
+        new ActivityDefDoc
+        {
+            ActivityId = 3,
+            NameTextId = 390005,  // 占位 textId,沿 §3.5 运营后续配多语言
+            DescTextId = 390006,
+            Type = 1,             // Login
+            Cycle = 3,            // OneShot 永发一次性
+            Target = 7,           // 累计 7 次登录达标
+            Reward = 5003,        // 活动 3 大奖礼包(GiftPoolSeeds 已注册:Index=5003,中型钻石/材料包)
+            SenderTextId = 110700,
+            TitleTextId = 390005,
+            ContentTextId = 390006,
+            ExpireDays = 14,
+            StartAtMs = 0,
+            EndAtMs = 0
+        },
+        // 活动 4:周累计 5 天登录周奖(Weekly 每周一 0:00 UTC 重置)。
+        //   引入第三种 cycle 进同登录钩子:Daily(活动 1)+ OneShot(活动 2/3)+ Weekly(活动 4)并存正确,
+        //   且 Counter 跨周清零由 ActivityEvalHelper.Increment 借力 LastUpdatedAt + ComputeCurrentCycleKey 反推识别
+        //   「上次 +1 与本次 +1 不在同一 Weekly 周期」实现(零 schema 字段加,沿设计 39 §3.2 守不变量)。
+        new ActivityDefDoc
+        {
+            ActivityId = 4,
+            NameTextId = 390007,
+            DescTextId = 390008,
+            Type = 1,             // Login
+            Cycle = 2,            // Weekly 每周一 0:00 UTC 重置
+            Target = 5,           // 本周累计 5 次登录达标
+            Reward = 5004,        // 活动 4 周奖礼包(GiftPoolSeeds 已注册:Index=5004,小-中型加权礼包)
+            SenderTextId = 110700,
+            TitleTextId = 390007,
+            ContentTextId = 390008,
+            ExpireDays = 14,
+            StartAtMs = 0,
+            EndAtMs = 0
         }
     };
 
@@ -99,7 +139,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         // 载入配置缓存(只读裁决用,进度判定的权威始终走 MongoDB 原子操作)。
         await ReloadCache(self);
 
-        Log.Info($"ActivityServiceComponent 初始化完成,活动配置缓存条目数={self.DefCache.Count}(activity_id=1 每日登录奖 + activity_id=2 EVENT 头像解锁活动)。");
+        Log.Info($"ActivityServiceComponent 初始化完成,活动配置缓存条目数={self.DefCache.Count}(activity_id=1 每日登录奖 Daily + activity_id=2 EVENT 头像 OneShot + activity_id=3 累计 7 天大奖 OneShot + activity_id=4 周累计 5 天周奖 Weekly)。");
     }
 
     /// <summary>
