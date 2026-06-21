@@ -4,6 +4,29 @@
 namespace Fantasy
 {
 	/// <summary>
+	/// Cumulative 节律累加裁决结果码(§3.3)
+	/// </summary>
+	public enum ActivityIncrementResultCode
+	{
+		/// <summary>
+		/// 累加成功(counter 已写入;视情况已发奖 — 见 TargetReached 字段)
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 参数非法(activityId 不存在 / delta ≤ 0 / 字段格式异常);文档零改动,不进 service
+		/// </summary>
+		InvalidRequest = 1,
+		/// <summary>
+		/// 活动配置 type ≠ Cumulative(防客户端用此 RPC 推 Login 类活动 counter,旁路登录节律)
+		/// </summary>
+		NotCumulative = 2,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 活动配置未加载 / Mail 服务未就绪);文档状态未知,客户端不本地放行
+		/// </summary>
+		ServiceUnavailable = 3
+	}
+
+	/// <summary>
 	/// 领取奖励裁决结果码（§3.4）
 	/// </summary>
 	public enum MailClaimResultCode

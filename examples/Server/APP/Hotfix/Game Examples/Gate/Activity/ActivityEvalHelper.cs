@@ -38,6 +38,9 @@ public static class ActivityEvalHelper
     /// <summary>Type=Login(玩家登录时 +1)。同 ActivityDefDoc.Type 编号。</summary>
     public const int TypeLogin = 1;
 
+    /// <summary>Type=Cumulative(业务方推累计进度,客户端 GameOver 类业务 hook + 服务端业务方直调皆走此 type;Tier 4 第 4 子单启用)。同 ActivityDefDoc.Type 编号。</summary>
+    public const int TypeCumulative = 2;
+
     /// <summary>Cycle=Daily(服务端跨日 0:00 UTC 重置)。同 ActivityDefDoc.Cycle 编号。</summary>
     public const int CycleDaily = 1;
 
@@ -99,8 +102,8 @@ public static class ActivityEvalHelper
                 }
                 // 2. counter+1(每次登录都计)。
                 await Increment(self, account, def.ActivityId, 1, nowMs);
-                // 3. 判达标 + 抢占周期键 + 发邮件。
-                await EvaluateAndClaim(self, mail, account, def, nowMs);
+                // 3. 判达标 + 抢占周期键 + 发邮件(Login 节律不消费返回值;返回值由 Cumulative 节律消费供 handler 回客户端)。
+                _ = await EvaluateAndClaim(self, mail, account, def, nowMs);
             }
             catch (Exception e)
             {
@@ -167,14 +170,31 @@ public static class ActivityEvalHelper
     /// </summary>
     private static async FTask ResetCounterIfCrossedWeek(ActivityServiceComponent self, string account, int activityId, long nowMs)
     {
+        await ResetCounterIfCrossedPeriod(self, activityId, account, CycleWeekly, nowMs);
+    }
+
+    /// <summary>
+    /// Cumulative / Login 通用跨周期 Counter 清零(Daily / Weekly 共用一处实现,设计 47 §3.5 service 前瞻支持 + SV12 ⑤)。
+    /// OneShot 不需要清零(永发一次性,counter 跨周期累加无碍,LastClaimedCycleKey=1 守幂等)。
+    /// 沿 ResetCounterIfCrossedWeek 同范式:借力 LastUpdatedAt 字段判「上次 +1 与本次 +1 不在同一周期」,
+    /// 原子条件写守并发(两连接同时跨周期首推 → 都通过 set Counter=0 → 后续两次 $inc 串行 → Counter=2,语义正确)。
+    /// </summary>
+    public static async FTask ResetCounterIfCrossedPeriod(
+        ActivityServiceComponent self, int activityId, string account, int cycle, long nowMs)
+    {
         if (self.Progress == null)
         {
             return;
         }
 
-        // 算本周一 0:00 UTC ticks(与 ComputeCurrentCycleKey(Weekly) 同口径)。
-        var thisMondayMs = ComputeCurrentCycleKey(CycleWeekly, nowMs);
-        if (thisMondayMs == null)
+        // OneShot 不清零:counter 跨「周期」无意义(periodKey=1 常量永远不变),LastClaimedCycleKey 守幂等。
+        if (cycle == CycleOneShot)
+        {
+            return;
+        }
+
+        var periodStartMs = ComputeCurrentCycleKey(cycle, nowMs);
+        if (periodStartMs == null)
         {
             return;
         }
@@ -182,11 +202,10 @@ public static class ActivityEvalHelper
         var uniqueKey = BuildKey(account, activityId);
         var filter = Builders<ActivityProgressDoc>.Filter.And(
             Builders<ActivityProgressDoc>.Filter.Eq(x => x.UniqueKey, uniqueKey),
-            // LastUpdatedAt < 本周一 ticks → 上周或更早 +1,本次属本周首登(含 LastUpdatedAt=0 的首次场景)。
-            Builders<ActivityProgressDoc>.Filter.Lt(x => x.LastUpdatedAt, thisMondayMs.Value));
+            // LastUpdatedAt < 本周期起始 ms → 上周期或更早 +1,本次跨周期首推(含 LastUpdatedAt=0 首次场景,但 IsUpsert=false 不建文档)。
+            Builders<ActivityProgressDoc>.Filter.Lt(x => x.LastUpdatedAt, periodStartMs.Value));
         var update = Builders<ActivityProgressDoc>.Update
             .Set(x => x.Counter, 0L);
-        // IsUpsert=false:文档不存在时不操作(Increment 紧随其后会建文档,Counter=delta=1)。
         var options = new UpdateOptions { IsUpsert = false };
         await self.Progress.UpdateOneAsync(filter, update, options);
     }
@@ -198,13 +217,17 @@ public static class ActivityEvalHelper
     /// 抢占失败 = 本周期已发(并发 / 重启 / 同日重复触发)→ 跳过、不发(SV4/SV6/SV7)。
     /// reward=0 → 仅记已发不投邮件(OneShot 永发类一次性活动用,设计 §3.4 + §SV8)。
     /// MongoDB 不可达 → 静默跳过(沿 BLOCKED-env 基线)。
+    /// 返回值:本次是否抢占成功 + 已执行发奖逻辑(true=首次达标抢占 / false=未达标 / 已发 / 服务未就绪等)。
+    ///   - Login 节律(OnLogin)忽略此返回值(玩家可观测路径 = 邮箱拉邮件,登录链路不感知);
+    ///   - Cumulative 节律(ActivityProgressService.Increment)消费此返回值供 handler 回客户端 TargetReached 字段
+    ///     (设计 47 §3.2:让客户端 UI 能弹「累计达成」类提示)。
     /// </summary>
-    public static async FTask EvaluateAndClaim(
+    public static async FTask<bool> EvaluateAndClaim(
         ActivityServiceComponent self, MailServiceComponent? mail, string account, ActivityDefDoc def, long nowMs)
     {
         if (self.Progress == null)
         {
-            return;
+            return false;
         }
 
         // 1. 读进度。无记录(理论上 Increment 已 upsert,这里保险)→ 视作 counter=0 / lastClaimedCycleKey=0。
@@ -218,39 +241,43 @@ public static class ActivityEvalHelper
         var periodKey = ComputeCurrentCycleKey(def.Cycle, nowMs);
         if (periodKey == null)
         {
-            return;
+            return false;
         }
 
         // 3. 判达标条件:counter ≥ target 且 lastClaimedCycleKey < 本周期键。
         if (counter < def.Target)
         {
-            return; // 未达标(本周期未刷够)。
+            return false; // 未达标(本周期未刷够)。
         }
         if (lastKey >= periodKey.Value)
         {
-            return; // 本周期已发(同日 / 同周重复触发)。
+            return false; // 本周期已发(同日 / 同周重复触发)。
         }
 
         // 4. 抢占本周期键(原子条件写)。filter _id 匹配 且 LastClaimedCycleKey < 本周期键 → $set 本周期键。
         //    抢占失败(并发 / 已发)→ 跳过,不发(SV6)。
         if (!await TryClaimCycleKey(self.Progress, uniqueKey, periodKey.Value, nowMs))
         {
-            return;
+            return false;
         }
 
         // 5. 抢占成功:发活动结算邮件(claim-then-act,§3.4 关键)。
         //    reward=0 → 仅记已发不投邮件(OneShot 类活动场景);其他 → 调 32 SendMailTo 投定向邮件。
+        //    后两种「漏发窄窗」(reward=0 / mail 服务未就绪 / SendMailTo 返 null):
+        //    服务端账目已抢占(LastClaimedCycleKey 已写),从客户端语义角度也是「首次达标」,
+        //    故返 true(让 Cumulative handler 回包 TargetReached=true,玩家 UI 仍弹达标提示;
+        //    邮件投递失败由运营补 — 沿设计 §四诚实取舍「漏发可补、超发不可补」)。
         if (def.Reward == 0)
         {
             Log.Info($"ActivityEvalHelper: account={account} activity_id={def.ActivityId} 本周期已发(无奖,仅记标记)。periodKey={periodKey.Value}");
-            return;
+            return true;
         }
 
         if (mail == null)
         {
             // 抢占已成功但邮件服务未就绪 → 漏发窄窗(运营可补,设计 §四诚实取舍)。
             Log.Warning($"ActivityEvalHelper: account={account} activity_id={def.ActivityId} 本周期已抢占但 MailServiceComponent 未就绪,漏发(运营可补)。");
-            return;
+            return true;
         }
 
         var mailIdOrNull = await MailDecisionHelper.SendMailTo(
@@ -259,10 +286,11 @@ public static class ActivityEvalHelper
         {
             // SendMailTo 返 null = mail.Directed 未就绪。同样属漏发窄窗(运营可补)。
             Log.Warning($"ActivityEvalHelper: account={account} activity_id={def.ActivityId} SendMailTo 返 null(Mail 未就绪),漏发(运营可补)。");
-            return;
+            return true;
         }
 
         Log.Info($"ActivityEvalHelper: account={account} activity_id={def.ActivityId} 本周期发奖完成,mailId={mailIdOrNull},reward={def.Reward},periodKey={periodKey.Value}");
+        return true;
     }
 
     /// <summary>

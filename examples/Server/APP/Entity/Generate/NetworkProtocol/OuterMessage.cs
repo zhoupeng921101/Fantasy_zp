@@ -24,6 +24,124 @@ using Fantasy.Serialize;
 namespace Fantasy
 {
     /// <summary>
+    /// 客户端业务方推累计进度请求(§3.2)
+    /// 身份从会话取,**不**携带账号字段(协议层即已不预留;即使协议被改坏夹带,handler 也只信会话身份)。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_ActivityIncrement : AMessage, IRequest
+    {
+        public static C2G_ActivityIncrement Create(bool autoReturn = true)
+        {
+            var c2G_ActivityIncrement = MessageObjectPool<C2G_ActivityIncrement>.Rent();
+            c2G_ActivityIncrement.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_ActivityIncrement.SetIsPool(false);
+            }
+            
+            return c2G_ActivityIncrement;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ActivityId = default;
+            Delta = default;
+            MessageObjectPool<C2G_ActivityIncrement>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_ActivityIncrement; } 
+        [ProtoIgnore]
+        public G2C_ActivityIncrementResponse ResponseType { get; set; }
+        /// <summary>
+        /// 目标活动 id(沿设计 39 §3.1 activity.xlsx.activity_id;不存在返 InvalidRequest)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ActivityId { get; set; }
+        /// <summary>
+        /// 本次累计增量(必须 > 0;≤ 0 返 InvalidRequest;服务端钳到 ≤ 10000 不报错,客户端从 CurrentCounter 自查实际写入值)
+        /// </summary>
+        [ProtoMember(2)]
+        public int Delta { get; set; }
+    }
+    /// <summary>
+    /// 服务端 Cumulative 累加裁决响应(§3.2)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_ActivityIncrementResponse : AMessage, IResponse
+    {
+        public static G2C_ActivityIncrementResponse Create(bool autoReturn = true)
+        {
+            var g2C_ActivityIncrementResponse = MessageObjectPool<G2C_ActivityIncrementResponse>.Rent();
+            g2C_ActivityIncrementResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_ActivityIncrementResponse.SetIsPool(false);
+            }
+            
+            return g2C_ActivityIncrementResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            CurrentCounter = default;
+            TargetReached = default;
+            MessageObjectPool<G2C_ActivityIncrementResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_ActivityIncrementResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public ActivityIncrementResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 写后 counter 值(供客户端 UI 显示当前进度);仅 ResultCode=Success 时有意义,其它码取 0
+        /// </summary>
+        [ProtoMember(2)]
+        public long CurrentCounter { get; set; }
+        /// <summary>
+        /// 本次 Increment 后是否首次达标 + 抢占成功 + 已投奖;仅 Success 时有意义;true ↔ 服务端已投出活动邮件
+        /// </summary>
+        [ProtoMember(3)]
+        public bool TargetReached { get; set; }
+    }
+    /// <summary>
     /// 客户端登陆到Gate服务器
     /// </summary>
     [Serializable]

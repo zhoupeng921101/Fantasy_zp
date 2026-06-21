@@ -107,6 +107,31 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
+        },
+        // ── Tier 4 第 4 子单(设计 47)新增 Cumulative 节律首套样例 ──────────────────────────────
+        // 活动 5:累计游戏 100 局大奖(Cumulative 节律 + OneShot 永发一次性)。
+        //   首次 Type=Cumulative(=2)活动:客户端业务方(下一刀 GameOver hook 接入)调 C2G_ActivityIncrement(5, 1)
+        //   推累计进度 → handler 校验 type=Cumulative 通过 → 调 ActivityProgressService.Increment → 沿用既有
+        //   ActivityEvalHelper.Increment + EvaluateAndClaim 编排(counter 累加 + 抢占周期键 + 发邮件,设计 39 §3.4 流程零改)。
+        //   与 Login 类活动(1/2/3/4)节律入口完全独立 — Login 走登录钩子遍历 type=1、Cumulative 走 RPC + service 入口遍历 type=2,
+        //   两路 type 过滤独立、复合主键 {account}_5 独立(§3.2 + 设计 47 §3.1),零回归既有 4 套活动行为。
+        //   Reward=5003 复用 43 子单已加的钻石礼包(GiftPoolSeeds 已注册:Index=5003);邮件文案复用占位 textId,
+        //   运营后续可改 textId / Reward / Target 任一字段后重启 → ReconcileDefs 写入已存 MongoDB 文档。
+        new ActivityDefDoc
+        {
+            ActivityId = 5,
+            NameTextId = 390009,
+            DescTextId = 390010,
+            Type = 2,             // Cumulative(本子单首次启用此 type;handler + service 双层校验仅放行此 type 走 RPC 路径)
+            Cycle = 3,            // OneShot 永发一次性(累计 100 局后 LastClaimedCycleKey=1,永不重发)
+            Target = 100,         // 累计游戏 100 局达标(中期目标;运营可调,SV4 / SV10 不依赖具体数值)
+            Reward = 5003,        // 复用 43 子单 5003 钻石礼包(GiftPoolSeeds 已注册);可砍 giftrandom 增量,沿 47 §3.4 可选
+            SenderTextId = 110700,
+            TitleTextId = 390009,
+            ContentTextId = 390010,
+            ExpireDays = 14,
+            StartAtMs = 0,
+            EndAtMs = 0
         }
     };
 
@@ -139,7 +164,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         // 载入配置缓存(只读裁决用,进度判定的权威始终走 MongoDB 原子操作)。
         await ReloadCache(self);
 
-        Log.Info($"ActivityServiceComponent 初始化完成,活动配置缓存条目数={self.DefCache.Count}(activity_id=1 每日登录奖 Daily + activity_id=2 EVENT 头像 OneShot + activity_id=3 累计 7 天大奖 OneShot + activity_id=4 周累计 5 天周奖 Weekly)。");
+        Log.Info($"ActivityServiceComponent 初始化完成,活动配置缓存条目数={self.DefCache.Count}(activity_id=1 每日登录奖 Daily + activity_id=2 EVENT 头像 OneShot + activity_id=3 累计 7 天大奖 OneShot + activity_id=4 周累计 5 天周奖 Weekly + activity_id=5 累计游戏 100 局 Cumulative OneShot)。");
     }
 
     /// <summary>

@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+// ActivityMessage.proto
+// 活动系统服务端权威协议 — Cumulative 节律首次实做(Tier 4 第 4 子单)。
+// 设计基线:design-docs/47-activity-cumulative.md §3.2 行为级协议契约。
+// 玩家身份由服务端从联网会话取(GateAccountFlagComponent → Account.Name = UUID),
+// 请求不携带账号字段(反作弊红线:服务端权威身份,沿设计 30/31/45 同范式)。
+//
+// handler 校验链(§3.3):身份 + activityId 存在 + 配置 type=Cumulative + delta > 0 + delta ≤ 10000(超上限钳制不报错)。
+// service 层兜底再做 type 校验(双层防御,防未来服务端业务方绕 handler 直调 service)。
+// 完整发奖编排沿用设计 39 §3.4 流程(原子条件写 + claim-then-act + SendMailTo),Cumulative 与 Login 共用同一编排。
+
+/// Cumulative 节律累加裁决结果码(§3.3)
+enum ActivityIncrementResultCode
+{
+	/// 累加成功(counter 已写入;视情况已发奖 — 见 TargetReached 字段)
+	Success = 0,
+	/// 参数非法(activityId 不存在 / delta ≤ 0 / 字段格式异常);文档零改动,不进 service
+	InvalidRequest = 1,
+	/// 活动配置 type ≠ Cumulative(防客户端用此 RPC 推 Login 类活动 counter,旁路登录节律)
+	NotCumulative = 2,
+	/// 服务不可用(MongoDB 不可达 / 活动配置未加载 / Mail 服务未就绪);文档状态未知,客户端不本地放行
+	ServiceUnavailable = 3
+}
+
+/// 客户端业务方推累计进度请求(§3.2)
+/// 身份从会话取,**不**携带账号字段(协议层即已不预留;即使协议被改坏夹带,handler 也只信会话身份)。
+message C2G_ActivityIncrement // IRequest,G2C_ActivityIncrementResponse
+{
+	int32 ActivityId = 1;        /// 目标活动 id(沿设计 39 §3.1 activity.xlsx.activity_id;不存在返 InvalidRequest)
+	int32 Delta = 2;             /// 本次累计增量(必须 > 0;≤ 0 返 InvalidRequest;服务端钳到 ≤ 10000 不报错,客户端从 CurrentCounter 自查实际写入值)
+}
+
+/// 服务端 Cumulative 累加裁决响应(§3.2)
+message G2C_ActivityIncrementResponse // IResponse
+{
+	ActivityIncrementResultCode ResultCode = 1;   /// 裁决结果码
+	int64 CurrentCounter = 2;                     /// 写后 counter 值(供客户端 UI 显示当前进度);仅 ResultCode=Success 时有意义,其它码取 0
+	bool TargetReached = 3;                       /// 本次 Increment 后是否首次达标 + 抢占成功 + 已投奖;仅 Success 时有意义;true ↔ 服务端已投出活动邮件
+}
