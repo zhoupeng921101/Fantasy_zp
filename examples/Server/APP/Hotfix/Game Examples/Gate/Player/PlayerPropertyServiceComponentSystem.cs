@@ -102,10 +102,37 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         }
 
         self.Players = mongoDatabase.GetCollection<PlayerDoc>("players");
-        Log.Info($"PlayerPropertyServiceComponent 初始化完成,玩家属性账本集合句柄已绑定(players);" +
+
+        // player_attr_ledger 集合句柄 + 建索引(设计 44 §3.1 + §3.2,SV2)。
+        // 集合在首次 InsertOne 时由 MongoDB 自动创建(同 mail_template / accounts / players 先例);
+        // CreateMany 索引建好后,后续 Append 直接命中查询索引。
+        // 索引建失败(MongoDB 抖动等)→ Warning 不阻断 Players 句柄绑定;
+        // ledger 句柄仍绑(只是查询走全表扫,审计完整性不破)。
+        var ledger = mongoDatabase.GetCollection<PlayerAttrLedgerDoc>("player_attr_ledger");
+        try
+        {
+            // 复合索引 (Account ASC, Timestamp DESC):核心查询「某账号最近 N 笔」直接命中(SV13)。
+            var byAccount = new CreateIndexModel<PlayerAttrLedgerDoc>(
+                Builders<PlayerAttrLedgerDoc>.IndexKeys
+                    .Ascending(x => x.Account)
+                    .Descending(x => x.Timestamp),
+                new CreateIndexOptions { Name = "ix_account_ts_desc" });
+            // 单字段索引 (Timestamp DESC):运营全局扫 + Tier 2+ 挂 TTL 用(O7)。
+            var byTs = new CreateIndexModel<PlayerAttrLedgerDoc>(
+                Builders<PlayerAttrLedgerDoc>.IndexKeys.Descending(x => x.Timestamp),
+                new CreateIndexOptions { Name = "ix_ts_desc" });
+            await ledger.Indexes.CreateManyAsync(new[] { byAccount, byTs });
+        }
+        catch (MongoException e)
+        {
+            // 索引创建失败(可能重复 / 配置变更冲突):不阻断 ledger 句柄绑定。
+            Log.Warning($"PlayerPropertyServiceComponent: player_attr_ledger 索引创建警告(可能重复存在),err={e.Message}");
+        }
+        self.AttrLedger = ledger;
+
+        Log.Info($"PlayerPropertyServiceComponent 初始化完成,玩家属性账本集合句柄已绑定(players + player_attr_ledger);" +
                  $"初始值[coin={self.CoinInitial} diamond={self.DiamondInitial} stamina={self.StaminaInitial}]," +
                  $"上界[coin={self.CoinUpperBound} diamond={self.DiamondUpperBound} stamina={self.StaminaUpperBound}].");
-        await FTask.CompletedTask;
     }
 }
 
@@ -114,5 +141,6 @@ public sealed class PlayerPropertyServiceComponentDestroySystem : DestroySystem<
     protected override void Destroy(PlayerPropertyServiceComponent self)
     {
         self.Players = null;
+        self.AttrLedger = null;
     }
 }

@@ -14,6 +14,13 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// <summary>玩家属性账本集合(players),_id = UUID 字符串。Init 前 / MongoDB 不可达时为 null。</summary>
     public IMongoCollection<PlayerDoc>? Players;
 
+    /// <summary>
+    /// 玩家三属性变更审计流水集合(player_attr_ledger,设计 44 §3.1)。Init 前 / MongoDB 不可达时为 null。
+    /// 每笔 ChangeProperty 写库成功后追加一行(AttrLedgerHelper.AppendAsync),**永不** update / delete(SV14)。
+    /// Null 时 ChangeProperty 写库照常成功 + ledger 旁路静默跳过(余额不回滚,沿设计 44 §3.4 「ledger 失败不回滚 players」基线)。
+    /// </summary>
+    public IMongoCollection<PlayerAttrLedgerDoc>? AttrLedger;
+
     /// <summary>金币首登初始值(运营配置,默认 0;§3.1 + plan D6 不读 PlayerPrefs 老值)。</summary>
     public long CoinInitial;
 

@@ -186,6 +186,19 @@ public static class PlayerPropertyServiceHelper
                 // 写入成功:取新余额(变更后)。
                 var newAmount = GetFieldValue(doc, type);
                 Log.Debug($"PlayerProperty 变更成功 account={accountId} type={type} delta={delta} reason='{reason}' newAmount={newAmount}");
+
+                // 设计 44 §3.4:ledger 旁路追加挂在 FindOneAndUpdate 成功裁决后、本方法 return 之前。
+                // 调用方 return 后才 SendDeltaPushTo → 推送给客户端,保证 ledger 永远先于推送写入。
+                // ledger 失败仅告警不回滚(余额已成功定格,SV11);AttrLedger 句柄 null(MongoDB 不可达)静默跳过。
+                // BalanceBefore = newAmount - delta(等价于 returnDocument Before,设计 44 §3.1)。
+                await AttrLedgerHelper.AppendAsync(
+                    service, accountId, type,
+                    balanceBefore: newAmount - delta,
+                    balanceAfter: newAmount,
+                    delta: delta,
+                    reasonRaw: reason ?? string.Empty,
+                    timestampMs: nowMs);
+
                 return (PropertyChangeResultCode.Success, newAmount);
             }
 
