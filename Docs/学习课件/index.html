@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fantasy 框架学习课件</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --sidebar:#010409;
+    --border:#30363d; --border-soft:#21262d;
+    --text:#c9d1d9; --head:#e6edf3; --muted:#8b949e;
+    --accent:#58a6ff; --accent2:#3fb950; --accent3:#bc8cff;
+    --code-bg:#161b22; --code-text:#79c0ff;
+    --note-bg:#0d253f; --note-bd:#1f6feb; --warn-bg:#2b2305; --warn-bd:#9e6a03;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);line-height:1.7;background:var(--bg);font-size:15px}
+  code,pre{font-family:"SF Mono",Consolas,"Cascadia Code",Menlo,monospace}
+  .layout{display:flex;min-height:100vh}
+  .sidebar{width:268px;flex:0 0 268px;background:var(--sidebar);border-right:1px solid var(--border);
+    position:sticky;top:0;height:100vh;overflow-y:auto;padding:22px 16px}
+  .sidebar h1{font-size:16px;margin:0 0 2px;color:var(--accent)}
+  .sidebar .sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+  .sidebar nav a{display:block;text-decoration:none;color:#adbac7;font-size:13.5px;padding:5px 10px;border-radius:6px;margin:1px 0}
+  .sidebar nav a:hover{background:#161b22;color:var(--accent)}
+  .sidebar nav a.sub2{padding-left:24px;font-size:12.5px;color:var(--muted)}
+  .sidebar nav a.active{background:var(--accent);color:#0d1117;font-weight:600}
+  .sidebar nav .grp{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6e7681;margin:14px 10px 4px}
+  .content{flex:1;min-width:0;padding:38px 52px 120px;max-width:1000px}
+  .content > header{border-bottom:2px solid var(--accent);padding-bottom:14px;margin-bottom:28px}
+  .content > header h1{font-size:30px;margin:0 0 6px;color:var(--head)}
+  .content > header p{margin:0;color:var(--muted)}
+  section{margin-bottom:48px;scroll-margin-top:18px}
+  h2{font-size:23px;border-bottom:1px solid var(--border);padding-bottom:8px;margin:0 0 16px;color:var(--head)}
+  h3{font-size:18px;margin:26px 0 10px;color:var(--head)}
+  h4{font-size:15px;margin:18px 0 6px;color:#adbac7}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:5px 0}
+  a{color:var(--accent)}
+  b{color:var(--head)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:#1f2630;font-weight:600;color:var(--head)}
+  tr:nth-child(even) td{background:#13181f}
+  code{background:var(--code-bg);border:1px solid var(--border-soft);border-radius:4px;padding:1px 5px;font-size:12.5px;color:#f0abfc}
+  pre{background:#010409;border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.55}
+  pre code{background:none;border:none;padding:0;color:#c9d1d9}
+  a.f{font-family:"SF Mono",Consolas,monospace;color:var(--accent);background:var(--code-bg);
+    border:1px solid var(--border-soft);border-radius:4px;padding:1px 6px 1px 5px;font-size:12.5px;text-decoration:none;white-space:nowrap}
+  a.f:hover{border-color:var(--accent);background:#1f2937}
+  a.f::after{content:" ↗";font-size:10px;color:var(--muted)}
+  .note,.warn{border-radius:8px;padding:12px 16px;margin:14px 0;font-size:14px}
+  .note{background:var(--note-bg);border:1px solid var(--note-bd)}
+  .warn{background:var(--warn-bg);border:1px solid var(--warn-bd)}
+  .pills span{display:inline-block;background:#1c2128;border:1px solid var(--border);border-radius:999px;
+    padding:3px 11px;font-size:12.5px;margin:3px 5px 3px 0;color:#adbac7}
+  .mental{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:14px 18px;margin:14px 0}
+  .mental h4{margin:0 0 6px;color:var(--accent)}
+  .modgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+  .modcard{border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--panel)}
+  .modcard .t{font-weight:600;color:var(--head)}
+  .modcard .t small{color:var(--accent2);font-weight:600;font-size:11px;margin-left:6px}
+  .modcard .d{font-size:13px;color:var(--muted);margin-top:3px}
+  figure{margin:20px 0}
+  figure svg{width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:var(--panel);padding:10px}
+  figcaption{font-size:12.5px;color:var(--muted);text-align:center;margin-top:6px}
+  .fp{font-size:13px;color:var(--muted)}
+  .fp b{color:#adbac7}
+  .hint{font-size:13px;color:var(--muted);font-style:italic;margin:6px 0 0}
+  @media(max-width:880px){.sidebar{display:none}.content{padding:24px 18px 80px}.modgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar">
+    <h1>Fantasy 学习课件</h1>
+    <div class="sub">服务端 + Unity 全链路</div>
+    <nav>
+      <a href="#about">关于本课件</a>
+      <div class="grp">阶段 0 · 全局概览</div>
+      <a href="#mental" class="sub2">三个核心心智模型</a>
+      <a href="#layers" class="sub2">三层结构图</a>
+      <a href="#dataflow" class="sub2">数据流图</a>
+      <a href="#seq" class="sub2">登录时序图</a>
+      <a href="#ecs-rel" class="sub2">ECS 关系图</a>
+      <a href="#modmap" class="sub2">模块依赖图 + 地图</a>
+      <div class="grp">分阶段深入</div>
+      <a href="#p1">阶段 1 · 配置 / 启动</a>
+      <a href="#p2">阶段 2 · ECS 核心</a>
+      <a href="#p3">阶段 3 · 网络全链路</a>
+      <a href="#p4">阶段 4 · 分布式特性</a>
+      <a href="#p5">阶段 5 · 数据与服务</a>
+      <a href="#p6">阶段 6 · 配套进阶</a>
+      <div class="grp">附录</div>
+      <a href="#verify">验证工具速查</a>
+      <a href="#cheat">速查表（命令/约定）</a>
+    </nav>
+  </nav>
+
+  <main class="content">
+    <header>
+      <h1>Fantasy 框架学习课件</h1>
+      <p>零反射 · 高性能 · ECS · AOT 友好的 C# 分布式游戏服务器框架 —— 从地基到分布式，服务端与 Unity 客户端全链路。</p>
+    </header>
+
+    <section id="about">
+      <h2>关于本课件</h2>
+      <p>一份<b>随教学逐阶段填充</b>的活文档。学习路线：服务端 + Unity 全链路、先全局概览再从地基逐阶段深入。每阶段按 <b>定位 → 读码 → 动手 → 验证 → 参考</b> 组织。</p>
+      <div class="note"><b>文件可点开</b>：文中带 <code>↗</code> 的文件路径都是可点击链接，点一下用系统默认程序打开对应源码 / 配置 / 文档。<b>权威参考</b>：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/SKILL.md">Skills/fantasy-net/SKILL.md</a> 是写/审 Fantasy 代码的导航总表。</div>
+    </section>
+
+    <!-- ===================== 阶段 0 ===================== -->
+    <section id="mental">
+      <h2>阶段 0 · 全局概览</h2>
+      <p>不抠细节，用<b>你已亲手跑通的那条链路</b>当地图，把整个框架一次性串起来。</p>
+      <h3>一、三个核心心智模型（先装进脑子）</h3>
+      <div class="mental">
+        <h4>① Scene 是一切的容器和生命周期边界</h4>
+        <p>「Gate 场景」「Map 场景」都是 <code>Scene</code>。所有 Entity 都活在某个 Scene 里；销毁一个 Scene 会<b>级联销毁</b>其下所有东西。想用框架功能（定时器、事件、网络、数据库），都通过 <code>self.Scene</code> 上挂的组件拿到。<b>找不到入口时，先看 <code>Scene</code>。</b></p>
+      </div>
+      <div class="mental">
+        <h4>② 零反射 =「定义即注册」</h4>
+        <p>由 <code>Fantasy.SourceGenerator</code> 在<b>编译期</b>把每个 Handler/System/协议/场景类型生成成注册代码。所以：写个 Handler 类它就自动被路由（<b>绝不手动注册</b>）；改协议/配置后要<b>重新构建</b>；<code>*.g.cs</code> 与 <code>Generate/</code> 产物<b>绝不手改</b>，改源头。</p>
+      </div>
+      <div class="mental">
+        <h4>③ Entity 不 <code>new</code>，异步不用 <code>Task</code></h4>
+        <p>Entity/Component 通过工厂创建（带对象池、零 GC），都是 <code>sealed class</code>；所有异步<b>一律 <code>FTask</code></b>。</p>
+      </div>
+    </section>
+
+    <section id="layers">
+      <h3>二、三层结构图 —— 服务端其实是三个工程</h3>
+      <figure>
+        <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fantasy 服务端三层结构：Main 引用 Entity 和 Hotfix，Hotfix 引用 Entity，Entity 引用 Fantasy 框架">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6e7681"/></marker>
+          </defs>
+          <!-- Main -->
+          <rect x="285" y="20" width="190" height="62" rx="9" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+          <text x="380" y="46" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Main · 入口</text>
+          <text x="380" y="66" text-anchor="middle" font-size="11" fill="#8b949e">Program.cs（加载→logger→Start）</text>
+          <!-- Entity -->
+          <rect x="70" y="160" width="230" height="78" rx="9" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+          <text x="185" y="188" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Entity · 数据</text>
+          <text x="185" y="208" text-anchor="middle" font-size="11" fill="#8b949e">Entity/Component 定义</text>
+          <text x="185" y="224" text-anchor="middle" font-size="11" fill="#8b949e">Fantasy.config · Generate/</text>
+          <!-- Hotfix -->
+          <rect x="460" y="160" width="230" height="78" rx="9" fill="#161b22" stroke="#bc8cff" stroke-width="2"/>
+          <text x="575" y="188" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Hotfix · 逻辑</text>
+          <text x="575" y="208" text-anchor="middle" font-size="11" fill="#8b949e">消息 Handler · ECS System</text>
+          <text x="575" y="224" text-anchor="middle" font-size="11" fill="#8b949e">可热重载</text>
+          <!-- Fantasy -->
+          <rect x="70" y="300" width="230" height="62" rx="9" fill="#0d253f" stroke="#1f6feb" stroke-width="1.6"/>
+          <text x="185" y="326" text-anchor="middle" font-size="14" font-weight="700" fill="#e6edf3">Fantasy.Net + SourceGenerator</text>
+          <text x="185" y="346" text-anchor="middle" font-size="11" fill="#8b949e">框架运行时 + 编译期注册</text>
+          <!-- arrows -->
+          <line x1="330" y1="82" x2="210" y2="158" stroke="#6e7681" stroke-width="1.8" marker-end="url(#a1)"/>
+          <line x1="430" y1="82" x2="560" y2="158" stroke="#6e7681" stroke-width="1.8" marker-end="url(#a1)"/>
+          <line x1="460" y1="205" x2="302" y2="205" stroke="#6e7681" stroke-width="1.8" marker-end="url(#a1)"/>
+          <line x1="185" y1="238" x2="185" y2="298" stroke="#6e7681" stroke-width="1.8" marker-end="url(#a1)"/>
+          <text x="252" y="118" font-size="11" fill="#8b949e">引用</text>
+          <text x="505" y="118" font-size="11" fill="#8b949e">引用</text>
+          <text x="360" y="198" font-size="11" fill="#8b949e">引用</text>
+          <text x="196" y="272" font-size="11" fill="#8b949e">唯一直接引用框架</text>
+          <text x="330" y="350" font-size="11.5" fill="#8b949e" font-style="italic">数据(Entity) / 逻辑(Hotfix) 分离 → 才能热重载</text>
+        </svg>
+        <figcaption>引用链 Main → {Entity, Hotfix}、Hotfix → Entity、Entity → Fantasy。<b>别把 Handler/System 写进 Entity。</b></figcaption>
+      </figure>
+      <p class="fp">关键文件：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Main/Program.cs">Main/Program.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/AssemblyHelper.cs">Entity/AssemblyHelper.cs</a></p>
+    </section>
+
+    <section id="dataflow">
+      <h3>三、数据流图：你按下 Play 后发生了什么</h3>
+      <figure>
+        <svg viewBox="0 0 920 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="登录到进图收单位的数据流">
+          <defs><marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6e7681"/></marker></defs>
+          <text x="16" y="38" font-size="13" font-weight="700" fill="#e6edf3">① 请求：登录 → 进图（自左向右）</text>
+          <rect x="16" y="56" width="165" height="92" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+          <text x="98" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Unity 客户端</text>
+          <text x="98" y="111" text-anchor="middle" font-size="10.5" fill="#8b949e">FantasyNetwork</text>
+          <text x="98" y="126" text-anchor="middle" font-size="10.5" fill="#8b949e">Session.Call/Send</text>
+          <rect x="198" y="56" width="165" height="92" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="280" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Gate 场景</text>
+          <text x="280" y="111" text-anchor="middle" font-size="10.5" fill="#8b949e">KCP 20000</text>
+          <text x="280" y="126" text-anchor="middle" font-size="10.5" fill="#8b949e">WS 20001</text>
+          <rect x="380" y="56" width="165" height="92" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="462" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">登录 RPC</text>
+          <text x="462" y="111" text-anchor="middle" font-size="10.5" fill="#8b949e">C2G_LoginGame</text>
+          <text x="462" y="126" text-anchor="middle" font-size="10.5" fill="#8b949e">Account 上线</text>
+          <rect x="562" y="56" width="165" height="92" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="644" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Roaming</text>
+          <text x="644" y="111" text-anchor="middle" font-size="10.5" fill="#8b949e">Link</text>
+          <text x="644" y="126" text-anchor="middle" font-size="10.5" fill="#8b949e">Gate → Map</text>
+          <rect x="744" y="56" width="160" height="92" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="824" y="90" text-anchor="middle" font-size="15" font-weight="700" fill="#e6edf3">Map · Terminus</text>
+          <text x="824" y="111" text-anchor="middle" font-size="10.5" fill="#8b949e">OnCreateTerminus</text>
+          <text x="824" y="126" text-anchor="middle" font-size="10.5" fill="#8b949e">→ 创建 Unit</text>
+          <line x1="181" y1="102" x2="198" y2="102" stroke="#6e7681" stroke-width="2" marker-end="url(#a2)"/>
+          <line x1="363" y1="102" x2="380" y2="102" stroke="#6e7681" stroke-width="2" marker-end="url(#a2)"/>
+          <line x1="545" y1="102" x2="562" y2="102" stroke="#6e7681" stroke-width="2" marker-end="url(#a2)"/>
+          <line x1="727" y1="102" x2="744" y2="102" stroke="#6e7681" stroke-width="2" marker-end="url(#a2)"/>
+          <text x="98" y="168" text-anchor="middle" font-size="10.5" fill="#58a6ff">阶段3 网络/协议</text>
+          <text x="280" y="168" text-anchor="middle" font-size="10.5" fill="#8b949e">阶段1 配置·阶段2 Scene</text>
+          <text x="462" y="168" text-anchor="middle" font-size="10.5" fill="#8b949e">阶段3 Message/RPC</text>
+          <text x="644" y="168" text-anchor="middle" font-size="10.5" fill="#8b949e">阶段4 Roaming</text>
+          <text x="824" y="168" text-anchor="middle" font-size="10.5" fill="#8b949e">阶段4 Terminus·阶段2 ECS</text>
+          <path d="M824,148 L824,208" fill="none" stroke="#6e7681" stroke-width="2" marker-end="url(#a2)"/>
+          <text x="836" y="184" font-size="10.5" fill="#8b949e">回推</text>
+          <text x="16" y="258" font-size="13" font-weight="700" fill="#e6edf3">② 推送：服务端把单位广播回客户端（自右向左）</text>
+          <rect x="744" y="274" width="160" height="86" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="824" y="306" text-anchor="middle" font-size="14" font-weight="700" fill="#e6edf3">M2C_UnitCreate</text>
+          <text x="824" y="327" text-anchor="middle" font-size="10.5" fill="#8b949e">广播：自己 + 他人</text>
+          <text x="824" y="343" text-anchor="middle" font-size="10.5" fill="#8b949e">PlayerUnitManageHelper</text>
+          <rect x="380" y="274" width="165" height="86" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="462" y="310" text-anchor="middle" font-size="14" font-weight="700" fill="#e6edf3">Gate 转发</text>
+          <text x="462" y="331" text-anchor="middle" font-size="10.5" fill="#8b949e">下行推送给 Session</text>
+          <rect x="16" y="274" width="165" height="86" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+          <text x="98" y="306" text-anchor="middle" font-size="14" font-weight="700" fill="#e6edf3">Unity 收推送</text>
+          <text x="98" y="327" text-anchor="middle" font-size="10.5" fill="#8b949e">M2C_UnitCreateHandler</text>
+          <text x="98" y="343" text-anchor="middle" font-size="10.5" fill="#8b949e">→ 生成胶囊</text>
+          <line x1="744" y1="317" x2="545" y2="317" stroke="#6e7681" stroke-width="2" marker-end="url(#a2)"/>
+          <line x1="380" y1="317" x2="181" y2="317" stroke="#6e7681" stroke-width="2" marker-end="url(#a2)"/>
+          <line x1="16" y1="420" x2="904" y2="420" stroke="#30363d" stroke-width="1"/>
+          <rect x="16" y="440" width="26" height="15" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+          <text x="50" y="452" font-size="11.5" fill="#8b949e">客户端（Unity）</text>
+          <rect x="190" y="440" width="26" height="15" rx="4" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="224" y="452" font-size="11.5" fill="#8b949e">服务端场景（Scene）</text>
+          <text x="16" y="490" font-size="11.5" fill="#8b949e">这一条链路用到了：配置 / Scene / 协议 / Message·RPC / ECS / Roaming·Terminus 六大模块。</text>
+        </svg>
+        <figcaption>请求自左向右，推送自右向左返回客户端。</figcaption>
+      </figure>
+    </section>
+
+    <section id="seq">
+      <h3>四、登录时序图（同一条链路，按时间看）</h3>
+      <figure>
+        <svg viewBox="0 0 880 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="登录进图时序图：Unity 客户端、Gate 场景、Map 场景之间的消息往来">
+          <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker></defs>
+          <!-- lifelines -->
+          <line x1="140" y1="62" x2="140" y2="566" stroke="#30363d" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <line x1="440" y1="62" x2="440" y2="566" stroke="#30363d" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <line x1="740" y1="62" x2="740" y2="566" stroke="#30363d" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <!-- heads -->
+          <rect x="62" y="16" width="156" height="40" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+          <text x="140" y="41" text-anchor="middle" font-size="13" font-weight="700" fill="#e6edf3">Unity 客户端</text>
+          <rect x="362" y="16" width="156" height="40" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+          <text x="440" y="41" text-anchor="middle" font-size="13" font-weight="700" fill="#e6edf3">Gate 场景</text>
+          <rect x="662" y="16" width="156" height="40" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+          <text x="740" y="41" text-anchor="middle" font-size="13" font-weight="700" fill="#e6edf3">Map 场景</text>
+          <!-- msgs -->
+          <text x="290" y="84" text-anchor="middle" font-size="11.5" fill="#c9d1d9">Scene.Connect (KCP/WS)</text>
+          <line x1="140" y1="92" x2="438" y2="92" stroke="#8b949e" stroke-width="1.6" marker-end="url(#a3)"/>
+          <text x="290" y="118" text-anchor="middle" font-size="11.5" fill="#8b949e">建立 Session</text>
+          <line x1="440" y1="126" x2="142" y2="126" stroke="#8b949e" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a3)"/>
+          <text x="290" y="160" text-anchor="middle" font-size="11.5" fill="#c9d1d9">C2G_LoginGameRequest</text>
+          <line x1="140" y1="168" x2="438" y2="168" stroke="#8b949e" stroke-width="1.6" marker-end="url(#a3)"/>
+          <rect x="450" y="182" width="232" height="34" rx="6" fill="#1c2128" stroke="#3fb950" stroke-width="1.3"/>
+          <text x="566" y="203" text-anchor="middle" font-size="11" fill="#adbac7">Account 上线 + Roaming Link → Map</text>
+          <text x="290" y="244" text-anchor="middle" font-size="11.5" fill="#8b949e">G2C_LoginGameResponse (ErrorCode=0)</text>
+          <line x1="440" y1="252" x2="142" y2="252" stroke="#8b949e" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a3)"/>
+          <text x="290" y="286" text-anchor="middle" font-size="11.5" fill="#c9d1d9">C2M_InitComplete（漫游消息）</text>
+          <line x1="140" y1="294" x2="438" y2="294" stroke="#8b949e" stroke-width="1.6" marker-end="url(#a3)"/>
+          <text x="590" y="320" text-anchor="middle" font-size="11.5" fill="#c9d1d9">Roaming 转发</text>
+          <line x1="440" y1="328" x2="738" y2="328" stroke="#8b949e" stroke-width="1.6" marker-end="url(#a3)"/>
+          <rect x="600" y="342" width="232" height="34" rx="6" fill="#1c2128" stroke="#3fb950" stroke-width="1.3"/>
+          <text x="716" y="363" text-anchor="middle" font-size="11" fill="#adbac7">OnCreateTerminus → 创建 PlayerUnit</text>
+          <text x="590" y="404" text-anchor="middle" font-size="11.5" fill="#c9d1d9">M2C_UnitCreate（广播）</text>
+          <line x1="740" y1="412" x2="442" y2="412" stroke="#8b949e" stroke-width="1.6" marker-end="url(#a3)"/>
+          <text x="290" y="438" text-anchor="middle" font-size="11.5" fill="#c9d1d9">下行推送给 Session</text>
+          <line x1="440" y1="446" x2="142" y2="446" stroke="#8b949e" stroke-width="1.6" marker-end="url(#a3)"/>
+          <rect x="34" y="472" width="212" height="34" rx="6" fill="#1c2128" stroke="#58a6ff" stroke-width="1.3"/>
+          <text x="140" y="493" text-anchor="middle" font-size="11" fill="#adbac7">UnitViewManager → 生成胶囊</text>
+          <text x="140" y="548" text-anchor="middle" font-size="11" fill="#6e7681">实线=请求/推送　虚线=响应返回</text>
+        </svg>
+        <figcaption>实线箭头是请求/推送，虚线箭头是 RPC 响应返回。</figcaption>
+      </figure>
+      <p class="fp">对照代码：<a class="f" href="file:///D:/work/TEngine_block/UnityProject/Assets/Fantasy/Scripts/FantasyNetwork.cs">FantasyNetwork.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Gate/Account/AccountHelper.cs">AccountHelper.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Map/Roaming/OnCreateTerminus_LinkUnit.cs">OnCreateTerminus_LinkUnit.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/UnityProject/Assets/Fantasy/Scripts/Handlers/M2C_UnitCreateHandler.cs">M2C_UnitCreateHandler.cs</a></p>
+    </section>
+
+    <section id="ecs-rel">
+      <h3>五、ECS 关系图（Scene / Entity / Component / System）</h3>
+      <figure>
+        <svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ECS 关系：Scene 容器内 Entity 持有 Component，System 驱动其生命周期，Scene 挂载框架组件">
+          <defs><marker id="a4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6e7681"/></marker></defs>
+          <rect x="16" y="16" width="728" height="328" rx="12" fill="none" stroke="#3fb950" stroke-width="1.6" stroke-dasharray="6 5"/>
+          <text x="34" y="40" font-size="13" font-weight="700" fill="#3fb950">Scene（容器 / 生命周期边界）</text>
+          <!-- Entity -->
+          <rect x="60" y="80" width="170" height="58" rx="9" fill="#161b22" stroke="#58a6ff" stroke-width="1.8"/>
+          <text x="145" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#e6edf3">Entity 实体</text>
+          <text x="145" y="124" text-anchor="middle" font-size="10.5" fill="#8b949e">sealed class · 工厂创建</text>
+          <!-- Component -->
+          <rect x="60" y="216" width="170" height="58" rx="9" fill="#161b22" stroke="#bc8cff" stroke-width="1.8"/>
+          <text x="145" y="242" text-anchor="middle" font-size="14" font-weight="700" fill="#e6edf3">Component 数据</text>
+          <text x="145" y="260" text-anchor="middle" font-size="10.5" fill="#8b949e">挂在 Entity 上</text>
+          <line x1="145" y1="138" x2="145" y2="214" stroke="#6e7681" stroke-width="1.8" marker-end="url(#a4)"/>
+          <text x="152" y="180" font-size="10.5" fill="#8b949e">持有 / 增删组件</text>
+          <!-- System -->
+          <rect x="300" y="148" width="190" height="78" rx="9" fill="#161b22" stroke="#f0883e" stroke-width="1.8"/>
+          <text x="395" y="176" text-anchor="middle" font-size="14" font-weight="700" fill="#e6edf3">System 系统</text>
+          <text x="395" y="196" text-anchor="middle" font-size="10.5" fill="#8b949e">Awake / Update / Destroy</text>
+          <text x="395" y="212" text-anchor="middle" font-size="10.5" fill="#8b949e">DeserializeSystem 等</text>
+          <line x1="300" y1="200" x2="232" y2="240" stroke="#6e7681" stroke-width="1.8" marker-end="url(#a4)"/>
+          <text x="250" y="232" font-size="10.5" fill="#8b949e">驱动生命周期</text>
+          <!-- framework comps -->
+          <rect x="540" y="80" width="180" height="194" rx="9" fill="#0d253f" stroke="#1f6feb" stroke-width="1.4"/>
+          <text x="630" y="104" text-anchor="middle" font-size="12.5" font-weight="700" fill="#e6edf3">Scene 挂载的框架组件</text>
+          <text x="556" y="132" font-size="11.5" fill="#adbac7">· TimerComponent</text>
+          <text x="556" y="156" font-size="11.5" fill="#adbac7">· EventComponent</text>
+          <text x="556" y="180" font-size="11.5" fill="#adbac7">· Network / Session</text>
+          <text x="556" y="204" font-size="11.5" fill="#adbac7">· World.Database</text>
+          <text x="556" y="228" font-size="11.5" fill="#adbac7">· SphereEventComponent</text>
+          <text x="556" y="256" font-size="10.5" fill="#8b949e">→ self.Scene.Xxx 拿到</text>
+        </svg>
+        <figcaption>Scene 装 Entity，Entity 持有 Component，System 驱动其生命周期；框架能力都挂在 Scene 上。</figcaption>
+      </figure>
+      <p class="fp">例子：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Game%20Examples/Map/Unit/Unit.cs">Unit.cs</a>（Entity）· <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Game%20Examples/Map/TransformComponent/TransformComponent.cs">TransformComponent.cs</a>（Component）· <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Map/Unit/System/PlayerUnitSystem.cs">PlayerUnitSystem.cs</a>（System）</p>
+    </section>
+
+    <section id="modmap">
+      <h3>六、模块依赖图 + 模块地图</h3>
+      <figure>
+        <svg viewBox="0 0 820 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="模块依赖：配置→启动→Scene→ECS 为地基，Scene 扩展出网络、分布式、数据服务、解耦四大簇">
+          <defs><marker id="a5" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6e7681"/></marker></defs>
+          <!-- foundation chain -->
+          <rect x="30" y="30" width="160" height="46" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="110" y="58" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e6edf3">配置 Fantasy.config</text>
+          <rect x="30" y="116" width="160" height="46" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1.6"/>
+          <text x="110" y="144" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e6edf3">启动 / 源生成器</text>
+          <rect x="30" y="202" width="160" height="46" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+          <text x="110" y="230" text-anchor="middle" font-size="12.5" font-weight="700" fill="#e6edf3">Scene（中枢）</text>
+          <rect x="30" y="288" width="160" height="46" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="1.6"/>
+          <text x="110" y="316" text-anchor="middle" font-size="12.5" font-weight="600" fill="#e6edf3">ECS（实体模型）</text>
+          <line x1="110" y1="76" x2="110" y2="114" stroke="#6e7681" stroke-width="1.6" marker-end="url(#a5)"/>
+          <line x1="110" y1="162" x2="110" y2="200" stroke="#6e7681" stroke-width="1.6" marker-end="url(#a5)"/>
+          <line x1="110" y1="248" x2="110" y2="286" stroke="#6e7681" stroke-width="1.6" marker-end="url(#a5)"/>
+          <!-- clusters -->
+          <rect x="330" y="24" width="460" height="58" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+          <text x="350" y="48" font-size="12.5" font-weight="700" fill="#e6edf3">网络</text>
+          <text x="350" y="68" font-size="11" fill="#8b949e">协议(Outer/Inner) → Message/RPC → Session</text>
+          <rect x="330" y="110" width="460" height="58" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+          <text x="350" y="134" font-size="12.5" font-weight="700" fill="#e6edf3">分布式</text>
+          <text x="350" y="154" font-size="11" fill="#8b949e">Address · Roaming/Terminus · SphereEvent</text>
+          <rect x="330" y="196" width="460" height="58" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+          <text x="350" y="220" font-size="12.5" font-weight="700" fill="#e6edf3">数据 / 服务</text>
+          <text x="350" y="240" font-size="11" fill="#8b949e">数据库 MongoDB · HTTP</text>
+          <rect x="330" y="282" width="460" height="58" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+          <text x="350" y="306" font-size="12.5" font-weight="700" fill="#e6edf3">解耦底座</text>
+          <text x="350" y="326" font-size="11" fill="#8b949e">事件系统 · Timer · FTask · 日志</text>
+          <line x1="190" y1="220" x2="328" y2="53" stroke="#6e7681" stroke-width="1.5" marker-end="url(#a5)"/>
+          <line x1="190" y1="222" x2="328" y2="139" stroke="#6e7681" stroke-width="1.5" marker-end="url(#a5)"/>
+          <line x1="190" y1="228" x2="328" y2="225" stroke="#6e7681" stroke-width="1.5" marker-end="url(#a5)"/>
+          <line x1="190" y1="234" x2="328" y2="311" stroke="#6e7681" stroke-width="1.5" marker-end="url(#a5)"/>
+        </svg>
+        <figcaption>地基链：配置 → 启动 → Scene → ECS；Scene 作为中枢，向外扩展出四大模块簇。</figcaption>
+      </figure>
+      <div class="modgrid">
+        <div class="modcard"><div class="t">配置 Fantasy.config <small>阶段1</small></div><div class="d">XML 描述拓扑：机器→进程→世界→场景；决定起哪些 Scene、用什么协议、监听什么端口。</div></div>
+        <div class="modcard"><div class="t">启动 / 源生成器 <small>阶段1</small></div><div class="d">进程从 <code>--m</code> 起来；AssemblyHelper 触发 ModuleInitializer；零反射注册的根。</div></div>
+        <div class="modcard"><div class="t">Scene / SubScene <small>阶段2</small></div><div class="d">Entity 的容器与生命周期边界；SubScene 做副本/房间。</div></div>
+        <div class="modcard"><div class="t">ECS（Entity/Component/System）<small>阶段2</small></div><div class="d">数据对象模型 + Awake/Update/Destroy 生命周期；sealed class + 对象池。</div></div>
+        <div class="modcard"><div class="t">协议 Protocol <small>阶段3</small></div><div class="d">.proto 定义 Outer/Inner，导出成 C#。</div></div>
+        <div class="modcard"><div class="t">消息处理 Message/RPC <small>阶段3</small></div><div class="d">服务端 <code>Message&lt;Session,T&gt;</code>/<code>MessageRPC</code>；客户端 <code>Message&lt;T&gt;</code> 收推送。</div></div>
+        <div class="modcard"><div class="t">Session <small>阶段3</small></div><div class="d">客户端↔服务器会话：Connect/Send/Call/心跳。</div></div>
+        <div class="modcard"><div class="t">Address 消息 <small>阶段4</small></div><div class="d">服务器间按 RuntimeId 给某实体直发消息。</div></div>
+        <div class="modcard"><div class="t">Roaming / Terminus <small>阶段4</small></div><div class="d">分布式实体路由；Terminus 是后端那一份代理实体。</div></div>
+        <div class="modcard"><div class="t">SphereEvent <small>阶段4</small></div><div class="d">跨服域发布/订阅，解耦跨进程事件。</div></div>
+        <div class="modcard"><div class="t">事件系统 / EventAwaiter <small>阶段6</small></div><div class="d">进程内解耦：Struct/Entity 事件；EventAwaiter 等待-通知。</div></div>
+        <div class="modcard"><div class="t">Timer <small>阶段6</small></div><div class="d">定时/延迟/重复任务，FTask 友好。</div></div>
+        <div class="modcard"><div class="t">数据库 MongoDB <small>阶段5</small></div><div class="d"><code>scene.World.Database</code> 持久化；<code>[SeparateTable]</code> 分表。</div></div>
+        <div class="modcard"><div class="t">HTTP <small>阶段5</small></div><div class="d">Controller 对外 REST 接口（HttpGift 场景 20010）。</div></div>
+      </div>
+    </section>
+
+    <!-- ===================== 阶段 1 ===================== -->
+    <section id="p1">
+      <h2>阶段 1 · 地基：配置 / 启动 / 三层结构</h2>
+      <p class="hint">本阶段讲到时，会在这里补充配置结构图、启动流程时序图与代码走读。</p>
+      <p><b>目标</b>：搞懂一台 Fantasy 进程怎么从命令行起来、配置怎么决定拓扑、为什么数据/逻辑要分离。</p>
+      <h4>关键文件</h4>
+      <table>
+        <tr><th>主题</th><th>文件</th></tr>
+        <tr><td>配置与拓扑</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Fantasy.config">examples/Server/APP/Entity/Fantasy.config</a></td></tr>
+        <tr><td>入口</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Main/Program.cs">examples/Server/APP/Main/Program.cs</a></td></tr>
+        <tr><td>程序集加载</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/AssemblyHelper.cs">examples/Server/APP/Entity/AssemblyHelper.cs</a></td></tr>
+        <tr><td>场景初始化</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/OnCreateSceneEvent.cs">examples/Server/APP/Hotfix/OnCreateSceneEvent.cs</a></td></tr>
+        <tr><td>生成产物</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Generate/CustomExport/SceneType.cs">examples/.../Generate/CustomExport/SceneType.cs</a></td></tr>
+      </table>
+      <h4>动手 / 验证</h4>
+      <p>在 <code>Fantasy.config</code> 加/改一个 scene，重启看日志 <code>Startup Complete SceneCount</code> 变化；在 <code>OnCreateSceneEvent</code> 给某 SceneType 打一条启动日志。验证：<code>Fantasy/服务端配置</code> 启动 → 日志 <code>Process:1 Startup Complete SceneCount:N</code>。</p>
+      <p class="fp">参考：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/config.md">references/config.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Docs/01-Server/01-ServerConfiguration.md">Docs/01-Server/01-ServerConfiguration.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Docs/01-Server/02-WritingStartupCode.md">02-WritingStartupCode.md</a></p>
+    </section>
+
+    <!-- ===================== 阶段 2 ===================== -->
+    <section id="p2">
+      <h2>阶段 2 · ECS 核心：Entity / Component / System / Scene</h2>
+      <p class="hint">本阶段讲到时，会在这里补充 Entity 生命周期时序图与代码走读（关系图见阶段 0「ECS 关系图」）。</p>
+      <p><b>目标</b>：掌握 Fantasy 的对象模型与生命周期，这是后面一切的基础。</p>
+      <h4>关键文件</h4>
+      <table>
+        <tr><th>主题</th><th>文件</th></tr>
+        <tr><td>Entity 定义</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Game%20Examples/Map/Unit/Unit.cs">Map/Unit/Unit.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Game%20Examples/Gate/Account/Account.cs">Gate/Account/Account.cs</a></td></tr>
+        <tr><td>Component 定义</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Game%20Examples/Map/TransformComponent/TransformComponent.cs">Map/TransformComponent/TransformComponent.cs</a></td></tr>
+        <tr><td>System 生命周期</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Map/Unit/System/PlayerUnitSystem.cs">Map/Unit/System/PlayerUnitSystem.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Gate/Account/AccountManageComponentSystem.cs">Gate/Account/AccountManageComponentSystem.cs</a></td></tr>
+      </table>
+      <h4>动手</h4>
+      <p>给 <code>PlayerUnit</code> 加一个简单 Component（如 <code>LevelComponent</code>）+ 对应 AwakeSystem，登录进图后用日志确认它被创建。</p>
+      <p class="fp">参考：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/ecs/index.md">references/ecs/index.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/ecs/lifecycle.md">ecs/lifecycle.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Docs/04-Advanced/CoreSystems/01-ECS.md">Docs/.../01-ECS.md</a></p>
+    </section>
+
+    <!-- ===================== 阶段 3 ===================== -->
+    <section id="p3">
+      <h2>阶段 3 · 网络通信全链路：协议 + Message/RPC</h2>
+      <p class="hint">本阶段讲到时，会补充「协议定义 → 导出 → Handler → 客户端收发」的流程图与全链路 demo 走读。</p>
+      <p><b>目标</b>：打通「定义协议 → 服务端 Handler → Unity 客户端收发」整条链，全链路学习的核心。</p>
+      <h4>关键文件</h4>
+      <table>
+        <tr><th>主题</th><th>文件</th></tr>
+        <tr><td>协议定义</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Config/NetworkProtocol/Outer/">Config/NetworkProtocol/Outer/</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Config/NetworkProtocol/Inner/">Inner/</a></td></tr>
+        <tr><td>导出产物</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Generate/NetworkProtocol/">Entity/Generate/NetworkProtocol/</a></td></tr>
+        <tr><td>服务端 Handler</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Functional%20Examples/Outer/NormalMessage/Gate/C2G_TestMessageHandler.cs">C2G_TestMessageHandler.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Functional%20Examples/Outer/NormalMessage/Gate/C2G_TestRequestHandler.cs">C2G_TestRequestHandler.cs</a></td></tr>
+        <tr><td>Unity 客户端</td><td><a class="f" href="file:///D:/work/TEngine_block/UnityProject/Assets/Fantasy/Scripts/FantasyNetwork.cs">Assets/Fantasy/Scripts/FantasyNetwork.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/UnityProject/Assets/Fantasy/Scripts/Handlers/M2C_UnitCreateHandler.cs">Handlers/M2C_UnitCreateHandler.cs</a></td></tr>
+      </table>
+      <h4>动手（全链路）</h4>
+      <p>新增一对协议 <code>C2G_Echo</code>/<code>G2C_Echo</code>（RPC）→ 导出 → 服务端写 Handler 原样回包 → Unity 调一次并打印响应。把前三阶段串起来。</p>
+      <p class="fp">参考：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/protocol/index.md">references/protocol/index.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/server/server-message-handler.md">server/server-message-handler.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Docs/03-Networking/02-MessageHandler.md">Docs/03-Networking/02-MessageHandler.md</a></p>
+    </section>
+
+    <!-- ===================== 阶段 4 ===================== -->
+    <section id="p4">
+      <h2>阶段 4 · 分布式特性：Address / Roaming / SphereEvent</h2>
+      <p class="hint">本阶段讲到时，会补充 Roaming 路由建立的时序图与 Terminus 生命周期关系图。</p>
+      <p><b>目标</b>：理解服务器间通信和分布式实体路由（你登录进图其实已经在用 Roaming）。</p>
+      <h4>关键文件</h4>
+      <table>
+        <tr><th>主题</th><th>文件</th></tr>
+        <tr><td>Roaming / Terminus</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Gate/Account/AccountHelper.cs">Gate/Account/AccountHelper.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Map/Roaming/OnCreateTerminus_LinkUnit.cs">Map/Roaming/OnCreateTerminus_LinkUnit.cs</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Game%20Examples/Map/Unit/Helper/PlayerUnitManageHelper.cs">PlayerUnitManageHelper.cs</a></td></tr>
+        <tr><td>HTTP / 普通业务参考</td><td>见阶段 3 的 Handler 范式</td></tr>
+      </table>
+      <h4>动手</h4>
+      <p>顺着 <code>C2M_InitComplete → OnCreateTerminus → M2C_UnitCreate</code> 全程加日志走查；再用 Addressable/SphereEvent 的现成 C2G_ 入口从 Unity 触发一次。</p>
+      <p class="fp">参考：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/server/roaming/index.md">references/server/roaming/index.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/server/address.md">server/address.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/server/sphere-event/index.md">sphere-event/index.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Docs/04-Advanced/NetworkDevelopment/08-Roaming.md">Docs/.../08-Roaming.md</a></p>
+    </section>
+
+    <!-- ===================== 阶段 5 ===================== -->
+    <section id="p5">
+      <h2>阶段 5 · 数据与服务：数据库(MongoDB) + HTTP</h2>
+      <p class="hint">本阶段讲到时，会补充数据库读写时序图与 HTTP 请求处理流程图。</p>
+      <p><b>目标</b>：掌握持久化和对外 HTTP 接口。</p>
+      <h4>关键文件 / 要点</h4>
+      <table>
+        <tr><th>主题</th><th>要点</th></tr>
+        <tr><td>数据库</td><td>需先起本机 MongoDB，并在 <code>Fantasy.config</code> 的 <code>&lt;world&gt;&lt;database&gt;</code> 填 <code>dbConnection</code>；<code>scene.World.Database</code> 的 Save/Insert/Query/Remove；<code>[SeparateTable]</code> 分表。</td></tr>
+        <tr><td>HTTP</td><td><a class="f" href="file:///D:/work/TEngine_block/Fantasy/examples/Server/APP/Hotfix/Functional%20Examples/HTTPHandler/HelloController.cs">HTTPHandler/HelloController.cs</a>（Controller + Scene 注入），HttpGift 场景 <code>20010</code>。</td></tr>
+      </table>
+      <h4>动手</h4>
+      <p>数据库：Account 登录时落库 + 再次登录读回。HTTP：加一个 GET 接口，浏览器访问 <code>http://127.0.0.1:20010/...</code> 验证。</p>
+      <p class="fp">参考：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/database/index.md">references/database/index.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/http.md">references/http.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Docs/04-Advanced/Database/14-Database.md">Docs/.../14-Database.md</a></p>
+    </section>
+
+    <!-- ===================== 阶段 6 ===================== -->
+    <section id="p6">
+      <h2>阶段 6 · 配套与进阶：事件系统 / Timer / 序列化 / 工具链</h2>
+      <p class="hint">本阶段讲到时，会补充事件发布订阅关系图与 Timer 用法示例。</p>
+      <p><b>目标</b>：补齐解耦与工程化能力。</p>
+      <ul>
+        <li><b>事件系统</b>：<code>EventSystem</code>（同步 Struct 事件零 GC）、<code>AsyncEventSystem</code>、<code>EventAwaiter</code>（等待-通知）。</li>
+        <li><b>Timer</b>：<code>scene.TimerComponent</code>（<code>WaitAsync</code>/<code>OnceTimer</code>/<code>RepeatedTimer</code>，客户端重连已用过）。</li>
+        <li><b>其它底座</b>：FTask、MemoryPack/Bson 序列化、IdFactory、日志。</li>
+      </ul>
+      <p class="fp">参考：<a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/event/index.md">references/event/index.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Skills/fantasy-net/references/timer/index.md">references/timer/index.md</a> · <a class="f" href="file:///D:/work/TEngine_block/Fantasy/Docs/04-Advanced/CoreSystems/04-Event.md">Docs/.../04-Event.md</a></p>
+    </section>
+
+    <!-- ===================== 附录 ===================== -->
+    <section id="verify">
+      <h2>附录 A · 验证工具速查</h2>
+      <ul>
+        <li><b>启停服务器</b>：Unity 菜单 <code>Fantasy/服务端配置</code>（或 <code>Fantasy/启动服务端</code> / <code>停止服务端</code>）。</li>
+        <li><b>命令行</b>：<code>dotnet run --project examples/Server/APP/Main/Main.csproj -c Debug --framework net9.0 -- --m Develop</code>（<code>--framework</code> 和 <code>--m</code> 都必需）。</li>
+        <li><b>启动成功</b>：日志 <code>Process:1 Startup Complete SceneCount:7</code>。监听 KCP 20000、WebSocket 20001、HTTP 20010、Inner TCP 11001–11007。</li>
+        <li><b>客户端验证</b>：Unity 进 Play，Console 看 <code>[Fantasy] ...</code> 往返日志。</li>
+        <li><b>改协议后</b>：务必重新运行协议导出，确认两侧 opcode 一致。数据库章节需本机 MongoDB。</li>
+      </ul>
+    </section>
+
+    <section id="cheat">
+      <h2>附录 B · 速查表（命令 / 约定）</h2>
+      <h4>铁律约定</h4>
+      <div class="pills">
+        <span>异步用 FTask，不用 Task</span>
+        <span>Entity/Component/Handler = sealed class</span>
+        <span>namespace Fantasy;（文件作用域）</span>
+        <span>Entity 不 new，用工厂+对象池</span>
+        <span>错误用 response.ErrorCode</span>
+        <span>Log.Debug/Info/Error</span>
+        <span>绝不手改 *.g.cs / Generate</span>
+        <span>绝不手动注册 Handler/System</span>
+      </div>
+      <h4>编译期硬要求</h4>
+      <ul>
+        <li>编译常量 <code>FANTASY_NET</code>（服务端）/ <code>FANTASY_UNITY</code>（Unity）。</li>
+        <li><code>AllowUnsafeBlocks=true</code>；<code>Fantasy.SourceGenerator</code> 作为 <code>Analyzer</code> 引用。</li>
+        <li><code>Fantasy.config</code> 既 <code>AdditionalFiles</code> 又 <code>CopyToOutputDirectory=Always</code>。</li>
+      </ul>
+      <h4>客户端连接（Unity）</h4>
+      <pre><code>// 协议按 FANTASY_WEBGL 自动切：WebGL→WebSocket(20001)，原生→KCP(20000)
+Session = Scene.Connect(address, FantasyNetworkConfig.Protocol,
+    onComplete, onFail, onDisconnect, false, 5000);
+Session.AddComponent&lt;SessionHeartbeatComponent&gt;().Start(2000);   // 心跳，别漏
+var resp = await Session.C2G_LoginGameRequest(account);          // RPC</code></pre>
+      <h4>服务端 Handler 骨架</h4>
+      <pre><code>// 普通消息（无返回）
+public sealed class C2G_XxxMessageHandler : Message&lt;Session, C2G_XxxMessage&gt;
+{
+    protected override async FTask Run(Session session, C2G_XxxMessage message)
+    {
+        await FTask.CompletedTask;
+    }
+}
+
+// RPC（请求-响应）
+public sealed class C2G_XxxRequestHandler : MessageRPC&lt;Session, C2G_XxxRequest, G2C_XxxResponse&gt;
+{
+    protected override async FTask Run(Session session, C2G_XxxRequest request, G2C_XxxResponse response, Action reply)
+    {
+        // 失败：response.ErrorCode = ...; 成功留 0
+        await FTask.CompletedTask;
+    }
+}</code></pre>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  const links = Array.from(document.querySelectorAll('.sidebar nav a'));
+  const map = new Map();
+  links.forEach(a => { const id = a.getAttribute('href').slice(1); const el = document.getElementById(id); if (el) map.set(el, a); });
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { links.forEach(l => l.classList.remove('active')); const a = map.get(e.target); if (a) a.classList.add('active'); } });
+  }, { rootMargin: '-10% 0px -80% 0px', threshold: 0 });
+  map.forEach((a, el) => obs.observe(el));
+</script>
+</body>
+</html>
