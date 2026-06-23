@@ -229,406 +229,6 @@ namespace Fantasy
         public uint ErrorCode { get; set; }
     }
     /// <summary>
-    /// 客户端通知服务器可以接收服务器推送的消息
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class C2M_InitComplete : AMessage, IRoamingMessage
-    {
-        public static C2M_InitComplete Create(bool autoReturn = true)
-        {
-            var c2M_InitComplete = MessageObjectPool<C2M_InitComplete>.Rent();
-            c2M_InitComplete.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                c2M_InitComplete.SetIsPool(false);
-            }
-            
-            return c2M_InitComplete;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            MessageObjectPool<C2M_InitComplete>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.C2M_InitComplete; } 
-        [ProtoIgnore]
-        public int RouteType => Fantasy.RoamingType.MapRoamingType;
-    }
-    /// <summary>
-    /// Map服务器通知客户端创建新的Unit
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class M2C_UnitCreate : AMessage, IRoamingMessage
-    {
-        public static M2C_UnitCreate Create(bool autoReturn = true)
-        {
-            var m2C_UnitCreate = MessageObjectPool<M2C_UnitCreate>.Rent();
-            m2C_UnitCreate.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                m2C_UnitCreate.SetIsPool(false);
-            }
-            
-            return m2C_UnitCreate;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            if (Unit != null)
-            {
-                Unit.Dispose();
-                Unit = null;
-            }
-            IsSelf = default;
-            MessageObjectPool<M2C_UnitCreate>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.M2C_UnitCreate; } 
-        [ProtoIgnore]
-        public int RouteType => Fantasy.RoamingType.MapRoamingType;
-        [ProtoMember(1)]
-        public UnitInfo Unit { get; set; }
-        [ProtoMember(2)]
-        public bool IsSelf { get; set; }
-    }
-    /// <summary>
-    /// Map通知客户端有Unit离开
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class M2C_UnitLeave : AMessage, IRoamingMessage
-    {
-        public static M2C_UnitLeave Create(bool autoReturn = true)
-        {
-            var m2C_UnitLeave = MessageObjectPool<M2C_UnitLeave>.Rent();
-            m2C_UnitLeave.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                m2C_UnitLeave.SetIsPool(false);
-            }
-            
-            return m2C_UnitLeave;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            UnitId = default;
-            MessageObjectPool<M2C_UnitLeave>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.M2C_UnitLeave; } 
-        [ProtoIgnore]
-        public int RouteType => Fantasy.RoamingType.MapRoamingType;
-        [ProtoMember(1)]
-        public long UnitId { get; set; }
-    }
-    /// <summary>
-    /// Unit信息
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class UnitInfo : AMessage, IDisposable
-    {
-        public static UnitInfo Create(bool autoReturn = true)
-        {
-            var unitInfo = MessageObjectPool<UnitInfo>.Rent();
-            unitInfo.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                unitInfo.SetIsPool(false);
-            }
-            
-            return unitInfo;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            UnitId = default;
-            Name = default;
-            if (Pos != null)
-            {
-                Pos.Dispose();
-                Pos = null;
-            }
-            UnitType = default;
-            MessageObjectPool<UnitInfo>.Return(this);
-        }
-        [ProtoMember(1)]
-        public long UnitId { get; set; }
-        [ProtoMember(2)]
-        public string Name { get; set; }
-        [ProtoMember(3)]
-        public Position Pos { get; set; }
-        [ProtoMember(4)]
-        public int UnitType { get; set; }
-    }
-    /// <summary>
-    /// 客户端发送请求移动
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class C2M_MoveRequest : AMessage, IRoamingRequest
-    {
-        public static C2M_MoveRequest Create(bool autoReturn = true)
-        {
-            var c2M_MoveRequest = MessageObjectPool<C2M_MoveRequest>.Rent();
-            c2M_MoveRequest.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                c2M_MoveRequest.SetIsPool(false);
-            }
-            
-            return c2M_MoveRequest;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            if (TargetPos != null)
-            {
-                TargetPos.Dispose();
-                TargetPos = null;
-            }
-            MessageObjectPool<C2M_MoveRequest>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.C2M_MoveRequest; } 
-        [ProtoIgnore]
-        public M2C_MoveResponse ResponseType { get; set; }
-        [ProtoIgnore]
-        public int RouteType => Fantasy.RoamingType.MapRoamingType;
-        [ProtoMember(1)]
-        public Position TargetPos { get; set; }
-    }
-    [Serializable]
-    [ProtoContract]
-    public partial class M2C_MoveResponse : AMessage, IRoamingResponse
-    {
-        public static M2C_MoveResponse Create(bool autoReturn = true)
-        {
-            var m2C_MoveResponse = MessageObjectPool<M2C_MoveResponse>.Rent();
-            m2C_MoveResponse.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                m2C_MoveResponse.SetIsPool(false);
-            }
-            
-            return m2C_MoveResponse;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            ErrorCode = 0;
-            foreach (var __t in Data) __t.Dispose();
-            Data.Clear();
-            MessageObjectPool<M2C_MoveResponse>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.M2C_MoveResponse; } 
-        [ProtoMember(2)]
-        public uint ErrorCode { get; set; }
-        [ProtoMember(1)]
-        public List<Position> Data { get; set; } = new List<Position>();
-    }
-    /// <summary>
-    /// 坐标信息
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class Position : AMessage, IDisposable
-    {
-        public static Position Create(bool autoReturn = true)
-        {
-            var position = MessageObjectPool<Position>.Rent();
-            position.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                position.SetIsPool(false);
-            }
-            
-            return position;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            X = default;
-            Y = default;
-            Z = default;
-            MessageObjectPool<Position>.Return(this);
-        }
-        [ProtoMember(1)]
-        public float X { get; set; }
-        [ProtoMember(2)]
-        public float Y { get; set; }
-        [ProtoMember(3)]
-        public float Z { get; set; }
-    }
-    /// <summary>
-    /// 通知客户端Unit移动状态改变
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class M2C_UnitMoveState : AMessage, IRoamingMessage
-    {
-        public static M2C_UnitMoveState Create(bool autoReturn = true)
-        {
-            var m2C_UnitMoveState = MessageObjectPool<M2C_UnitMoveState>.Rent();
-            m2C_UnitMoveState.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                m2C_UnitMoveState.SetIsPool(false);
-            }
-            
-            return m2C_UnitMoveState;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            State = default;
-            UnitId = default;
-            if (Pos != null)
-            {
-                Pos.Dispose();
-                Pos = null;
-            }
-            MessageObjectPool<M2C_UnitMoveState>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.M2C_UnitMoveState; } 
-        [ProtoIgnore]
-        public int RouteType => Fantasy.RoamingType.MapRoamingType;
-        [ProtoMember(1)]
-        public int State { get; set; }
-        [ProtoMember(2)]
-        public long UnitId { get; set; }
-        [ProtoMember(3)]
-        public Position Pos { get; set; }
-    }
-    /// <summary>
     /// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
     /// </summary>
     [Serializable]
@@ -3336,6 +2936,134 @@ namespace Fantasy
         public TestMemoryPackInfo Info { get; set; }
     }
     /// <summary>
+    /// 玩家信息(基础档案 + 三数值属性快照),登录后整份下发
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class PlayerInfo : AMessage, IDisposable
+    {
+        public static PlayerInfo Create(bool autoReturn = true)
+        {
+            var playerInfo = MessageObjectPool<PlayerInfo>.Rent();
+            playerInfo.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                playerInfo.SetIsPool(false);
+            }
+            
+            return playerInfo;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            AccountId = default;
+            Nickname = default;
+            Level = default;
+            Exp = default;
+            foreach (var __t in Properties) __t.Dispose();
+            Properties.Clear();
+            SchemaVersion = default;
+            MessageObjectPool<PlayerInfo>.Return(this);
+        }
+        /// <summary>
+        /// 账号 ID(UUID,= 登录账号名)
+        /// </summary>
+        [ProtoMember(1)]
+        public string AccountId { get; set; }
+        /// <summary>
+        /// 昵称(首登默认空串,后续改名功能再填)
+        /// </summary>
+        [ProtoMember(2)]
+        public string Nickname { get; set; }
+        /// <summary>
+        /// 等级(首登默认 1)
+        /// </summary>
+        [ProtoMember(3)]
+        public int Level { get; set; }
+        /// <summary>
+        /// 经验(首登默认 0)
+        /// </summary>
+        [ProtoMember(4)]
+        public long Exp { get; set; }
+        /// <summary>
+        /// 三数值属性当前余额(金币/钻石/体力,复用 PropertyAmount)
+        /// </summary>
+        [ProtoMember(5)]
+        public List<PropertyAmount> Properties { get; set; } = new List<PropertyAmount>();
+        /// <summary>
+        /// schema 版本(加字段时升,客户端据此识别)
+        /// </summary>
+        [ProtoMember(6)]
+        public int SchemaVersion { get; set; }
+    }
+    /// <summary>
+    /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_PlayerInfoSnapshot : AMessage, IMessage
+    {
+        public static G2C_PlayerInfoSnapshot Create(bool autoReturn = true)
+        {
+            var g2C_PlayerInfoSnapshot = MessageObjectPool<G2C_PlayerInfoSnapshot>.Rent();
+            g2C_PlayerInfoSnapshot.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_PlayerInfoSnapshot.SetIsPool(false);
+            }
+            
+            return g2C_PlayerInfoSnapshot;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            if (Info != null)
+            {
+                Info.Dispose();
+                Info = null;
+            }
+            MessageObjectPool<G2C_PlayerInfoSnapshot>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_PlayerInfoSnapshot; } 
+        /// <summary>
+        /// 玩家完整信息(基础档案 + 三属性)
+        /// </summary>
+        [ProtoMember(1)]
+        public PlayerInfo Info { get; set; }
+    }
+    /// <summary>
     /// 单条属性余额项(初始快照下发用,可复用)
     /// </summary>
     [Serializable]
@@ -3509,61 +3237,6 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public long NewAmount { get; set; }
-    }
-    /// <summary>
-    /// 服务端登录后下发属性初始快照(服务端主动 push,本子单选独立 push message 而非登录响应捎带,
-    /// 形态与 G2C_PropertyDeltaPush 对齐,客户端段下一刀同一处订阅)(§3.3.1 + plan D3 + O4)
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class G2C_PropertyInitSnapshot : AMessage, IMessage
-    {
-        public static G2C_PropertyInitSnapshot Create(bool autoReturn = true)
-        {
-            var g2C_PropertyInitSnapshot = MessageObjectPool<G2C_PropertyInitSnapshot>.Rent();
-            g2C_PropertyInitSnapshot.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                g2C_PropertyInitSnapshot.SetIsPool(false);
-            }
-            
-            return g2C_PropertyInitSnapshot;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            foreach (var __t in Properties) __t.Dispose();
-            Properties.Clear();
-            SchemaVersion = default;
-            MessageObjectPool<G2C_PropertyInitSnapshot>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.G2C_PropertyInitSnapshot; } 
-        /// <summary>
-        /// 三属性当前余额(每登录一次完整下发,客户端段下一刀作初视图)
-        /// </summary>
-        [ProtoMember(1)]
-        public List<PropertyAmount> Properties { get; set; } = new List<PropertyAmount>();
-        /// <summary>
-        /// schema 版本(本子单 = 1;Tier 2+ 加字段时升版,客户端段据此识别)
-        /// </summary>
-        [ProtoMember(2)]
-        public int SchemaVersion { get; set; }
     }
     /// <summary>
     /// 服务端属性变更主动推送(每次写库成功后服务端起,推送目标 = 该 UUID 在线全部会话,§3.3.3 + §5.4)

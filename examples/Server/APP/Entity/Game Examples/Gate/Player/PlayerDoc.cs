@@ -30,9 +30,18 @@ public sealed class PlayerDoc
     /// <summary>体力余额(非负;同上)。</summary>
     public long Stamina { get; set; }
 
+    /// <summary>昵称(首登 setOnInsert 默认空串;旧文档缺字段时初始化器保底为空串)。</summary>
+    public string Nickname { get; set; } = string.Empty;
+
+    /// <summary>等级(首登 setOnInsert 默认 1;旧文档缺字段时初始化器保底为 1)。</summary>
+    public int Level { get; set; } = 1;
+
+    /// <summary>经验(首登 setOnInsert 默认 0;旧文档缺字段保底 0)。</summary>
+    public long Exp { get; set; }
+
     /// <summary>末次属性变更时间(服务端 Unix 毫秒,UTC)。每次 $inc 成功后 $set 刷新;Tier 2+ ledger 落地前作单字段快照。</summary>
     public long LastChangeUnixMs { get; set; }
 
-    /// <summary>schema 版本(本子单 = 1;Tier 2+ 加字段时升 2 + 缺字段保底)。</summary>
+    /// <summary>schema 版本(加字段时升 + 缺字段保底)。</summary>
     public int SchemaVersion { get; set; }
 }

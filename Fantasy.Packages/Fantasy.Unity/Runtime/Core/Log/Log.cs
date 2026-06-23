@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using UnityEngine;
 #if FANTASY_NET
 using Fantasy.Platform.Net;
 // ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
@@ -81,6 +82,7 @@ namespace Fantasy
         /// 记录信息级别的日志消息。
         /// </summary>
         /// <param name="msg">日志消息。</param>
+        [HideInCallstack]
         public static void Info(string msg)
         {
             _logCore.Info(msg);

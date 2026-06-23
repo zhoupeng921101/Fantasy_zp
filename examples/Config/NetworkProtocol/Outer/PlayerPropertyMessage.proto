@@ -57,14 +57,6 @@ message G2C_PropertyChangeResponse // IResponse
 	int64 NewAmount = 3;                       /// 成功 = 变更后该属性新余额;NotEnough / OverLimit = 当前实际余额(供 toast「需要 X,你有 Y」);其它失败 = 0
 }
 
-/// 服务端登录后下发属性初始快照(服务端主动 push,本子单选独立 push message 而非登录响应捎带,
-/// 形态与 G2C_PropertyDeltaPush 对齐,客户端段下一刀同一处订阅)(§3.3.1 + plan D3 + O4)
-message G2C_PropertyInitSnapshot // IMessage
-{
-	repeated PropertyAmount Properties = 1;    /// 三属性当前余额(每登录一次完整下发,客户端段下一刀作初视图)
-	int32 SchemaVersion = 2;                   /// schema 版本(本子单 = 1;Tier 2+ 加字段时升版,客户端段据此识别)
-}
-
 /// 服务端属性变更主动推送(每次写库成功后服务端起,推送目标 = 该 UUID 在线全部会话,§3.3.3 + §5.4)
 /// 推送是「绝对余额快照」非「相对变更流水」,丢失 = 下次登录拉快照对齐(O6 不重试)
 message G2C_PropertyDeltaPush // IMessage

@@ -33,10 +33,10 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
             return;
         }
 
-        // 玩家属性账本 setOnInsert + 读快照(设计 37 §3.2 处理顺序步骤 4):
-        // 首登 → insert 三属性初始值;重登 → update 路径不动余额、读当前值。
+        // 玩家数据 setOnInsert + 读整份文档(设计 37 §3.2 处理顺序步骤 4):
+        // 首登 → insert 三属性初始值 + 档案初值(昵称/等级/经验);重登 → update 路径不动既有值、读当前文档。
         // 失败 → 返登录失败,短路后续(不挂会话身份,沿 35 + 30 「服务不可用不本地放行」基线)。
-        var (propErrorCode, propSnapshot) = await PlayerPropertyServiceHelper.InitOrLoad(session.Scene, accountName);
+        var (propErrorCode, playerDoc) = await PlayerPropertyServiceHelper.InitOrLoad(session.Scene, accountName);
         if (propErrorCode != 0)
         {
             response.ErrorCode = propErrorCode;
@@ -55,11 +55,10 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         // 执行上线流程
         await AccountHelper.Online(session, account);
 
-        // 上线流程完成后,下发属性初始快照到该会话(设计 37 §3.3.1 + plan D3 + O4)。
-        // 形态选独立 G2C_PropertyInitSnapshot push message(非登录响应捎带),与 G2C_PropertyDeltaPush 对齐;
-        // 客户端段下一刀同一处订阅快照 + 推送两条消息,Player 模块作初视图。
+        // 上线流程完成后,下发玩家信息整份快照到该会话(取代原 G2C_PropertyInitSnapshot)。
+        // 一条 G2C_PlayerInfoSnapshot 携带基础档案(昵称/等级/经验)+ 三数值属性余额,客户端 Player 模块作初视图。
         // 放 Online 之后:确保 GateAccountFlagComponent + account.Session 都已挂全,推送通路稳。
-        PlayerPropertyServiceHelper.SendInitSnapshotTo(session, propSnapshot);
+        PlayerPropertyServiceHelper.SendPlayerInfoTo(session, accountName, playerDoc);
 
         // 活动系统登录触发(设计 39 §3.5 Login 类节律):遍历 Type=Login 活动各自 counter+1 + 判达标 + 抢占 + 发邮件。
         // 不写入 response、不影响 G2C_LoginGameResponse 契约(零客户端协议改);

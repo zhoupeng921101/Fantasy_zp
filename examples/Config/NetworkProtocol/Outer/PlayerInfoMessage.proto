@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+// PlayerInfoMessage.proto
+// 玩家信息聚合协议:登录成功后服务端主动下发一份完整玩家信息(基础档案 + 三数值属性)。
+// 取代原 G2C_PropertyInitSnapshot 的登录推送 —— 由本快照统一承载属性,登录只推这一条。
+// 身份与数值均服务端权威;数值属性复用 PlayerPropertyMessage.proto 的 PropertyType / PropertyAmount。
+
+/// 玩家信息(基础档案 + 三数值属性快照),登录后整份下发
+message PlayerInfo
+{
+	string AccountId = 1;                      /// 账号 ID(UUID,= 登录账号名)
+	string Nickname = 2;                       /// 昵称(首登默认空串,后续改名功能再填)
+	int32 Level = 3;                           /// 等级(首登默认 1)
+	int64 Exp = 4;                             /// 经验(首登默认 0)
+	repeated PropertyAmount Properties = 5;    /// 三数值属性当前余额(金币/钻石/体力,复用 PropertyAmount)
+	int32 SchemaVersion = 6;                   /// schema 版本(加字段时升,客户端据此识别)
+}
+
+/// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)
+message G2C_PlayerInfoSnapshot // IMessage
+{
+	PlayerInfo Info = 1;                       /// 玩家完整信息(基础档案 + 三属性)
+}

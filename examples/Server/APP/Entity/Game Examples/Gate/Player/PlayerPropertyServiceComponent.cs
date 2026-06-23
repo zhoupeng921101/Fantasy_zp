@@ -39,6 +39,6 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// <summary>体力类型上界(运营配置,默认 5;Tier 2+ 加体力上限独立字段后改为读上限字段)。</summary>
     public long StaminaUpperBound;
 
-    /// <summary>本子单的 schema 版本(常量 1;Tier 2+ 加字段时升)。</summary>
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>玩家数据 schema 版本(常量 2;PlayerDoc 加昵称/等级/经验后升至 2)。</summary>
+    public const int CurrentSchemaVersion = 2;
 }

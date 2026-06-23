@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Fantasy.Async;
 using Fantasy.Helper;
 using Fantasy.Network;
@@ -39,19 +38,17 @@ public static class PlayerPropertyServiceHelper
     ///             余额字段稳定 = 上次变更后的值);
     ///   ReturnDocument: After(取写后的当前文档,首登 = 初始值 / 重登 = 既有值)。
     ///
-    /// 返回 (errorCode, snapshot)。errorCode 0 = 成功(snapshot 含三属性当前余额);
-    /// 非 0 = MongoDB 不可达 / 异常 / 服务未挂(snapshot 为空)。
+    /// 返回 (errorCode, doc)。errorCode 0 = 成功(doc = 玩家完整文档:三属性余额 + 昵称/等级/经验);
+    /// 非 0 = MongoDB 不可达 / 异常 / 服务未挂(doc 为 null)。
     /// </summary>
-    public static async FTask<(uint errorCode, IReadOnlyList<(PropertyType type, long amount)> snapshot)> InitOrLoad(
+    public static async FTask<(uint errorCode, PlayerDoc? doc)> InitOrLoad(
         Scene scene, string accountId)
     {
-        var emptySnapshot = (IReadOnlyList<(PropertyType, long)>)System.Array.Empty<(PropertyType, long)>();
-
         var service = scene.GetComponent<PlayerPropertyServiceComponent>();
         if (service == null)
         {
             Log.Error("当前 Scene 下没有 PlayerPropertyServiceComponent 组件(应挂在 Gate Scene 上)。");
-            return (1u, emptySnapshot);
+            return (1u, null);
         }
 
         var players = service.Players;
@@ -59,21 +56,24 @@ public static class PlayerPropertyServiceHelper
         {
             // MongoDB 不可达 — AwakeSystem 已 Warning;此处不重复 Warning。
             // 登录失败短路:不挂会话身份(plan §3.2 失败硬约束 + 35 同口径)。
-            return (1u, emptySnapshot);
+            return (1u, null);
         }
 
         var nowMs = TimeHelper.Now;
         var filter = Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId);
 
-        // $setOnInsert:首登写 _id + 三初始余额 + LastChangeUnixMs + SchemaVersion;
+        // $setOnInsert:首登写 _id + 三初始余额 + 档案初值(昵称空/等级1/经验0)+ LastChangeUnixMs + SchemaVersion;
         // update 路径(已存在)完全跳过(MongoDB 官方语义:$setOnInsert 仅在 upsert 触发 insert 时写)。
-        // 余额字段全部走 $setOnInsert,**无 $set** → 重登 update 命令为空(MongoDB 允许空 update),
-        // 余额字段稳定 = 上次变更后的值(SV5)。
+        // 全部走 $setOnInsert,**无 $set** → 重登 update 命令为空(MongoDB 允许空 update),
+        // 字段稳定 = 上次变更后的值(SV5)。
         var update = Builders<PlayerDoc>.Update
             .SetOnInsert(x => x.AccountId, accountId)
             .SetOnInsert(x => x.Coin, service.CoinInitial)
             .SetOnInsert(x => x.Diamond, service.DiamondInitial)
             .SetOnInsert(x => x.Stamina, service.StaminaInitial)
+            .SetOnInsert(x => x.Nickname, string.Empty)
+            .SetOnInsert(x => x.Level, 1)
+            .SetOnInsert(x => x.Exp, 0L)
             .SetOnInsert(x => x.LastChangeUnixMs, nowMs)
             .SetOnInsert(x => x.SchemaVersion, PlayerPropertyServiceComponent.CurrentSchemaVersion);
 
@@ -90,22 +90,16 @@ public static class PlayerPropertyServiceHelper
             {
                 // 理论上 IsUpsert=true + ReturnDocument.After 不应返 null;防御性处理。
                 Log.Warning($"PlayerPropertyServiceHelper.InitOrLoad: FindOneAndUpdate 返 null,accountId={accountId}。");
-                return (1u, emptySnapshot);
+                return (1u, null);
             }
 
-            var snapshot = new List<(PropertyType, long)>(3)
-            {
-                (PropertyType.Coin, doc.Coin),
-                (PropertyType.Diamond, doc.Diamond),
-                (PropertyType.Stamina, doc.Stamina)
-            };
-            return (0u, snapshot);
+            return (0u, doc);
         }
         catch (MongoException e)
         {
             // 写入异常 / 网络抖动 / 集群挂:登录失败、不挂会话身份(沿 35 「服务不可用不本地放行」基线)。
             Log.Warning($"PlayerPropertyServiceHelper.InitOrLoad 失败,accountId={accountId},err={e.Message}");
-            return (1u, emptySnapshot);
+            return (1u, null);
         }
     }
 
@@ -264,30 +258,37 @@ public static class PlayerPropertyServiceHelper
     }
 
     /// <summary>
-    /// 推送初始属性快照到指定会话(登录成功后即时下发,§3.3.1 + plan D3)。
-    /// 与 DeltaPush 不同:这里走指定 session(刚登录的连接),不查 Account 字典——
-    /// 因 InitOrLoad 在 Login Handler 中调用,此时会话身份(GateAccountFlagComponent)在 RegisterOrLogin 之后挂的,
-    /// 调用方拿到 Session 即可直推。
+    /// 推送玩家信息整份快照到指定会话(登录成功后即时下发)。
+    /// 取代原 G2C_PropertyInitSnapshot:一条 G2C_PlayerInfoSnapshot 同时携带基础档案(昵称/等级/经验)与三数值属性余额。
+    /// 走指定 session(刚登录的连接),不查 Account 字典——InitOrLoad 已在 Login Handler 取回 doc,调用方拿到 Session 即可直推。
     /// </summary>
-    public static void SendInitSnapshotTo(Session session, IReadOnlyList<(PropertyType type, long amount)> snapshot)
+    public static void SendPlayerInfoTo(Session session, string accountId, PlayerDoc? doc)
     {
-        if (session == null || session.IsDisposed)
+        if (session == null || session.IsDisposed || doc == null)
         {
             return;
         }
 
-        var msg = new G2C_PropertyInitSnapshot
-        {
-            SchemaVersion = PlayerPropertyServiceComponent.CurrentSchemaVersion
-        };
-        foreach (var (t, amount) in snapshot)
-        {
-            var item = PropertyAmount.Create();
-            item.Type = t;
-            item.Amount = amount;
-            msg.Properties.Add(item);
-        }
-        session.Send(msg);
+        var info = PlayerInfo.Create();
+        info.AccountId = accountId;
+        info.Nickname = doc.Nickname;
+        info.Level = doc.Level;
+        info.Exp = doc.Exp;
+        info.SchemaVersion = PlayerPropertyServiceComponent.CurrentSchemaVersion;
+        AddProperty(info, PropertyType.Coin, doc.Coin);
+        AddProperty(info, PropertyType.Diamond, doc.Diamond);
+        AddProperty(info, PropertyType.Stamina, doc.Stamina);
+
+        session.Send(new G2C_PlayerInfoSnapshot { Info = info });
+    }
+
+    /// <summary>把单条属性余额追加到 PlayerInfo.Properties(复用 PropertyAmount 对象池)。</summary>
+    private static void AddProperty(PlayerInfo info, PropertyType type, long amount)
+    {
+        var item = PropertyAmount.Create();
+        item.Type = type;
+        item.Amount = amount;
+        info.Properties.Add(item);
     }
 
     /// <summary>

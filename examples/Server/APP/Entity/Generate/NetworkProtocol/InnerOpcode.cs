@@ -6,8 +6,6 @@ namespace Fantasy
     /// </summary>
     public static partial class InnerOpcode
     {
-        public const uint G2M_OfflineRequest = 3087017745;
-        public const uint M2G_OfflineResponse = 3221235473;
         public const uint G2A_TestMessage = 939534097;
         public const uint G2A_TestRequest = 1073751825;
         public const uint G2A_TestResponse = 1207969553;
@@ -26,8 +24,8 @@ namespace Fantasy
         public const uint Chat2M_TestMessage = 2952800017;
         public const uint G2Map_TestRouteMessageRequest = 1073751831;
         public const uint Map2G_TestRouteMessageResponse = 1207969559;
-        public const uint G2Map_TestRoamingMessageRequest = 3087017746;
-        public const uint Map2G_TestRoamingMessageResponse = 3221235474;
+        public const uint G2Map_TestRoamingMessageRequest = 3087017745;
+        public const uint Map2G_TestRoamingMessageResponse = 3221235473;
         public const uint G2Map_SubscribeSphereEventRequest = 1073751832;
         public const uint G2Map_SubscribeSphereEventResponse = 1207969560;
         public const uint G2Map_UnsubscribeSphereEventRequest = 1073751833;

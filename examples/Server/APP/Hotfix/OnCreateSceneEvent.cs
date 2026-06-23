@@ -54,7 +54,7 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
             }
             case SceneType.Map:
             {
-                scene.AddComponent<PlayerUnitManageComponent>();
+                // Map 游戏玩法(单位/移动)已移除;Map 场景保留作框架示例(Addressable/Roaming)的目标空场景。
                 break;
             }
             case SceneType.Chat:
