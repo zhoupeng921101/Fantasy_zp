@@ -21,6 +21,9 @@ try
     // 配置 NLog 日志基础设施
     // 可选：传入 null 或省略参数以使用控制台日志
     var logger = new Fantasy.NLog("Server");
+    // Luban 配置加载:同步落 GameConfigSystem.Tables,后续 AwakeSystem 可直接 GlobalCfg.GetInt 读权威值。
+    // 失败不阻断启动(GameConfigSystem 内部 Tables=null,业务回退默认),保留兜底 = 表缺失不拒服。
+    GameConfigSystem.Load();
     // 使用配置的日志系统启动 Fantasy.Net 框架
     await Fantasy.Platform.Net.Entry.Start(logger);
 }

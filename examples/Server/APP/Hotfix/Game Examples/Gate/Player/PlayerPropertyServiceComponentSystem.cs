@@ -63,28 +63,15 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     private const long DefaultGuardianExpUpperBound = 2_000_000L;
 
     /// <summary>
-    /// 玩法体力默认初始 / 上界 / 被动恢复软上限。值口径(同 mail/rank/activity 服务端镜像先例):
-    /// Initial=20 ← 客户端 `MergeOrderConfig.EnergyStart` 常量(MergeOrderConfig.cs);
-    /// RecoverSoftCap=30 ← 客户端 `MergeOrderConfig.EnergyCap`(= 玩家界面"满体",被动时间恢复天花板);
+    /// 玩法体力默认初始 / 上界。
+    /// Initial=20 ← 客户端 `MergeOrderConfig.EnergyStart` 常量(B 类,Stage 2 入表);
     /// UpperBound=9999 = 存储硬顶 / ChangeProperty 单笔变更后余额上界,远大于软上限。
-    ///   订单交付 +8、内购 / 许愿 / 盲盒等主动来源允许把体力顶到 30 以上(规则:其他来源不被软上限钳制);
+    ///   订单交付 +8、内购 / 许愿 / 盲盒等主动来源允许把体力顶到软上限以上(规则:其他来源不被软上限钳制);
     ///   9999 仅作 sanity 天花板挡荒谬值,真业务远不可能撞顶。
-    /// 注:本仓库无 global.xlsx,值取自客户端代码内文档化默认;源表被策划调过则需以真表为准再校。
+    /// 软上限 / 恢复 tick 改读 Luban global.xlsx(id=4/id=3),见 Awake 内。
     /// </summary>
     private const long DefaultEnergyInitial = 20L;
     private const long DefaultEnergyUpperBound = 9999L;
-    private const long DefaultEnergyRecoverSoftCap = 30L;
-
-    /// <summary>
-    /// 体力恢复 tick 间隔 360000ms = 360 秒。值手抄自客户端 `GlobalConfigMgr.EnergyRecoverIntervalDefault`
-    /// (global.xlsx id=3 间隔段默认 360 秒)。源表改了需同步。
-    /// </summary>
-    private const long DefaultEnergyRecoverIntervalMs = 360_000L;
-    /// <summary>
-    /// 体力每 tick 恢复 1 点。值手抄自客户端 `GlobalConfigMgr.EnergyRecoverAmountDefault`
-    /// (global.xlsx id=3 点数段默认 1)。源表改了需同步。
-    /// </summary>
-    private const long DefaultEnergyRecoverPerTick = 1L;
 
     /// <summary>
     /// Coin/Diamond 单次 delta 上限(占位):远低于类型上界,挡粗暴改值。
@@ -142,9 +129,15 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         self.GuardianExpUpperBound = DefaultGuardianExpUpperBound;
         self.EnergyInitial = DefaultEnergyInitial;
         self.EnergyUpperBound = DefaultEnergyUpperBound;
-        self.EnergyRecoverSoftCap = DefaultEnergyRecoverSoftCap;
-        self.EnergyRecoverIntervalMs = DefaultEnergyRecoverIntervalMs;
-        self.EnergyRecoverPerTick = DefaultEnergyRecoverPerTick;
+        // 体力恢复参数:读 Luban global.xlsx,与客户端 GlobalConfigMgr 同源。
+        //   SoftCap   ← id=4 EnergyRecoverCap(默认 30,= 客户端 MergeOrderConfig.EnergyCap 旧值)
+        //   Interval  ← id=3 EnergyRecoverSeconds 的 interval 段(复合 "amount#interval";缺表/缺段默认 360 秒)
+        //   PerTick   ← 同 id=3 的 amount 段(默认 1 点)
+        // Tables 加载失败时 GlobalCfg.* 全部走默认值,等价旧硬编码,行为不回归。
+        self.EnergyRecoverSoftCap = GlobalCfg.GetInt(GlobalCfg.EnergyRecoverCap, 30);
+        var (energyRecoverAmount, energyRecoverInterval) = GlobalCfg.ParseEnergyRecover();
+        self.EnergyRecoverIntervalMs = energyRecoverInterval * 1000L;
+        self.EnergyRecoverPerTick = energyRecoverAmount;
         self.CoinSingleDeltaLimit = DefaultCoinSingleDeltaLimit;
         self.DiamondSingleDeltaLimit = DefaultDiamondSingleDeltaLimit;
         self.StaminaSingleDeltaLimit = DefaultStaminaSingleDeltaLimit;
@@ -292,9 +285,15 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         }
         self.AttrLedger = ledger;
 
+        // Luban A 类配置回显(用户验收 Stage 1 配置读表是否生效):
+        //   EnergyRecoverSoftCap ← global.xlsx id=4 EnergyRecoverCap
+        //   EnergyRecoverIntervalMs / PerTick ← global.xlsx id=3 EnergyRecoverSeconds("amount#interval" 复合)
+        //   订单池容量 / 刷新节律 ← MergeOrderConfigServer.ActiveOrders/OrderRefreshIntervalSec(读 global id=1/id=2)
         Log.Info($"PlayerPropertyServiceComponent 初始化完成,玩家属性账本集合句柄已绑定(players + player_attr_ledger);" +
                  $"初始值[coin={self.CoinInitial} diamond={self.DiamondInitial} stamina={self.StaminaInitial}]," +
-                 $"上界[coin={self.CoinUpperBound} diamond={self.DiamondUpperBound} stamina={self.StaminaUpperBound}].");
+                 $"上界[coin={self.CoinUpperBound} diamond={self.DiamondUpperBound} stamina={self.StaminaUpperBound}];" +
+                 $"Luban A类[EnergyRecoverSoftCap={self.EnergyRecoverSoftCap} EnergyRecoverIntervalMs={self.EnergyRecoverIntervalMs} EnergyRecoverPerTick={self.EnergyRecoverPerTick}" +
+                 $" OrderCount={MergeOrderConfigServer.ActiveOrders} OrderRefreshIntervalSec={MergeOrderConfigServer.OrderRefreshIntervalSec}].");
     }
 }
 

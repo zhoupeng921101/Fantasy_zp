@@ -3,18 +3,18 @@ namespace Fantasy;
 /// <summary>
 /// 订单系统服务端权威常量 + 订单池(P2 全栈迁移·Phase 1·normal 订单)。
 ///
-/// **手抄自客户端,改一处需同步另一处**(Fantasy 无 Luban,服务端配置作为权威源单独存在):
-///   - 订单池 8 条     ← `Assets/GameScripts/HotFix/GameLogic/Module/BlockBlast/MergeOrderConfig.cs` `OrderPool` 数组
-///   - MergeCount=4    ← 同上 `MergeCount`(合成比,难度公式 d = Count × MergeCount^(Level-1) 用)
-///   - PietyPerDifficulty=30 ← `TempleConfig.cs` 同名常量(虔诚币奖励系数)
-///   - ActiveOrders=3、OrderRefreshIntervalSec=300 ← `GlobalConfigMgr` 默认值(global.xlsx id=1/id=2,本仓库无表,值为客户端代码内默认)
-///   - OrderRewardEnergy=8 ← `MergeOrderConfig.OrderRewardEnergy`
+/// 单源原则(参 .claude/rules/data-authority.md 与 server-config-luban-pipeline 记忆):
+///   - A 类(已在 global.xlsx) → 读 Luban 表(`GlobalCfg.GetInt`)
+///     · ActiveOrders ← id=1 OrderCount(默认 3)
+///     · OrderRefreshIntervalSec ← id=2 OrderRefreshSeconds(默认 300)
+///   - B 类(暂未入表,Stage 2 迁) → 服务端常量,改一处需同步客户端
+///     · 订单池 8 条     ← `MergeOrderConfig.OrderPool`
+///     · MergeCount=4    ← 同上(难度公式 d = Count × MergeCount^(Level-1) 用)
+///     · PietyPerDifficulty=30 ← `TempleConfig.cs` 同名常量
+///     · OrderRewardEnergy=8 ← `MergeOrderConfig.OrderRewardEnergy`
 ///
 /// 订单类型(Type)的 int 值必须与客户端 `MergeElement` 枚举一致:None=0/Butterfly=1/Chalice=2/Scroll=3/Star=4;
 /// 改 OrderPool 顺序 / 元素类型 / 数量 / 等级,务必同步客户端同名数组。
-///
-/// 设计基线:.claude/rules/data-authority.md(玩家持久数据服务端权威);客户端段保持显示逻辑兼容,
-/// 但奖励 / 订单进度 / 刷新节律以服务端为权威。
 /// </summary>
 public static class MergeOrderConfigServer
 {
@@ -25,14 +25,18 @@ public static class MergeOrderConfigServer
     public const int OrderTypeScroll = 3;
     public const int OrderTypeStar = 4;
 
-    /// <summary>同时激活的订单槽数(= 客户端 GlobalConfigMgr.OrderCountValue 默认 3)。</summary>
-    public const int ActiveOrders = 3;
+    /// <summary>
+    /// 同时激活的订单槽数。读 Luban global.xlsx id=1,缺表/缺键回退默认 3(与客户端 GlobalConfigMgr.OrderCountValue 一致)。
+    /// </summary>
+    public static readonly int ActiveOrders = GlobalCfg.GetInt(GlobalCfg.OrderCount, 3);
 
-    /// <summary>订单按时整批刷新间隔秒数(= 客户端 GlobalConfigMgr.OrderRefreshSecondsValue 默认 300)。</summary>
-    public const int OrderRefreshIntervalSec = 300;
+    /// <summary>
+    /// 订单按时整批刷新间隔秒数。读 Luban global.xlsx id=2,缺表/缺键回退默认 300(同客户端)。
+    /// </summary>
+    public static readonly int OrderRefreshIntervalSec = GlobalCfg.GetInt(GlobalCfg.OrderRefreshSeconds, 300);
 
     /// <summary>订单按时整批刷新间隔毫秒(服务端时钟用,= IntervalSec * 1000)。</summary>
-    public const long OrderRefreshIntervalMs = OrderRefreshIntervalSec * 1000L;
+    public static readonly long OrderRefreshIntervalMs = OrderRefreshIntervalSec * 1000L;
 
     /// <summary>单次交付奖励体力(= 客户端 MergeOrderConfig.OrderRewardEnergy)。</summary>
     public const int OrderRewardEnergy = 8;

@@ -1,0 +1,23 @@
+# ============================================================================
+# Fantasy 服务端 systemd 单元
+# 安装（在服务器上，root 执行）：
+#   sudo cp fantasy.service /etc/systemd/system/fantasy.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now fantasy
+#   sudo journalctl -u fantasy -f      # 看实时日志
+# 若你的发布目录不是 /opt/fantasy/server，请同步修改下面两行路径。
+# ============================================================================
+[Unit]
+Description=Fantasy Game Server
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/fantasy/server
+ExecStart=/opt/fantasy/server/Main --m Release
+Restart=always
+RestartSec=5
+# 文件日志写到 WorkingDirectory 上一级的 Logs/（NLog 配置为 ${basedir}/../Logs）
+
+[Install]
+WantedBy=multi-user.target

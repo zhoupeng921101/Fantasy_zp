@@ -6,6 +6,8 @@
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <LangVersion>default</LangVersion>
+        <!-- Luban 运行时 ByteBuf 使用 unsafe 指针读写定长数值/向量(Float/Double/Vector*/Matrix4x4)。 -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -38,6 +40,14 @@
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
       <None Update="Fantasy.xsd">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+    <!-- Luban 服务端配置 .bytes 由 gen_code_bin_to_server.bat 生成进 Generate\GameConfigBytes\,
+         随构建复制到 Main bin 目录;运行期 GameConfigSystem 从进程工作目录的 GameConfigBytes\ 下加载。 -->
+    <ItemGroup>
+      <None Include="Generate\GameConfigBytes\**\*.bytes">
+        <Link>GameConfigBytes\%(RecursiveDir)%(Filename)%(Extension)</Link>
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
     </ItemGroup>
