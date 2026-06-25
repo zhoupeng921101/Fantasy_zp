@@ -18,7 +18,9 @@ enum RankSubmitResultCode
 	/// 榜 id 在服务端榜配置查不到（不崩，以结果码回包）
 	RankNotFound = 3,
 	/// 服务不可用（无法建立身份 / 无法处理）；客户端不阻断玩法、稍后重连可重报（§四）
-	ServiceUnavailable = 4
+	ServiceUnavailable = 4,
+	/// 服务端反作弊拦截（超绝对上限 / 频率过密 / 跃升异常等）→ 不进榜、不写存储；响应 BestScore = 已存最佳
+	RejectedByAntiCheat = 5
 }
 
 /// 查榜结果码（§3.5）

@@ -29,23 +29,22 @@ namespace Fantasy;
 public static class AttrLedgerQueryHelper
 {
     /// <summary>
-    /// 协议层 kind 整数(0 = 不过滤,1=Coin / 2=Diamond / 3=Stamina)→ PropertyType 枚举(Coin=0 / Diamond=1 / Stamina=2)的映射。
+    /// 协议层 kind 整数(0 = 不过滤,1..7 = 七种 PropertyType + 1 错开一位)→ PropertyType 枚举的映射。
     /// 0 留作 sentinel 表「不过滤」(若直接复用 PropertyType 整数则 Coin=0 与 sentinel 冲突,故协议层错开一位)。
-    /// 入参 kind 非 0/1/2/3 整数 → 由 handler 在调用前拦截返 InvalidRequest,本 helper 不重复校验。
+    /// P2 扩到七类:1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy。
+    /// 入参 kind 非合法整数 → 由 handler 在调用前拦截返 InvalidRequest,本 helper 不重复校验。
     /// </summary>
     public static bool TryMapKindToPropertyType(int kind, out PropertyType type)
     {
         switch (kind)
         {
-            case 1:
-                type = PropertyType.Coin;
-                return true;
-            case 2:
-                type = PropertyType.Diamond;
-                return true;
-            case 3:
-                type = PropertyType.Stamina;
-                return true;
+            case 1: type = PropertyType.Coin; return true;
+            case 2: type = PropertyType.Diamond; return true;
+            case 3: type = PropertyType.Stamina; return true;
+            case 4: type = PropertyType.SoulPower; return true;
+            case 5: type = PropertyType.Piety; return true;
+            case 6: type = PropertyType.GuardianExp; return true;
+            case 7: type = PropertyType.Energy; return true;
             default:
                 type = default;
                 return false;

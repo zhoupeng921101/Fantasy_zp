@@ -1,3 +1,4 @@
+using System;
 using Fantasy.Async;
 using Fantasy.Helper;
 using Fantasy.Network;
@@ -68,9 +69,20 @@ public static class PlayerPropertyServiceHelper
         // 字段稳定 = 上次变更后的值(SV5)。
         var update = Builders<PlayerDoc>.Update
             .SetOnInsert(x => x.AccountId, accountId)
+            // PlayerId 首登写空串(present-and-empty),与其他字段一致;
+            // 不写则文档无该字段,后续 ClaimOrIssuePlayerId 的「PlayerId == ""」filter 永不匹配。
+            // 配合 ux_player_id partial index 用 $gt:"" 过滤,空串不进入唯一约束。
+            .SetOnInsert(x => x.PlayerId, string.Empty)
             .SetOnInsert(x => x.Coin, service.CoinInitial)
             .SetOnInsert(x => x.Diamond, service.DiamondInitial)
             .SetOnInsert(x => x.Stamina, service.StaminaInitial)
+            // P2 新增四货币首登 setOnInsert(旧文档反序列化时缺字段 → BSON 默认 0L,与 setOnInsert 0 一致;
+            // 但 EnergyLastRecoverMs 必须 setOnInsert 为 nowMs,否则首登玩家流逝时间 = nowMs - 0 = 极大值,体力会一次性回满)。
+            .SetOnInsert(x => x.SoulPower, service.SoulPowerInitial)
+            .SetOnInsert(x => x.Piety, service.PietyInitial)
+            .SetOnInsert(x => x.GuardianExp, service.GuardianExpInitial)
+            .SetOnInsert(x => x.Energy, service.EnergyInitial)
+            .SetOnInsert(x => x.EnergyLastRecoverMs, nowMs)
             .SetOnInsert(x => x.Nickname, string.Empty)
             .SetOnInsert(x => x.Level, 1)
             .SetOnInsert(x => x.Exp, 0L)
@@ -93,6 +105,10 @@ public static class PlayerPropertyServiceHelper
                 return (1u, null);
             }
 
+            // P2 体力恢复:登录拉快照前结算一次,保证客户端拿到的 Energy 是「补完恢复」的最新值。
+            // 旧文档(P0/P1 期玩家)缺 EnergyLastRecoverMs 字段 → 反序列化 0 → 走 RecoverEnergyIfDue 的 bootstrap 分支(只刷字段不补量)。
+            await RecoverEnergyIfDue(service, accountId, doc, nowMs);
+
             return (0u, doc);
         }
         catch (MongoException e)
@@ -100,6 +116,194 @@ public static class PlayerPropertyServiceHelper
             // 写入异常 / 网络抖动 / 集群挂:登录失败、不挂会话身份(沿 35 「服务不可用不本地放行」基线)。
             Log.Warning($"PlayerPropertyServiceHelper.InitOrLoad 失败,accountId={accountId},err={e.Message}");
             return (1u, null);
+        }
+    }
+
+    /// <summary>
+    /// 签发或认领 playerId,确保返回非空权威值(账号级稳定唯一标识,跨登录不变)。
+    ///
+    /// 三种入参组合(localPlayerId 经格式校验 + 全局唯一性守卫后规整):
+    ///   1. doc.PlayerId 非空 → 已有权威值,直接返回;若 localPlayerId 非空且与之不同,记 warning(便于排查老档残留 / 多端冲突)。
+    ///   2. doc.PlayerId 空 + localPlayerId 合法且未被他人占用 → 认领老档本地 guid(单条原子 update)。
+    ///   3. doc.PlayerId 空 + localPlayerId 空 / 畸形 / 已被他人占用 → 服务端 Guid.NewGuid() 新生成。
+    ///
+    /// 安全守卫(playerId 是 P1 排行榜归属 / P3 云存档寻址的身份锚,不可碰撞,不可伪造):
+    ///   - 格式校验:localPlayerId 必须是 32 位小写 hex(`Guid.TryParseExact(..., "N", out _)`,
+    ///     与客户端 PlayerInfo.NewId 形态对齐)。畸形 → 视同空值走服务端生成(Warning)。
+    ///   - 全局唯一性守卫:认领前查全库是否已有**另一个账号**(AccountId != 当前)持有该 PlayerId;
+    ///     占用 → 拒绝认领、改服务端生成(Warning),防止跨账号身份冒领。
+    ///   - TOCTOU 收口:DB 端 players.PlayerId 部分唯一索引(ux_player_id, PartialFilter PlayerId > "")
+    ///     兜底——查重 → 写入间隙被抢占时,FindOneAndUpdate 触发 E11000(MongoWriteException),
+    ///     退回服务端 Guid.NewGuid() 重试。索引在 PlayerPropertyServiceComponentSystem.Init 建。
+    ///
+    /// 原子写规约:
+    ///   filter: _id == accountId AND (PlayerId == "" OR PlayerId 字段缺失)
+    ///   update: $set(PlayerId = 目标值)
+    ///   ReturnDocument: After
+    ///
+    /// 并发场景:同账号两连接首登并发,两路径都拿到空 doc 各自要写;先到的 update 命中、后到的 filter 不命中
+    /// (PlayerId 已被前者填写),后到回退去读当前 doc 拿到权威值——所以匹配失败必须重读一次。
+    ///
+    /// 返回 (errorCode, playerId)。0 = 成功;非 0 = MongoDB 异常或 doc 丢失(playerId 空)。
+    /// </summary>
+    public static async FTask<(uint errorCode, string playerId)> ClaimOrIssuePlayerId(
+        Scene scene, string accountId, PlayerDoc? doc, string localPlayerId)
+    {
+        if (doc == null)
+        {
+            return (1u, string.Empty);
+        }
+
+        // Case 1: 已有权威 PlayerId,直接返回(服务端为准,忽略客户端上传值,仅记不一致告警)。
+        if (!string.IsNullOrEmpty(doc.PlayerId))
+        {
+            if (!string.IsNullOrEmpty(localPlayerId) && localPlayerId != doc.PlayerId)
+            {
+                Log.Warning($"PlayerId 不一致 account={accountId} server={doc.PlayerId} client={localPlayerId} → 以服务端为准(忽略客户端上传值)。");
+            }
+            return (0u, doc.PlayerId);
+        }
+
+        var service = scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (service == null || service.Players == null)
+        {
+            return (1u, string.Empty);
+        }
+
+        // 格式校验:客户端身份 id 形态 = 32 位小写 hex(Guid "N",见客户端 PlayerInfo.NewId)。
+        // 畸形 / 超长 → 视同空值走服务端生成(防止畸形值被采纳进库)。
+        var claimCandidate = localPlayerId ?? string.Empty;
+        if (claimCandidate.Length > 0 && !Guid.TryParseExact(claimCandidate, "N", out _))
+        {
+            Log.Warning($"PlayerId 客户端上传值格式非法 account={accountId} localPlayerId='{claimCandidate}' → 改服务端生成。");
+            claimCandidate = string.Empty;
+        }
+
+        // 全局唯一性守卫:认领前查全库是否已有**另一个账号**持有该 PlayerId;
+        // 占用 → 拒绝认领、改服务端生成。这是 fast path,DB 端 partial unique index 兜底 TOCTOU。
+        if (claimCandidate.Length > 0)
+        {
+            var ownerFilter = Builders<PlayerDoc>.Filter.And(
+                Builders<PlayerDoc>.Filter.Eq(x => x.PlayerId, claimCandidate),
+                Builders<PlayerDoc>.Filter.Ne(x => x.AccountId, accountId));
+            try
+            {
+                var occupiedByOther = await service.Players.Find(ownerFilter).FirstOrDefaultAsync();
+                if (occupiedByOther != null)
+                {
+                    Log.Warning($"PlayerId 客户端上传值已被他账号占用 account={accountId} localPlayerId={claimCandidate} occupiedBy={occupiedByOther.AccountId} → 改服务端生成。");
+                    claimCandidate = string.Empty;
+                }
+            }
+            catch (MongoException e)
+            {
+                Log.Warning($"PlayerPropertyServiceHelper.ClaimOrIssuePlayerId 唯一性查重失败 account={accountId},err={e.Message}");
+                return (1u, string.Empty);
+            }
+        }
+
+        // 目标 playerId:认领候选合法且未被占用 → 用之;否则服务端 NewGuid 生成(走客户端 "N" 形态对齐)。
+        var targetPlayerId = claimCandidate.Length > 0 ? claimCandidate : Guid.NewGuid().ToString("N");
+        var sourceTag = claimCandidate.Length > 0 ? "client-claim" : "server-issue";
+
+        // 原子 update:filter 含「PlayerId 尚未实占」(空串或字段缺失),防并发覆盖已被前者填写的值。
+        // MongoDB 里「字段缺失(absent)」≠「空串」:旧档 / 未走 setOnInsert 写入 PlayerId 的新档,文档无该字段,
+        // 单用 Eq("") 永不匹配 → 走回读分支拿到空 PlayerId → 登录 ErrorCode=1。
+        // 用 Or(Eq(""), Exists(false)) 覆盖两种「未实占」形态,保持「仅在 PlayerId 还没被填」的原子认领语义。
+        // DuplicateKey 退回分支(FallbackIssuePlayerId)复用本 filter,改这一处定义即两路一致。
+        var notClaimed = Builders<PlayerDoc>.Filter.Or(
+            Builders<PlayerDoc>.Filter.Eq(x => x.PlayerId, string.Empty),
+            Builders<PlayerDoc>.Filter.Exists(x => x.PlayerId, false));
+        var filter = Builders<PlayerDoc>.Filter.And(
+            Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
+            notClaimed);
+        var options = new FindOneAndUpdateOptions<PlayerDoc>
+        {
+            IsUpsert = false,
+            ReturnDocument = ReturnDocument.After
+        };
+
+        try
+        {
+            var update = Builders<PlayerDoc>.Update.Set(x => x.PlayerId, targetPlayerId);
+            var updatedDoc = await service.Players.FindOneAndUpdateAsync(filter, update, options);
+            if (updatedDoc != null)
+            {
+                Log.Debug($"PlayerId 签发/认领成功 account={accountId} playerId={updatedDoc.PlayerId} source={sourceTag}");
+                return (0u, updatedDoc.PlayerId);
+            }
+
+            // filter 未命中:并发场景下另一路已抢先写入,回读当前 doc 拿权威值。
+            var currentDoc = await service.Players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId))
+                .FirstOrDefaultAsync();
+            if (currentDoc != null && !string.IsNullOrEmpty(currentDoc.PlayerId))
+            {
+                if (!string.IsNullOrEmpty(localPlayerId) && localPlayerId != currentDoc.PlayerId)
+                {
+                    Log.Warning($"PlayerId 不一致(并发回读) account={accountId} server={currentDoc.PlayerId} client={localPlayerId}");
+                }
+                return (0u, currentDoc.PlayerId);
+            }
+
+            Log.Warning($"PlayerId 签发后回读失败 account={accountId}");
+            return (1u, string.Empty);
+        }
+        catch (MongoWriteException mwe) when (mwe.WriteError != null && mwe.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        {
+            // TOCTOU 窗口被 partial unique index 拒绝(查重时未占用 / 写入前被另一并发认领抢占)。
+            // C# 驱动会按场景把 duplicate-key 包成 MongoWriteException 或 MongoCommandException(Code=11000),
+            // 两种形态都走同一退回逻辑(同 Rank/Activity/Mail/Redeem 双 catch 范式)。
+            return await FallbackIssuePlayerId(service, accountId, targetPlayerId, filter, options);
+        }
+        catch (MongoCommandException e) when (e.Code == 11000 /* DuplicateKey */)
+        {
+            return await FallbackIssuePlayerId(service, accountId, targetPlayerId, filter, options);
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"PlayerPropertyServiceHelper.ClaimOrIssuePlayerId 失败 account={accountId},err={e.Message}");
+            return (1u, string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// PlayerId 认领命中 DB 唯一索引冲突后的退回路径:服务端生成新 guid 重写。
+    /// 抽出独立方法以让 MongoWriteException / MongoCommandException 两种 duplicate-key catch 共用同一退回逻辑。
+    /// 新 guid 碰撞概率 = 2^-128,实战 = 0,不再循环重试。
+    /// </summary>
+    private static async FTask<(uint errorCode, string playerId)> FallbackIssuePlayerId(
+        PlayerPropertyServiceComponent service, string accountId, string originalTarget,
+        FilterDefinition<PlayerDoc> filter, FindOneAndUpdateOptions<PlayerDoc> options)
+    {
+        Log.Warning($"PlayerId 认领写入命中 DB 唯一索引冲突 account={accountId} target={originalTarget} → 退回服务端生成。");
+        // 调用方进入本方法前已守卫 service.Players != null(ClaimOrIssuePlayerId 入口处 early return)。
+        var players = service.Players!;
+        try
+        {
+            var fallbackId = Guid.NewGuid().ToString("N");
+            var fallbackUpdate = Builders<PlayerDoc>.Update.Set(x => x.PlayerId, fallbackId);
+            var fallbackDoc = await players.FindOneAndUpdateAsync(filter, fallbackUpdate, options);
+            if (fallbackDoc != null)
+            {
+                Log.Debug($"PlayerId 退回服务端生成成功 account={accountId} playerId={fallbackDoc.PlayerId} source=server-issue(fallback)");
+                return (0u, fallbackDoc.PlayerId);
+            }
+
+            // 退回写入仍未命中 filter:并发回读拿权威值。
+            var currentDoc = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId))
+                .FirstOrDefaultAsync();
+            if (currentDoc != null && !string.IsNullOrEmpty(currentDoc.PlayerId))
+            {
+                return (0u, currentDoc.PlayerId);
+            }
+
+            Log.Warning($"PlayerId 退回服务端生成后回读失败 account={accountId}");
+            return (1u, string.Empty);
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"PlayerPropertyServiceHelper.ClaimOrIssuePlayerId 退回写入失败 account={accountId},err={e.Message}");
+            return (1u, string.Empty);
         }
     }
 
@@ -140,8 +344,8 @@ public static class PlayerPropertyServiceHelper
             return (PropertyChangeResultCode.ServiceUnavailable, 0L);
         }
 
-        // 类型合法性:三类枚举之一(SV10)。
-        if (!TryGetTypeMeta(service, type, out var fieldName, out var upperBound))
+        // 类型合法性:七类枚举之一(P2 扩到七类,SV10)。
+        if (!TryGetTypeMeta(service, type, out var fieldName, out var upperBound, out var singleDeltaLimit))
         {
             return (PropertyChangeResultCode.UnknownType, 0L);
         }
@@ -152,7 +356,51 @@ public static class PlayerPropertyServiceHelper
             return (PropertyChangeResultCode.InvalidRequest, 0L);
         }
 
+        // P2 限界信任·单次 delta 上限:|delta| 超过 singleDeltaLimit → 视为客户端粗暴改值,拒。
+        // 比上界严格(单次幅度限制 vs 总余额上限),业务真实奖励/消耗单笔幅度按 singleDeltaLimit 调参。
+        if (delta > singleDeltaLimit || delta < -singleDeltaLimit)
+        {
+            Log.Warning($"PropertyChange 拒因=SingleDeltaLimit account={accountId} type={type} delta={delta} limit={singleDeltaLimit} reason='{reason}'");
+            return (PropertyChangeResultCode.InvalidRequest, 0L);
+        }
+
         var nowMs = TimeHelper.Now;
+
+        // P2 限界信任·频率限制:同账号同属性最小间隔(进程内字典,沿 P1 RankAntiCheatPolicy 同款做法)。
+        // 拒因复用 InvalidRequest,日志标 RateLimited 拒因(避免新增结果码扩大客户端段下一刀处理面)。
+        if (service.PropertyChangeMinIntervalMs > 0L)
+        {
+            var rateKey = string.Concat(accountId, "|", ((int)type).ToString());
+            if (service.LastChangeAtMs.TryGetValue(rateKey, out var prevMs))
+            {
+                if (nowMs - prevMs < service.PropertyChangeMinIntervalMs)
+                {
+                    Log.Warning($"PropertyChange 拒因=RateLimited account={accountId} type={type} delta={delta} elapsed={nowMs - prevMs}ms min={service.PropertyChangeMinIntervalMs}ms reason='{reason}'");
+                    return (PropertyChangeResultCode.InvalidRequest, 0L);
+                }
+            }
+            service.LastChangeAtMs[rateKey] = nowMs;
+        }
+
+        // Energy 类型:在变更前先按 EnergyLastRecoverMs 流逝时间做恢复结算(P2 体力服务端权威),
+        // 否则后续 FindOneAndUpdate 用条件过滤拿到的当前余额是「未补恢复」的旧值,delta 判断会偏。
+        if (type == PropertyType.Energy)
+        {
+            // 先读 doc 取 EnergyLastRecoverMs(也供 RecoverEnergyIfDue 做 CAS filter)。
+            try
+            {
+                var preDoc = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
+                if (preDoc != null)
+                {
+                    await RecoverEnergyIfDue(service, accountId, preDoc, nowMs);
+                }
+            }
+            catch (MongoException e)
+            {
+                Log.Warning($"PropertyChange 体力变更前恢复结算读取失败 account={accountId},err={e.Message}");
+                // 不阻断:就算恢复结算没做成,后续 FindOneAndUpdate 仍按当前 DB 值原子裁决(语义降级但不崩)。
+            }
+        }
         // 用字段名构造过滤条件,统一三属性同套原子写。
         // 余额下界:当前余额 + delta >= 0,等价于 当前余额 >= -delta。
         // 类型上界:当前余额 + delta <= 上界,等价于 当前余额 <= 上界 - delta。
@@ -278,6 +526,11 @@ public static class PlayerPropertyServiceHelper
         AddProperty(info, PropertyType.Coin, doc.Coin);
         AddProperty(info, PropertyType.Diamond, doc.Diamond);
         AddProperty(info, PropertyType.Stamina, doc.Stamina);
+        // P2 四种玩法货币也并入登录快照。Energy 已由 InitOrLoad 调 RecoverEnergyIfDue 结算过,doc.Energy 为最新值。
+        AddProperty(info, PropertyType.SoulPower, doc.SoulPower);
+        AddProperty(info, PropertyType.Piety, doc.Piety);
+        AddProperty(info, PropertyType.GuardianExp, doc.GuardianExp);
+        AddProperty(info, PropertyType.Energy, doc.Energy);
 
         session.Send(new G2C_PlayerInfoSnapshot { Info = info });
     }
@@ -292,29 +545,54 @@ public static class PlayerPropertyServiceHelper
     }
 
     /// <summary>
-    /// 取出某类型对应的 PlayerDoc BSON 字段名 + 配置上界。
+    /// 取出某类型对应的 PlayerDoc BSON 字段名 + 配置上界 + 单次 delta 上限(P2 限界信任新增)。
     /// 字段名按 BSON 序列化默认 = C# 属性名(无 [BsonElement] 重命名,PlayerDoc 没用)。
     /// 未知类型返 false → 触发 UnknownType 结果码(§3.4 + SV10)。
     /// </summary>
-    private static bool TryGetTypeMeta(PlayerPropertyServiceComponent service, PropertyType type, out string fieldName, out long upperBound)
+    private static bool TryGetTypeMeta(PlayerPropertyServiceComponent service, PropertyType type,
+        out string fieldName, out long upperBound, out long singleDeltaLimit)
     {
         switch (type)
         {
             case PropertyType.Coin:
                 fieldName = nameof(PlayerDoc.Coin);
                 upperBound = service.CoinUpperBound;
+                singleDeltaLimit = service.CoinSingleDeltaLimit;
                 return true;
             case PropertyType.Diamond:
                 fieldName = nameof(PlayerDoc.Diamond);
                 upperBound = service.DiamondUpperBound;
+                singleDeltaLimit = service.DiamondSingleDeltaLimit;
                 return true;
             case PropertyType.Stamina:
                 fieldName = nameof(PlayerDoc.Stamina);
                 upperBound = service.StaminaUpperBound;
+                singleDeltaLimit = service.StaminaSingleDeltaLimit;
+                return true;
+            case PropertyType.SoulPower:
+                fieldName = nameof(PlayerDoc.SoulPower);
+                upperBound = service.SoulPowerUpperBound;
+                singleDeltaLimit = service.SoulPowerSingleDeltaLimit;
+                return true;
+            case PropertyType.Piety:
+                fieldName = nameof(PlayerDoc.Piety);
+                upperBound = service.PietyUpperBound;
+                singleDeltaLimit = service.PietySingleDeltaLimit;
+                return true;
+            case PropertyType.GuardianExp:
+                fieldName = nameof(PlayerDoc.GuardianExp);
+                upperBound = service.GuardianExpUpperBound;
+                singleDeltaLimit = service.GuardianExpSingleDeltaLimit;
+                return true;
+            case PropertyType.Energy:
+                fieldName = nameof(PlayerDoc.Energy);
+                upperBound = service.EnergyUpperBound;
+                singleDeltaLimit = service.EnergySingleDeltaLimit;
                 return true;
             default:
                 fieldName = string.Empty;
                 upperBound = 0L;
+                singleDeltaLimit = 0L;
                 return false;
         }
     }
@@ -327,7 +605,96 @@ public static class PlayerPropertyServiceHelper
             PropertyType.Coin => doc.Coin,
             PropertyType.Diamond => doc.Diamond,
             PropertyType.Stamina => doc.Stamina,
+            PropertyType.SoulPower => doc.SoulPower,
+            PropertyType.Piety => doc.Piety,
+            PropertyType.GuardianExp => doc.GuardianExp,
+            PropertyType.Energy => doc.Energy,
             _ => 0L
         };
     }
+
+    /// <summary>
+    /// 体力懒结算(P2):变更/查询 Energy 之前,按 EnergyLastRecoverMs 与 nowMs 流逝时间补恢复量。
+    /// 单条原子 FindOneAndUpdate:filter = (_id == accountId AND Energy < cap AND EnergyLastRecoverMs == lastSeenMs),
+    ///   update = $inc(Energy, recoverAmount) + $set(EnergyLastRecoverMs, newLastMs)。
+    /// filter 含 EnergyLastRecoverMs 字段做 CAS,防并发双结算(SV11 沿三老属性原子单写范式)。
+    /// 若 doc 当前 Energy >= cap → 不写,仅刷新 lastRecoverMs;若流逝时间不足一个 tick → 不写。
+    /// 旧文档兼容:doc.EnergyLastRecoverMs == 0(P0/P1 期玩家无此字段,BSON 反序列化默认 0)→
+    /// 视为「首次接触新字段」,写入 nowMs 而不补恢复量(防 nowMs - 0 = epoch 流逝直接回满)。
+    /// 失败(MongoDB 不可达 / 抖动)→ Warning 不抛、不阻断后续 ChangeProperty(返回的 doc 仍可用)。
+    /// </summary>
+    private static async FTask RecoverEnergyIfDue(
+        PlayerPropertyServiceComponent service, string accountId, PlayerDoc doc, long nowMs)
+    {
+        var players = service.Players;
+        if (players == null) return;
+
+        var lastMs = doc.EnergyLastRecoverMs;
+
+        // 边界:旧文档缺字段(反序列化为 0)或新登时被设为 nowMs。
+        // lastMs == 0 = 旧档兼容:不补恢复、直接刷字段为 nowMs。
+        if (lastMs <= 0L)
+        {
+            var bootstrapFilter = Builders<PlayerDoc>.Filter.And(
+                Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
+                Builders<PlayerDoc>.Filter.Eq(x => x.EnergyLastRecoverMs, 0L));
+            var bootstrapUpdate = Builders<PlayerDoc>.Update.Set(x => x.EnergyLastRecoverMs, nowMs);
+            try
+            {
+                var newDoc = await players.FindOneAndUpdateAsync(bootstrapFilter, bootstrapUpdate,
+                    new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+                if (newDoc != null)
+                {
+                    doc.EnergyLastRecoverMs = newDoc.EnergyLastRecoverMs;
+                    doc.Energy = newDoc.Energy;
+                }
+            }
+            catch (MongoException e)
+            {
+                Log.Warning($"RecoverEnergyIfDue 旧档 bootstrap 失败 account={accountId},err={e.Message}");
+            }
+            return;
+        }
+
+        var elapsed = nowMs - lastMs;
+        var interval = service.EnergyRecoverIntervalMs;
+        if (elapsed < interval) return;
+
+        var ticks = elapsed / interval;
+        var advanceMs = ticks * interval;
+        var newLastMs = lastMs + advanceMs;
+        var cap = service.EnergyUpperBound;
+        var perTick = service.EnergyRecoverPerTick;
+
+        // 已经达到 cap → 只推进 lastRecoverMs 不补量;
+        // 未达 cap → $min 钳上限:目标值 = min(Energy + ticks*perTick, cap),
+        // 用条件过滤 + $set 直接置目标值,而非 $inc 防超 cap(原子写 + cap 钳一步到位)。
+        var targetEnergy = doc.Energy + ticks * perTick;
+        if (targetEnergy > cap) targetEnergy = cap;
+
+        // CAS:filter 含 EnergyLastRecoverMs == lastMs 防并发双结算。
+        var filter = Builders<PlayerDoc>.Filter.And(
+            Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
+            Builders<PlayerDoc>.Filter.Eq(x => x.EnergyLastRecoverMs, lastMs));
+        var update = Builders<PlayerDoc>.Update
+            .Set(x => x.Energy, targetEnergy)
+            .Set(x => x.EnergyLastRecoverMs, newLastMs);
+        try
+        {
+            var newDoc = await players.FindOneAndUpdateAsync(filter, update,
+                new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+            if (newDoc != null)
+            {
+                doc.Energy = newDoc.Energy;
+                doc.EnergyLastRecoverMs = newDoc.EnergyLastRecoverMs;
+                Log.Debug($"Energy 恢复结算 account={accountId} ticks={ticks} energy={newDoc.Energy} lastRecoverMs={newDoc.EnergyLastRecoverMs}");
+            }
+            // newDoc == null:并发已被另一路结算,本路当作已完成(下次变更时取到最新 doc)。
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"RecoverEnergyIfDue 结算失败 account={accountId} ticks={ticks},err={e.Message}");
+        }
+    }
+
 }

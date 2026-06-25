@@ -130,6 +130,7 @@ namespace Fantasy
         /// 记录错误级别的日志消息，并附带调用栈信息。
         /// </summary>
         /// <param name="msg">日志消息。</param>
+        [HideInCallstack]
         public static void Error(string msg)
         {
             var st = new StackTrace(1, true);

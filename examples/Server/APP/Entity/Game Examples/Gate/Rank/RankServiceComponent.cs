@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Fantasy.Entitas;
 using MongoDB.Driver;
@@ -27,4 +28,11 @@ public sealed class RankServiceComponent : Entity
 
     /// <summary>结算节律重复定时器 id(进程内调度,设计 33 §3.4);Destroy 时取消。0 = 未起。</summary>
     public long SettleTimerId;
+
+    /// <summary>
+    /// 反作弊频率追踪:键 "{account}|{rankId}" → 上次穿过反作弊裁决的提交时刻(Unix 毫秒)。
+    /// 进程内字典,不持久化(进程重启清零;攻击者重启服务端的成本远高于刷分收益,本增量按可接受边界)。
+    /// 用 ConcurrentDictionary 防 Scene 调度模式变化(当前 Gate 单线程,字典本身也保险)。
+    /// </summary>
+    public readonly ConcurrentDictionary<string, long> AntiCheatLastSubmitAtMs = new ConcurrentDictionary<string, long>();
 }

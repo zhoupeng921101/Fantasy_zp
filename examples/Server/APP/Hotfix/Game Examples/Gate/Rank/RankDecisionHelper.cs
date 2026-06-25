@@ -49,13 +49,25 @@ public static class RankDecisionHelper
         //    0 分/负分天然落入此分支(入榜要求 >0 时),不特殊崩(SV10)。
         if (score < def.EnterCondition)
         {
-            var existing = await QueryBestScore(scores, account, rankId);
-            return (RankSubmitResultCode.BelowEnterRequirement, existing);
+            var existingForBelow = await QueryBestScore(scores, account, rankId);
+            return (RankSubmitResultCode.BelowEnterRequirement, existingForBelow);
         }
 
-        // 3. 取最优:原子条件写(仅当新分严格高于存量才刷新分+时间, SV2/SV7)。
-        var key = MakeKey(account, rankId);
+        // 3. 反作弊裁决(P1):绝对上限 / 频率 / 跃升异常,任一命中 → 拒、不写存储、Log 拒因(account/rankId/score/existing/拒因)。
+        //    跃升判定需要历史最佳,先查一次;通过后该 existing 也供「未刷新」分支复用,省一次查询。
+        var existing = await QueryBestScore(scores, account, rankId);
         var now = TimeHelper.Now;
+        var verdict = RankAntiCheatPolicy.Evaluate(self.AntiCheatLastSubmitAtMs, account, rankId, score, existing, now);
+        if (verdict != RankAntiCheatPolicy.Verdict.Accepted)
+        {
+            Log.Warning($"排行榜上报被反作弊拦截 reason={verdict} account={account} rankId={rankId} score={score} existingBest={existing}");
+            return (RankSubmitResultCode.RejectedByAntiCheat, existing);
+        }
+        // 通过 → 记本次时刻(供后续频率判定);即使后续原子写未刷新,也算「客户端发起过一次合法提交」,频率窗口该推进。
+        RankAntiCheatPolicy.RecordSubmit(self.AntiCheatLastSubmitAtMs, account, rankId, now);
+
+        // 4. 取最优:原子条件写(仅当新分严格高于存量才刷新分+时间, SV2/SV7)。
+        var key = MakeKey(account, rankId);
         var refreshed = await TryRefreshBest(scores, key, account, rankId, score, now);
         if (refreshed)
         {
@@ -63,7 +75,8 @@ public static class RankDecisionHelper
             return (RankSubmitResultCode.BestRefreshed, score);
         }
 
-        // 4. 未刷新(够入榜要求但不高于已存最佳):回已存最佳(高于/等于本次, SV2 先高后低分支)。
+        // 5. 未刷新(够入榜要求但不高于已存最佳):回已存最佳(高于/等于本次, SV2 先高后低分支)。
+        //    并发场景下该 existing 可能略旧(原子写之间被其他请求顶过),再查一次保正确。
         var best = await QueryBestScore(scores, account, rankId);
         return (RankSubmitResultCode.BestNotRefreshed, best);
     }

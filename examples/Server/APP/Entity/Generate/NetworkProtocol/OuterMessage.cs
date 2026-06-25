@@ -142,6 +142,228 @@ namespace Fantasy
         public bool TargetReached { get; set; }
     }
     /// <summary>
+    /// 客户端上传一份存档快照(身份从会话取,不携带 playerId)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_CloudSaveUploadRequest : AMessage, IRequest
+    {
+        public static C2G_CloudSaveUploadRequest Create(bool autoReturn = true)
+        {
+            var c2G_CloudSaveUploadRequest = MessageObjectPool<C2G_CloudSaveUploadRequest>.Rent();
+            c2G_CloudSaveUploadRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_CloudSaveUploadRequest.SetIsPool(false);
+            }
+            
+            return c2G_CloudSaveUploadRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Version = default;
+            Blob = null;
+            MessageObjectPool<C2G_CloudSaveUploadRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_CloudSaveUploadRequest; } 
+        [ProtoIgnore]
+        public G2C_CloudSaveUploadResponse ResponseType { get; set; }
+        /// <summary>
+        /// 客户端本地基线版本号(本次上传期望推进到的版本;必须 > 0 且 > 上次本端拉到的 ServerVersion)
+        /// </summary>
+        [ProtoMember(1)]
+        public long Version { get; set; }
+        /// <summary>
+        /// 客户端序列化好的存档字节流(服务端不解析其内部结构,原样存)
+        /// </summary>
+        [ProtoMember(2)]
+        public byte[] Blob { get; set; }
+    }
+    /// <summary>
+    /// 服务端上传裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_CloudSaveUploadResponse : AMessage, IResponse
+    {
+        public static G2C_CloudSaveUploadResponse Create(bool autoReturn = true)
+        {
+            var g2C_CloudSaveUploadResponse = MessageObjectPool<G2C_CloudSaveUploadResponse>.Rent();
+            g2C_CloudSaveUploadResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_CloudSaveUploadResponse.SetIsPool(false);
+            }
+            
+            return g2C_CloudSaveUploadResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            ServerVersion = default;
+            ServerBlob = null;
+            MessageObjectPool<G2C_CloudSaveUploadResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_CloudSaveUploadResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public CloudSaveUploadResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 服务端当前权威版本号(Accepted = 本次 version;Stale = 已存 version;无存档 / 其它失败 = 0)
+        /// </summary>
+        [ProtoMember(2)]
+        public long ServerVersion { get; set; }
+        /// <summary>
+        /// 仅 Stale 时回带服务端当前权威 blob,便于客户端合并;其它情况为空
+        /// </summary>
+        [ProtoMember(3)]
+        public byte[] ServerBlob { get; set; }
+    }
+    /// <summary>
+    /// 客户端拉取自己当前 playerId 的存档快照(身份从会话取)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_CloudSaveDownloadRequest : AMessage, IRequest
+    {
+        public static C2G_CloudSaveDownloadRequest Create(bool autoReturn = true)
+        {
+            var c2G_CloudSaveDownloadRequest = MessageObjectPool<C2G_CloudSaveDownloadRequest>.Rent();
+            c2G_CloudSaveDownloadRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_CloudSaveDownloadRequest.SetIsPool(false);
+            }
+            
+            return c2G_CloudSaveDownloadRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_CloudSaveDownloadRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_CloudSaveDownloadRequest; } 
+        [ProtoIgnore]
+        public G2C_CloudSaveDownloadResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端下载响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_CloudSaveDownloadResponse : AMessage, IResponse
+    {
+        public static G2C_CloudSaveDownloadResponse Create(bool autoReturn = true)
+        {
+            var g2C_CloudSaveDownloadResponse = MessageObjectPool<G2C_CloudSaveDownloadResponse>.Rent();
+            g2C_CloudSaveDownloadResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_CloudSaveDownloadResponse.SetIsPool(false);
+            }
+            
+            return g2C_CloudSaveDownloadResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            ServerVersion = default;
+            ServerBlob = null;
+            MessageObjectPool<G2C_CloudSaveDownloadResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_CloudSaveDownloadResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public CloudSaveDownloadResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 服务端当前权威版本号(NoSnapshot / 其它失败 = 0)
+        /// </summary>
+        [ProtoMember(2)]
+        public long ServerVersion { get; set; }
+        /// <summary>
+        /// 服务端存储的存档字节流(NoSnapshot / 失败 = 空)
+        /// </summary>
+        [ProtoMember(3)]
+        public byte[] ServerBlob { get; set; }
+    }
+    /// <summary>
     /// 客户端登陆到Gate服务器
     /// </summary>
     [Serializable]
@@ -179,6 +401,7 @@ namespace Fantasy
         {
             if (!IsPool()) return; 
             AccountName = default;
+            LocalPlayerId = default;
             MessageObjectPool<C2G_LoginGameRequest>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.C2G_LoginGameRequest; } 
@@ -186,6 +409,11 @@ namespace Fantasy
         public G2C_LoginGameResponse ResponseType { get; set; }
         [ProtoMember(1)]
         public string AccountName { get; set; }
+        /// <summary>
+        /// 客户端本地已有的 playerId(老档迁移用,首次走新登录时上交认领);新装/无本地值传空串。
+        /// </summary>
+        [ProtoMember(2)]
+        public string LocalPlayerId { get; set; }
     }
     [Serializable]
     [ProtoContract]
@@ -222,11 +450,17 @@ namespace Fantasy
         {
             if (!IsPool()) return; 
             ErrorCode = 0;
+            PlayerId = default;
             MessageObjectPool<G2C_LoginGameResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_LoginGameResponse; } 
-        [ProtoMember(1)]
+        [ProtoMember(2)]
         public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 服务端签发/认领后的权威 playerId(账号级稳定唯一,后续登录恒返同一值)。
+        /// </summary>
+        [ProtoMember(1)]
+        public string PlayerId { get; set; }
     }
     /// <summary>
     /// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
@@ -3427,7 +3661,7 @@ namespace Fantasy
         [ProtoIgnore]
         public G2C_QueryAttrLedgerResponse ResponseType { get; set; }
         /// <summary>
-        /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina,值与 PropertyType 整数同源,未知值返 InvalidRequest)
+        /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
         /// </summary>
         [ProtoMember(1)]
         public int Kind { get; set; }

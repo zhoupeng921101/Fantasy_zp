@@ -185,6 +185,7 @@ public sealed class RankServiceComponentDestroySystem : DestroySystem<RankServic
             Fantasy.Async.FTask.RemoveTimer(self.Scene, ref self.SettleTimerId);
         }
         self.DefCache.Clear();
+        self.AntiCheatLastSubmitAtMs.Clear();
         self.Scores = null;
         self.SettleMarks = null;
     }

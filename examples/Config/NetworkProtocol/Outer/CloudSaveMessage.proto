@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+// CloudSaveMessage.proto
+// 云存档(portability)服务端 blob 同步协议。
+// 用途:换设备继续玩——把一批"低危、改了主要只影响自己"的客户端存档数据(局内棋盘现场、解锁标志、
+// dynamicWeight 调度权重等)序列化为字节快照,服务端原样存取(opaque blob),换设备时拉回。
+// 服务端不解读 blob 的内部结构,也不据此做权威校验;与货币/排行榜的"服务端权威 + 字段级校验"是两条
+// 不同通道,这里只解决"携带"。
+// 寻址按 playerId(P0 签发的账号级权威身份);身份从会话取,请求不携带 playerId 字段。
+// 冲突解决:单调递增 version——上传 version > 已存才接受并覆盖,否则拒(返服务端当前 version + blob)。
+
+/// 上传裁决结果码
+enum CloudSaveUploadResultCode
+{
+	/// 接受并已覆盖(版本号已推进到本次上传的 version)。响应 ServerVersion = 本次 version。
+	Accepted = 0,
+	/// 上传 version <= 已存 version(他端已写入更新的存档)。响应 ServerVersion / ServerBlob = 服务端当前权威值,
+	/// 客户端应据此合并后以更高 version 重传(不静默丢弃本地改动)。
+	Stale = 1,
+	/// blob 大小超出服务端上限(防滥用 / 防超 BSON 文档限制)。响应不含 blob 字段。
+	BlobTooLarge = 2,
+	/// 会话未挂账号身份(35 登录失败 / 链路异常)。客户端段下一刀重登。
+	NotLoggedIn = 3,
+	/// 协议参数非法(version <= 0 / blob 为空数组 / playerId 未签发等)。
+	InvalidRequest = 4,
+	/// 服务不可用(MongoDB 不可达 / 写入异常)。变更未生效,稍后重试。
+	ServiceUnavailable = 5,
+}
+
+/// 下载裁决结果码
+enum CloudSaveDownloadResultCode
+{
+	/// 取到存档(ServerVersion / ServerBlob 有效)。
+	Success = 0,
+	/// 服务端无该 playerId 的存档(首次同步前的全新账号属此态,非异常)。响应 ServerVersion = 0 / ServerBlob 空。
+	NoSnapshot = 1,
+	/// 会话未挂账号身份。
+	NotLoggedIn = 2,
+	/// 服务不可用(MongoDB 不可达 / 读取异常)。
+	ServiceUnavailable = 3,
+}
+
+/// 客户端上传一份存档快照(身份从会话取,不携带 playerId)
+message C2G_CloudSaveUploadRequest // IRequest,G2C_CloudSaveUploadResponse
+{
+	int64 Version = 1; /// 客户端本地基线版本号(本次上传期望推进到的版本;必须 > 0 且 > 上次本端拉到的 ServerVersion)
+	bytes Blob = 2;    /// 客户端序列化好的存档字节流(服务端不解析其内部结构,原样存)
+}
+/// 服务端上传裁决响应
+message G2C_CloudSaveUploadResponse // IResponse
+{
+	CloudSaveUploadResultCode ResultCode = 1; /// 裁决结果码
+	int64 ServerVersion = 2;                  /// 服务端当前权威版本号(Accepted = 本次 version;Stale = 已存 version;无存档 / 其它失败 = 0)
+	bytes ServerBlob = 3;                     /// 仅 Stale 时回带服务端当前权威 blob,便于客户端合并;其它情况为空
+}
+
+/// 客户端拉取自己当前 playerId 的存档快照(身份从会话取)
+message C2G_CloudSaveDownloadRequest // IRequest,G2C_CloudSaveDownloadResponse
+{
+}
+/// 服务端下载响应
+message G2C_CloudSaveDownloadResponse // IResponse
+{
+	CloudSaveDownloadResultCode ResultCode = 1; /// 裁决结果码
+	int64 ServerVersion = 2;                    /// 服务端当前权威版本号(NoSnapshot / 其它失败 = 0)
+	bytes ServerBlob = 3;                       /// 服务端存储的存档字节流(NoSnapshot / 失败 = 空)
+}

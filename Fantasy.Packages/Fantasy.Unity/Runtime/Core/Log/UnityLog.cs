@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 #if UNITY_EDITOR
 using System;
 using System.Reflection;
@@ -28,12 +29,12 @@ namespace Fantasy
         {
             UnityEngine.Debug.Log(Format("TRACE", TraceColor, msg));
         }
-
+        [HideInCallstack]
         public void Debug(string msg)
         {
             UnityEngine.Debug.Log(Format("DEBUG", DebugColor, msg));
         }
-
+        [HideInCallstack]
         public void Info(string msg)
         {
             UnityEngine.Debug.Log(Format("INFO", InfoColor, msg));
@@ -44,6 +45,7 @@ namespace Fantasy
             UnityEngine.Debug.LogWarning(Format("WARN", WarningColor, msg));
         }
 
+        [HideInCallstack]
         public void Error(string msg)
         {
             UnityEngine.Debug.LogError(Format("ERROR", ErrorColor, msg));

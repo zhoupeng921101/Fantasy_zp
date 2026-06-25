@@ -7,12 +7,16 @@ syntax = "proto3";
 // 请求不携带账号、不携带绝对余额字段(反作弊红线:服务端永不信客户端传入绝对数值,见 §3.3.2)。
 // handler 仅消费类型 + delta + reason 三字段(Code Review SV17 必拦)。
 
-/// 属性类型(本子单三类)
+/// 属性类型(P2 扩到七类:在原三类基础上新增四种玩法货币,服务端权威化)
 enum PropertyType
 {
-	Coin = 0,        /// 金币
-	Diamond = 1,     /// 钻石
-	Stamina = 2,     /// 体力
+	Coin = 0,            /// 金币
+	Diamond = 1,         /// 钻石
+	Stamina = 2,         /// 体力
+	SoulPower = 3,       /// 灵力(玩法软货币,纯增减计数器)
+	Piety = 4,           /// 虔诚币(长期主线货币,纯增减计数器)
+	GuardianExp = 5,     /// 守护者累积经验(玩法侧第四种货币,纯增减计数器;与 PlayerDoc.Level/Exp 玩家账号经验不复用)
+	Energy = 6,          /// 玩法体力(带离线随时间恢复;服务端按 EnergyLastRecoverMs + EnergyRecoverIntervalMs 懒结算)
 }
 
 /// 属性变更裁决结果码(§3.3.2 + §3.4)
@@ -100,7 +104,7 @@ message AttrLedgerEntry
 /// limit 必填(本子单不设默认);服务端钳制 [0, 100],超上限钳为 100 不报错(降级语义)。
 message C2G_QueryAttrLedger // IRequest,G2C_QueryAttrLedgerResponse
 {
-	int32 Kind = 1;              /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina,值与 PropertyType 整数同源,未知值返 InvalidRequest)
+	int32 Kind = 1;              /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
 	int64 SinceTs = 2;           /// 时间下界(只返 Timestamp > SinceTs 的行;0 = 不过滤;负数返 InvalidRequest)
 	int32 Limit = 3;             /// 单次最多返回行数(服务端钳制 [0, 100];Limit=0 返空 entries[];负数返 InvalidRequest)
 }

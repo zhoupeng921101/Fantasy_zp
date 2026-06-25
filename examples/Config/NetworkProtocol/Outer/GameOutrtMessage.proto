@@ -5,8 +5,11 @@ syntax = "proto3";
 message C2G_LoginGameRequest // IRequest,G2C_LoginGameResponse
 {
 	string AccountName = 1;
+	/// 客户端本地已有的 playerId(老档迁移用,首次走新登录时上交认领);新装/无本地值传空串。
+	string LocalPlayerId = 2;
 }
 message G2C_LoginGameResponse // IResponse
 {
-
+	/// 服务端签发/认领后的权威 playerId(账号级稳定唯一,后续登录恒返同一值)。
+	string PlayerId = 1;
 }

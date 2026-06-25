@@ -27,6 +27,61 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 上传裁决结果码
+	/// </summary>
+	public enum CloudSaveUploadResultCode
+	{
+		/// <summary>
+		/// 接受并已覆盖(版本号已推进到本次上传的 version)。响应 ServerVersion = 本次 version。
+		/// </summary>
+		Accepted = 0,
+		/// <summary>
+		/// 上传 version <= 已存 version(他端已写入更新的存档)。响应 ServerVersion / ServerBlob = 服务端当前权威值,
+		/// 客户端应据此合并后以更高 version 重传(不静默丢弃本地改动)。
+		/// </summary>
+		Stale = 1,
+		/// <summary>
+		/// blob 大小超出服务端上限(防滥用 / 防超 BSON 文档限制)。响应不含 blob 字段。
+		/// </summary>
+		BlobTooLarge = 2,
+		/// <summary>
+		/// 会话未挂账号身份(35 登录失败 / 链路异常)。客户端段下一刀重登。
+		/// </summary>
+		NotLoggedIn = 3,
+		/// <summary>
+		/// 协议参数非法(version <= 0 / blob 为空数组 / playerId 未签发等)。
+		/// </summary>
+		InvalidRequest = 4,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 写入异常)。变更未生效,稍后重试。
+		/// </summary>
+		ServiceUnavailable = 5
+	}
+
+	/// <summary>
+	/// 下载裁决结果码
+	/// </summary>
+	public enum CloudSaveDownloadResultCode
+	{
+		/// <summary>
+		/// 取到存档(ServerVersion / ServerBlob 有效)。
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 服务端无该 playerId 的存档(首次同步前的全新账号属此态,非异常)。响应 ServerVersion = 0 / ServerBlob 空。
+		/// </summary>
+		NoSnapshot = 1,
+		/// <summary>
+		/// 会话未挂账号身份。
+		/// </summary>
+		NotLoggedIn = 2,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 读取异常)。
+		/// </summary>
+		ServiceUnavailable = 3
+	}
+
+	/// <summary>
 	/// 领取奖励裁决结果码（§3.4）
 	/// </summary>
 	public enum MailClaimResultCode
@@ -58,7 +113,7 @@ namespace Fantasy
 	}
 
 	/// <summary>
-	/// 属性类型(本子单三类)
+	/// 属性类型(P2 扩到七类:在原三类基础上新增四种玩法货币,服务端权威化)
 	/// </summary>
 	public enum PropertyType
 	{
@@ -73,7 +128,23 @@ namespace Fantasy
 		/// <summary>
 		/// 体力
 		/// </summary>
-		Stamina = 2
+		Stamina = 2,
+		/// <summary>
+		/// 灵力(玩法软货币,纯增减计数器)
+		/// </summary>
+		SoulPower = 3,
+		/// <summary>
+		/// 虔诚币(长期主线货币,纯增减计数器)
+		/// </summary>
+		Piety = 4,
+		/// <summary>
+		/// 守护者累积经验(玩法侧第四种货币,纯增减计数器;与 PlayerDoc.Level/Exp 玩家账号经验不复用)
+		/// </summary>
+		GuardianExp = 5,
+		/// <summary>
+		/// 玩法体力(带离线随时间恢复;服务端按 EnergyLastRecoverMs + EnergyRecoverIntervalMs 懒结算)
+		/// </summary>
+		Energy = 6
 	}
 
 	/// <summary>
@@ -154,7 +225,11 @@ namespace Fantasy
 		/// <summary>
 		/// 服务不可用（无法建立身份 / 无法处理）；客户端不阻断玩法、稍后重连可重报（§四）
 		/// </summary>
-		ServiceUnavailable = 4
+		ServiceUnavailable = 4,
+		/// <summary>
+		/// 服务端反作弊拦截（超绝对上限 / 频率过密 / 跃升异常等）→ 不进榜、不写存储；响应 BestScore = 已存最佳
+		/// </summary>
+		RejectedByAntiCheat = 5
 	}
 
 	/// <summary>

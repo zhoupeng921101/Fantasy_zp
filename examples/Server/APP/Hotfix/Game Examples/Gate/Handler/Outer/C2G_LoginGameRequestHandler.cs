@@ -43,6 +43,18 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
             return;
         }
 
+        // playerId 签发/认领(P0 身份收敛):账号尚无 playerId 时,客户端 localPlayerId 非空 → 认领、空 → 服务端新生成;
+        // 账号已有则忽略客户端上传值并回带服务端权威值。结果填进 response.PlayerId 让客户端落到 PlayerPrefs。
+        // 失败 → 登录失败短路(不挂会话身份,沿 35 / 37 服务不可用基线)。
+        var (idErrorCode, playerId) = await PlayerPropertyServiceHelper.ClaimOrIssuePlayerId(
+            session.Scene, accountName, playerDoc, request.LocalPlayerId ?? string.Empty);
+        if (idErrorCode != 0)
+        {
+            response.ErrorCode = idErrorCode;
+            return;
+        }
+        response.PlayerId = playerId;
+
         if (!AccountManageHelper.Add(session.Scene, accountName, out var account))
         {
             response.ErrorCode = 1;
@@ -50,6 +62,9 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         }
         // var account = Entity.Create<Account>(session.Scene);
         account.Session = session;
+        // 把签发/认领得到的 playerId 一并挂到会话级 Account 实体上,后续 handler(如 P3 云存档)直接读
+        // flag.Account.PlayerId,不必为每次请求回库读 PlayerDoc(身份取用 fast path)。
+        account.PlayerId = playerId;
         // 挂载组件用来标记这个Session下的Account，后面下线流程也会用到
         session.AddComponent<GateAccountFlagComponent>().Account = account;
         // 执行上线流程
