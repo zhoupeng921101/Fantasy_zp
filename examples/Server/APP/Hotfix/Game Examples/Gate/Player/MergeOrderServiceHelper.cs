@@ -1,0 +1,350 @@
+using System;
+using Fantasy.Async;
+using Fantasy.Helper;
+using Fantasy.Network;
+using MongoDB.Driver;
+
+namespace Fantasy;
+
+/// <summary>
+/// 订单系统服务端权威裁决核心(P2 全栈迁移·Phase 1·normal 订单)。
+///
+/// 三类对外能力,共用同一组持久状态(PlayerDoc.OrderCursor / LastOrderRefreshMs / OrderDeliveredMask):
+///   1. ApplyOrderRefreshIfDue — 登录拉快照前 + 每次交付前调:按 nowMs - LastOrderRefreshMs 是否 ≥ 间隔
+///      判定刷新整批(类比 Energy 懒结算);首次/负时差/离线只一批不堆叠(同客户端 ApplyOrderRefresh 语义)。
+///   2. BuildSnapshot — 由 doc 当前 cursor + mask 派生「激活订单快照」(协议层 MergeOrderSnapshot),
+///      已交付槽以 Type=0 空槽占位,客户端整份覆盖本地视图。
+///   3. TryDeliver — 交付 RPC 内部裁决:刷新结算 → claim-then-act:CAS 抢占 mask 槽位 → 抢占成功才发奖
+///      (Energy + Piety 经 PlayerPropertyServiceHelper.ChangeProperty serverAuthoritative=true 入口落账
+///      + ledger + delta 推送)→ 返回最新快照。库存校验本轮不做(farming 已由 mask 一次性抢占堵死)。
+///
+/// 反作弊红线:
+///   - 交付奖励金额 = 服务端按 OrderCursor + 槽位查 OrderPool 自己算定,**不**接受客户端上报金额;
+///   - 幂等顺序 claim-then-act(沿 RankSettleHelper / ActivityEvalHelper 同范式):
+///     ① 先 CAS 抢占 mask(filter 含 cursor + lastRefreshMs + bit 未置)→ MongoDB 单条原子保证每批每槽仅一次抢成;
+///     ② 抢占成功才发奖,失败 → 重读判 AlreadyDelivered(或刷新已发生 → 按新状态返)。
+///     这一顺序结构性堵死「并发同账号同槽双发」,不依赖频率闸偶然兜底。
+///     代价:抢占成功后、发奖失败(MongoDB 抖动罕见)→ 槽已消耗但少这次奖,
+///     anti-farming 语境下安全方向(玩家少拿、绝不多拿),记 Warning,不回滚 mask、不重复发。
+///   - 奖励经 ChangeProperty(serverAuthoritative=true)走「上界 cap + 原子写 + ledger + 推送」,
+///     跳过客户端 RPC 路径的单笔上限 + 100ms 频率闸(本侧 Energy + Piety 一笔内连续发、不同槽连交两单也不该被误拒)。
+///
+/// 时钟:统一用 TimeHelper.Now(服务端 Unix 毫秒);客户端时钟篡改影响不到本侧。
+/// </summary>
+public static class MergeOrderServiceHelper
+{
+    /// <summary>
+    /// 按真实时差判定并执行订单整批刷新(服务端懒结算,语义对齐客户端 ApplyOrderRefresh)。
+    /// 行为:
+    ///   ① doc.LastOrderRefreshMs == 0 → 首次接触(旧档 / 首登)→ CAS 写入 nowMs、本次不刷、cursor 不动、mask 不动;
+    ///   ② elapsed = nowMs - lastMs ≤ 0 → 不刷(同刻 / 负时差,服务端时钟不会负,防御);
+    ///   ③ elapsed < OrderRefreshIntervalMs → 不刷;
+    ///   ④ elapsed ≥ OrderRefreshIntervalMs → 整批刷新:cursor += ActiveOrders + mask = 0 + lastMs = nowMs(对齐到此刻,
+    ///      离线很久也只刷到「最新一批」、不堆叠 N 批,同客户端语义)。
+    ///
+    /// CAS:filter 含 (AccountId, LastOrderRefreshMs == lastMs) 防并发双刷新。
+    /// 写库失败 / 并发被另一路抢先刷新 → 不抛、Warning 不阻断,doc 字段保留 fast path 读到的值(下次操作前会重新读)。
+    /// 成功后会把更新结果写回入参 doc 引用,调用方据此构造快照。
+    /// </summary>
+    public static async FTask ApplyOrderRefreshIfDue(
+        PlayerPropertyServiceComponent service, string accountId, PlayerDoc doc, long nowMs)
+    {
+        var players = service.Players;
+        if (players == null) return;
+
+        var lastMs = doc.LastOrderRefreshMs;
+
+        // 边界:旧档缺字段 / 首登(setOnInsert 没写过) → 0L。bootstrap 为 nowMs,本次不刷。
+        if (lastMs <= 0L)
+        {
+            var bootstrapFilter = Builders<PlayerDoc>.Filter.And(
+                Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
+                Builders<PlayerDoc>.Filter.Eq(x => x.LastOrderRefreshMs, 0L));
+            var bootstrapUpdate = Builders<PlayerDoc>.Update.Set(x => x.LastOrderRefreshMs, nowMs);
+            try
+            {
+                var newDoc = await players.FindOneAndUpdateAsync(bootstrapFilter, bootstrapUpdate,
+                    new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+                if (newDoc != null)
+                {
+                    doc.LastOrderRefreshMs = newDoc.LastOrderRefreshMs;
+                    doc.OrderCursor = newDoc.OrderCursor;
+                    doc.OrderDeliveredMask = newDoc.OrderDeliveredMask;
+                    Log.Debug($"MergeOrder bootstrap account={accountId} lastRefreshMs={newDoc.LastOrderRefreshMs} cursor={newDoc.OrderCursor}");
+                }
+            }
+            catch (MongoException e)
+            {
+                Log.Warning($"MergeOrderServiceHelper.ApplyOrderRefreshIfDue bootstrap 失败 account={accountId},err={e.Message}");
+            }
+            return;
+        }
+
+        var elapsed = nowMs - lastMs;
+        if (elapsed < MergeOrderConfigServer.OrderRefreshIntervalMs) return;
+
+        // 到点:整批刷新。
+        // cursor 推进 ActiveOrders(让下一批指向 pool[cursor+ActiveOrders..cursor+2*ActiveOrders);等价于客户端 RefreshAllOrders 每槽 NextOrder() 累计推进 ActiveOrders 次)。
+        // mask 清零(新批全部未交付)。lastMs 对齐到 nowMs(离线很久也只刷一批,不堆叠 — 同客户端 LastOrderRefreshTime = nowUnixSec)。
+        var newCursor = doc.OrderCursor + MergeOrderConfigServer.ActiveOrders;
+        var refreshFilter = Builders<PlayerDoc>.Filter.And(
+            Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
+            Builders<PlayerDoc>.Filter.Eq(x => x.LastOrderRefreshMs, lastMs));
+        var refreshUpdate = Builders<PlayerDoc>.Update
+            .Set(x => x.OrderCursor, newCursor)
+            .Set(x => x.OrderDeliveredMask, 0)
+            .Set(x => x.LastOrderRefreshMs, nowMs);
+        try
+        {
+            var newDoc = await players.FindOneAndUpdateAsync(refreshFilter, refreshUpdate,
+                new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+            if (newDoc != null)
+            {
+                doc.OrderCursor = newDoc.OrderCursor;
+                doc.OrderDeliveredMask = newDoc.OrderDeliveredMask;
+                doc.LastOrderRefreshMs = newDoc.LastOrderRefreshMs;
+                Log.Debug($"MergeOrder 整批刷新 account={accountId} cursor={newDoc.OrderCursor} lastRefreshMs={newDoc.LastOrderRefreshMs}");
+            }
+            // newDoc == null:并发已被另一路刷新,本路当作已完成(下次操作前重读 doc)。
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"MergeOrderServiceHelper.ApplyOrderRefreshIfDue 刷新失败 account={accountId},err={e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 由 PlayerDoc 当前订单进度构造协议层快照(MergeOrderSnapshot)。
+    /// 派生算式:激活订单第 i 槽 = OrderPool[(cursor + i) mod length],已交付的槽(mask bit i 置位)以 Type=0 空槽占位。
+    /// 首登 cursor==0 → 激活订单 = pool[0..ActiveOrders),与客户端 Reset 后 NextOrder() 填三槽对齐。
+    /// </summary>
+    public static MergeOrderSnapshot BuildSnapshot(PlayerDoc doc)
+    {
+        var snap = MergeOrderSnapshot.Create();
+        snap.OrderCursor = doc.OrderCursor;
+        snap.LastOrderRefreshMs = doc.LastOrderRefreshMs;
+        snap.OrderRefreshIntervalSec = MergeOrderConfigServer.OrderRefreshIntervalSec;
+        snap.OrderRewardEnergy = MergeOrderConfigServer.OrderRewardEnergy;
+
+        for (int slot = 0; slot < MergeOrderConfigServer.ActiveOrders; slot++)
+        {
+            var item = OrderItem.Create();
+            // 该槽已交付 → Type=0 空槽占位
+            if ((doc.OrderDeliveredMask & (1 << slot)) != 0)
+            {
+                item.Type = MergeOrderConfigServer.OrderTypeNone;
+                item.Level = 0;
+                item.Count = 0;
+            }
+            else
+            {
+                var entry = MergeOrderConfigServer.GetActiveOrder(doc.OrderCursor, slot);
+                item.Type = entry.Type;
+                item.Level = entry.Level;
+                item.Count = entry.Count;
+            }
+            snap.ActiveOrders.Add(item);
+        }
+        return snap;
+    }
+
+    /// <summary>
+    /// 交付订单裁决(claim-then-act 幂等):刷新结算 → CAS 抢占 mask → 抢占成功才发奖 → 回传最新快照。
+    ///
+    /// 抢占在发奖前(范式同 RankSettleHelper.TryClaimSettlePeriod / ActivityEvalHelper.TryClaimCycleKey):
+    /// 并发同账号同槽多路到达,MongoDB FindOneAndUpdate 原子保证只一路 filter 命中(bit 未置)、其他路返 null;
+    /// 每个 (cursor 批, slot) 恰好抢占成功一次 = 恰好发奖一次,结构性堵死「双发」。
+    /// 抢失败的路重读 doc:bit 已置 → AlreadyDelivered(并发对手已交付);cursor/lastMs 变了 → 期间已刷新一批,
+    /// 重读后 mask 通常为 0、bit 也未置 → 此时按未交付返(刷新后的新状态),让客户端整份覆盖快照对齐。
+    ///
+    /// 返回 (resultCode, energyReward, pietyReward, snapshot)。
+    /// 失败时 snapshot 尽量构造当前状态;ServiceUnavailable 时若 doc 都读不到,snapshot 为零长度 ActiveOrders 占位。
+    /// </summary>
+    public static async FTask<(DeliverOrderResultCode resultCode, long energyReward, long pietyReward, MergeOrderSnapshot snapshot)>
+        TryDeliver(Scene scene, string accountId, int slot)
+    {
+        var service = scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (service == null || service.Players == null)
+        {
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, MergeOrderSnapshot.Create());
+        }
+
+        // 槽位合法性:协议层基础校验。
+        if (slot < 0 || slot >= MergeOrderConfigServer.ActiveOrders)
+        {
+            var snap = await TryBuildSnapshotFromDb(service, accountId);
+            return (DeliverOrderResultCode.InvalidSlot, 0L, 0L, snap);
+        }
+
+        var players = service.Players;
+        var nowMs = TimeHelper.Now;
+
+        // 读 doc + 跑刷新结算(到点会推进 cursor / 清 mask)。
+        PlayerDoc doc;
+        try
+        {
+            doc = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"MergeOrderServiceHelper.TryDeliver 读 doc 失败 account={accountId},err={e.Message}");
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, MergeOrderSnapshot.Create());
+        }
+        if (doc == null)
+        {
+            // 未首登(理论上登录链路已保证;实战防御)。
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, MergeOrderSnapshot.Create());
+        }
+
+        await ApplyOrderRefreshIfDue(service, accountId, doc, nowMs);
+
+        // 刷新结算后再校验 mask(刷新成功的话 mask 已清零)。
+        var bit = 1 << slot;
+        if ((doc.OrderDeliveredMask & bit) != 0)
+        {
+            // 本轮该槽已交付。
+            return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, BuildSnapshot(doc));
+        }
+
+        // 首登 cursor=0 + LastOrderRefreshMs 刚 bootstrap 为 nowMs 时,激活订单 = pool[0..ActiveOrders)
+        // (与 BuildSnapshot 派生口径一致,首登可立刻交付前 ActiveOrders 张)。
+        var entry = MergeOrderConfigServer.GetActiveOrder(doc.OrderCursor, slot);
+
+        // ── claim:先 CAS 抢占 mask 槽位 ──────────────────────────
+        // filter 含「mask 该位未置 + cursor 未变 + lastRefreshMs 未变」:
+        //   ·并发同槽多路 → MongoDB 原子保证只一路命中;其余路 filter 不匹配 → updatedDoc=null;
+        //   ·期间发生刷新(cursor/lastMs 变了)→ 本路 filter 不匹配 → 重读判定。
+        var newMask = doc.OrderDeliveredMask | bit;
+        var maskFilter = Builders<PlayerDoc>.Filter.And(
+            Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
+            Builders<PlayerDoc>.Filter.Eq(x => x.OrderCursor, doc.OrderCursor),
+            Builders<PlayerDoc>.Filter.Eq(x => x.LastOrderRefreshMs, doc.LastOrderRefreshMs),
+            Builders<PlayerDoc>.Filter.BitsAllClear(x => x.OrderDeliveredMask, (long)bit));
+        var maskUpdate = Builders<PlayerDoc>.Update.Set(x => x.OrderDeliveredMask, newMask);
+
+        PlayerDoc? claimedDoc;
+        try
+        {
+            claimedDoc = await players.FindOneAndUpdateAsync(maskFilter, maskUpdate,
+                new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"DeliverOrder 抢占 mask 失败 account={accountId} slot={slot},err={e.Message}");
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, BuildSnapshot(doc));
+        }
+
+        if (claimedDoc == null)
+        {
+            // 抢占失败:并发对手已交付该槽,或刷新已发生 cursor/lastMs 变了。重读 doc 判定。
+            PlayerDoc? freshDoc = null;
+            try
+            {
+                freshDoc = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
+            }
+            catch (MongoException e)
+            {
+                Log.Warning($"DeliverOrder 抢占失败后重读 doc 失败 account={accountId} slot={slot},err={e.Message}");
+            }
+            if (freshDoc == null)
+            {
+                // 重读失败:沿用 fast path doc 给客户端最新视图,语义按 AlreadyDelivered 返(不发奖)。
+                Log.Warning($"DeliverOrder 抢占未命中(并发交付该槽 / 刷新已发生),重读 doc 失败 account={accountId} slot={slot}");
+                return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, BuildSnapshot(doc));
+            }
+            Log.Debug($"DeliverOrder 抢占未命中(并发对手已交付 / 刷新已发生) account={accountId} slot={slot} freshCursor={freshDoc.OrderCursor} freshMask={freshDoc.OrderDeliveredMask}");
+            // 不发奖,以重读后状态构造快照。
+            return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, BuildSnapshot(freshDoc));
+        }
+
+        // ── 抢占成功:同步 doc 引用为最新状态,准备发奖 ───────────
+        doc.OrderDeliveredMask = claimedDoc.OrderDeliveredMask;
+        doc.OrderCursor = claimedDoc.OrderCursor;
+        doc.LastOrderRefreshMs = claimedDoc.LastOrderRefreshMs;
+
+        // 计算奖励:Energy=OrderRewardEnergy 常量;Piety=难度 × PietyPerDifficulty。
+        long energyDelta = MergeOrderConfigServer.OrderRewardEnergy;
+        long pietyDelta = (long)entry.Difficulty * MergeOrderConfigServer.PietyPerDifficulty;
+        var reason = $"merge_order_deliver:slot{slot}:t{entry.Type}l{entry.Level}c{entry.Count}";
+
+        // ── act:服务端权威发奖。serverAuthoritative=true 跳过客户端 RPC 路径的单笔上限 + 100ms 频率闸,
+        // 但仍走上界 cap + ledger + delta 推送(权威性不降)。
+        // 发奖失败的安全方向:槽已消耗但少这次奖(玩家少拿、绝不多拿),记 Warning,不回滚 mask、不重复发。
+        // ChangeProperty 是 all-or-nothing 落 delta:Success 时净增 = delta(无部分钳止);OverLimit 时整笔被拒、余额不动。
+        var (energyResultCode, energyAfterAmount) = await PlayerPropertyServiceHelper.ChangeProperty(
+            scene, accountId, PropertyType.Energy, energyDelta, reason, serverAuthoritative: true);
+
+        long energyReward = 0L;
+        if (energyResultCode == PropertyChangeResultCode.Success)
+        {
+            PlayerPropertyServiceHelper.SendDeltaPushTo(scene, accountId, PropertyType.Energy, energyAfterAmount, reason);
+            energyReward = energyDelta;
+        }
+        else if (energyResultCode == PropertyChangeResultCode.OverLimit)
+        {
+            // 体力撞 EnergyUpperBound 硬顶(9999,仅作 sanity 天花板)。规则上交付奖励允许超被动恢复软上限(30),
+            // 走 serverAuthoritative=true 路径不受 SoftCap 与 SingleDeltaLimit 钳制;只有撞 9999 才进本分支。
+            // 真业务量级远到不了 9999,本分支是兜底:跳过 Energy 发奖,继续 Piety + 维持 mask 已置(订单已消耗)。
+            Log.Warning($"DeliverOrder Energy 钳硬顶 account={accountId} slot={slot} delta={energyDelta} currentEnergy={energyAfterAmount} reason='{reason}' → 跳过体力发奖,继续发 Piety");
+            energyReward = 0L;
+        }
+        else
+        {
+            // 发奖失败(ServiceUnavailable / UnknownType / InvalidRequest;NotEnough 不可能因 delta>0):
+            // 安全方向 = 槽已消耗、少这次 Energy + Piety 也不再尝试(避免半笔账)。
+            Log.Warning($"DeliverOrder Energy 发放失败(mask 已抢占) account={accountId} slot={slot} result={energyResultCode} reason='{reason}'");
+            return (DeliverOrderResultCode.Success, 0L, 0L, BuildSnapshot(doc));
+        }
+
+        var (pietyResultCode, pietyAfterAmount) = await PlayerPropertyServiceHelper.ChangeProperty(
+            scene, accountId, PropertyType.Piety, pietyDelta, reason, serverAuthoritative: true);
+
+        long pietyReward = 0L;
+        if (pietyResultCode == PropertyChangeResultCode.Success)
+        {
+            PlayerPropertyServiceHelper.SendDeltaPushTo(scene, accountId, PropertyType.Piety, pietyAfterAmount, reason);
+            pietyReward = pietyDelta;
+        }
+        else if (pietyResultCode == PropertyChangeResultCode.OverLimit)
+        {
+            // Piety 上界 1_000_000,实战不可能触顶;真触顶按同口径丢这笔。
+            Log.Warning($"DeliverOrder Piety 钳上界 account={accountId} slot={slot} delta={pietyDelta} currentPiety={pietyAfterAmount} reason='{reason}' → 跳过虔诚币发奖");
+            pietyReward = 0L;
+        }
+        else
+        {
+            // Piety 发奖失败但 Energy 已成功:槽已消耗(mask 抢占在前),Piety 缺一笔由用户/运营事后补。
+            // 不回滚 Energy:严格事务需要 MongoDB 多文档事务或 outbox,本子单不引入。
+            Log.Warning($"DeliverOrder Piety 发放失败(Energy 已成功 / mask 已抢占) account={accountId} slot={slot} result={pietyResultCode} reason='{reason}'");
+        }
+
+        Log.Debug($"DeliverOrder 成功 account={accountId} slot={slot} energyReward={energyReward} pietyReward={pietyReward} mask={newMask}");
+        return (DeliverOrderResultCode.Success, energyReward, pietyReward, BuildSnapshot(doc));
+    }
+
+    /// <summary>从 DB 读最新 doc 并构造快照(失败 / 找不到玩家返回零长度 ActiveOrders 的占位 snapshot)。</summary>
+    public static async FTask<MergeOrderSnapshot> TryBuildSnapshotFromDb(PlayerPropertyServiceComponent service, string accountId)
+    {
+        if (service?.Players == null) return MergeOrderSnapshot.Create();
+        try
+        {
+            var doc = await service.Players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
+            if (doc == null) return MergeOrderSnapshot.Create();
+            return BuildSnapshot(doc);
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"MergeOrderServiceHelper.TryBuildSnapshotFromDb 失败 account={accountId},err={e.Message}");
+            return MergeOrderSnapshot.Create();
+        }
+    }
+
+    /// <summary>把订单快照推送给指定会话(登录初推 + 刷新后推 + 错误 fallback 用)。</summary>
+    public static void SendSnapshotTo(Session session, MergeOrderSnapshot snapshot)
+    {
+        if (session == null || session.IsDisposed || snapshot == null) return;
+        var push = G2C_MergeOrderSnapshotPush.Create();
+        push.Snapshot = snapshot;
+        session.Send(push);
+    }
+}

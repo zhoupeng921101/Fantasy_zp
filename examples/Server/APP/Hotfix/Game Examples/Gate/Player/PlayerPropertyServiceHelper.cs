@@ -83,6 +83,11 @@ public static class PlayerPropertyServiceHelper
             .SetOnInsert(x => x.GuardianExp, service.GuardianExpInitial)
             .SetOnInsert(x => x.Energy, service.EnergyInitial)
             .SetOnInsert(x => x.EnergyLastRecoverMs, nowMs)
+            // P2 Phase 1·订单进度状态显式写默认值(数值字段缺失 BSON 反序列化为 0 与本处 setOnInsert 0 一致;
+            // 但显式 setOnInsert 让首登 doc 字段全部 present,后续 CAS filter Eq(0L) / Eq(0) 形态稳定不依赖 absent==0 隐式语义)。
+            .SetOnInsert(x => x.OrderCursor, 0)
+            .SetOnInsert(x => x.LastOrderRefreshMs, 0L)
+            .SetOnInsert(x => x.OrderDeliveredMask, 0)
             .SetOnInsert(x => x.Nickname, string.Empty)
             .SetOnInsert(x => x.Level, 1)
             .SetOnInsert(x => x.Exp, 0L)
@@ -314,11 +319,21 @@ public static class PlayerPropertyServiceHelper
     ///   1. 服务就绪(组件 / players 句柄非空);
     ///   2. 类型枚举合法(三类之一);
     ///   3. delta 范围合法([-类型上界, +类型上界],防 long 极值绕过余额检查,§5.5);
-    ///   4. MongoDB 单条原子 FindOneAndUpdate:
+    ///   4. 限界信任(仅 serverAuthoritative=false 时生效,客户端 RPC 路径专用):
+    ///      ·SingleDeltaLimit 单笔幅度上限;
+    ///      ·同 account|type 100ms 频率闸(进程内字典,防客户端 spam);
+    ///   5. MongoDB 单条原子 FindOneAndUpdate:
     ///      filter: _id == accountId AND 0 <= 当前余额 + delta <= 类型上界
     ///      update: $inc(该属性, delta) + $set(LastChangeUnixMs)
     ///      ReturnDocument: After(成功 → 取新余额回包);
-    ///   5. 匹配失败 → 按 delta 正负返 NotEnough / OverLimit + 含当前实际余额(§3.4)。
+    ///   6. 匹配失败 → 按 delta 正负返 NotEnough / OverLimit + 含当前实际余额(§3.4)。
+    ///
+    /// serverAuthoritative:
+    ///   false(默认)= 客户端 RPC 入口,跑限界信任(单笔上限 + 频率闸);
+    ///   true        = 服务端进程内权威发放(订单结算 / 活动 / 邮件等业务系统调用),
+    ///                 跳过 SingleDeltaLimit + 频率闸(发奖金额由服务端自己算定,不是客户端上报;
+    ///                 不同槽位连交两单时第二单不应被限速误拒)。
+    ///                 上界 cap、范围校验、原子写仍生效,**不**降低权威性。
     ///
     /// 返回 (resultCode, newAmount):
     ///   - Success:newAmount = 变更后新余额;
@@ -329,7 +344,8 @@ public static class PlayerPropertyServiceHelper
     /// (调用方上下文不同:handler 在请求路径,进程内 API 在业务系统刀,推送时机由调用方控)。
     /// </summary>
     public static async FTask<(PropertyChangeResultCode resultCode, long newAmount)> ChangeProperty(
-        Scene scene, string accountId, PropertyType type, long delta, string reason)
+        Scene scene, string accountId, PropertyType type, long delta, string reason,
+        bool serverAuthoritative = false)
     {
         var service = scene.GetComponent<PlayerPropertyServiceComponent>();
         if (service == null)
@@ -356,19 +372,25 @@ public static class PlayerPropertyServiceHelper
             return (PropertyChangeResultCode.InvalidRequest, 0L);
         }
 
-        // P2 限界信任·单次 delta 上限:|delta| 超过 singleDeltaLimit → 视为客户端粗暴改值,拒。
-        // 比上界严格(单次幅度限制 vs 总余额上限),业务真实奖励/消耗单笔幅度按 singleDeltaLimit 调参。
-        if (delta > singleDeltaLimit || delta < -singleDeltaLimit)
+        // P2 限界信任:仅客户端 RPC 路径(serverAuthoritative=false)跑;
+        // 服务端权威进程内发放(订单 / 活动 / 邮件等)金额由服务端自己算定、reason 由代码侧固定,
+        // 不受「客户端 spam / 客户端粗暴改值」威胁;且业务真实多笔奖励连发(如同账号 100ms 内连交两单)
+        // 会被同 type 100ms 频率闸误拒,需绕过。
+        if (!serverAuthoritative)
         {
-            Log.Warning($"PropertyChange 拒因=SingleDeltaLimit account={accountId} type={type} delta={delta} limit={singleDeltaLimit} reason='{reason}'");
-            return (PropertyChangeResultCode.InvalidRequest, 0L);
+            // 单次 delta 上限:|delta| 超过 singleDeltaLimit → 视为客户端粗暴改值,拒。
+            if (delta > singleDeltaLimit || delta < -singleDeltaLimit)
+            {
+                Log.Warning($"PropertyChange 拒因=SingleDeltaLimit account={accountId} type={type} delta={delta} limit={singleDeltaLimit} reason='{reason}'");
+                return (PropertyChangeResultCode.InvalidRequest, 0L);
+            }
         }
 
         var nowMs = TimeHelper.Now;
 
-        // P2 限界信任·频率限制:同账号同属性最小间隔(进程内字典,沿 P1 RankAntiCheatPolicy 同款做法)。
+        // 频率限制:同账号同属性最小间隔(进程内字典,沿 P1 RankAntiCheatPolicy 同款做法)。
         // 拒因复用 InvalidRequest,日志标 RateLimited 拒因(避免新增结果码扩大客户端段下一刀处理面)。
-        if (service.PropertyChangeMinIntervalMs > 0L)
+        if (!serverAuthoritative && service.PropertyChangeMinIntervalMs > 0L)
         {
             var rateKey = string.Concat(accountId, "|", ((int)type).ToString());
             if (service.LastChangeAtMs.TryGetValue(rateKey, out var prevMs))
@@ -614,11 +636,12 @@ public static class PlayerPropertyServiceHelper
     }
 
     /// <summary>
-    /// 体力懒结算(P2):变更/查询 Energy 之前,按 EnergyLastRecoverMs 与 nowMs 流逝时间补恢复量。
-    /// 单条原子 FindOneAndUpdate:filter = (_id == accountId AND Energy < cap AND EnergyLastRecoverMs == lastSeenMs),
-    ///   update = $inc(Energy, recoverAmount) + $set(EnergyLastRecoverMs, newLastMs)。
-    /// filter 含 EnergyLastRecoverMs 字段做 CAS,防并发双结算(SV11 沿三老属性原子单写范式)。
-    /// 若 doc 当前 Energy >= cap → 不写,仅刷新 lastRecoverMs;若流逝时间不足一个 tick → 不写。
+    /// 体力被动恢复懒结算(P2):变更/查询 Energy 之前,按 EnergyLastRecoverMs 与 nowMs 流逝时间补恢复量。
+    /// 镜像客户端 MergeOrderState.ApplyTimeRegen 语义(规则:只有被动恢复有 SoftCap 软上限,主动来源可超):
+    ///   - doc.Energy &lt; SoftCap:$set(Energy, min(Energy + ticks*perTick, SoftCap)) + 推进 EnergyLastRecoverMs;
+    ///   - doc.Energy &gt;= SoftCap:**不**写 Energy(保留主动来源溢出的盈余),**仍**推进 EnergyLastRecoverMs
+    ///     (不囤积流逝的 ticks;一旦消费降到 SoftCap 以下,从那刻起重新累计)。
+    /// CAS:filter 含 EnergyLastRecoverMs == lastMs 防并发双结算(SV11 沿三老属性原子单写范式)。
     /// 旧文档兼容:doc.EnergyLastRecoverMs == 0(P0/P1 期玩家无此字段,BSON 反序列化默认 0)→
     /// 视为「首次接触新字段」,写入 nowMs 而不补恢复量(防 nowMs - 0 = epoch 流逝直接回满)。
     /// 失败(MongoDB 不可达 / 抖动)→ Warning 不抛、不阻断后续 ChangeProperty(返回的 doc 仍可用)。
@@ -663,26 +686,52 @@ public static class PlayerPropertyServiceHelper
         var ticks = elapsed / interval;
         var advanceMs = ticks * interval;
         var newLastMs = lastMs + advanceMs;
-        var cap = service.EnergyUpperBound;
+        var softCap = service.EnergyRecoverSoftCap;
         var perTick = service.EnergyRecoverPerTick;
 
-        // 已经达到 cap → 只推进 lastRecoverMs 不补量;
-        // 未达 cap → $min 钳上限:目标值 = min(Energy + ticks*perTick, cap),
-        // 用条件过滤 + $set 直接置目标值,而非 $inc 防超 cap(原子写 + cap 钳一步到位)。
-        var targetEnergy = doc.Energy + ticks * perTick;
-        if (targetEnergy > cap) targetEnergy = cap;
-
-        // CAS:filter 含 EnergyLastRecoverMs == lastMs 防并发双结算。
-        var filter = Builders<PlayerDoc>.Filter.And(
+        // CAS filter 共用:_id 锚 + EnergyLastRecoverMs == lastMs 防并发双结算。
+        var casFilter = Builders<PlayerDoc>.Filter.And(
             Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
             Builders<PlayerDoc>.Filter.Eq(x => x.EnergyLastRecoverMs, lastMs));
-        var update = Builders<PlayerDoc>.Update
+        var options = new FindOneAndUpdateOptions<PlayerDoc>
+        {
+            IsUpsert = false,
+            ReturnDocument = ReturnDocument.After
+        };
+
+        // doc.Energy >= softCap:只推进 lastMs、不动 Energy(镜像客户端 Energy < cap 块外仍推进 LastEnergyRegenTime;
+        // 关键差异于旧实现:旧代码无条件 Set(Energy, min(Energy+restored, cap)),Energy 已超 softCap 时会被钳回,
+        // 与"主动来源可超 30"规则冲突 — 订单交付攒下的盈余会被下一次被动恢复抹掉)。
+        if (doc.Energy >= softCap)
+        {
+            var update = Builders<PlayerDoc>.Update.Set(x => x.EnergyLastRecoverMs, newLastMs);
+            try
+            {
+                var newDoc = await players.FindOneAndUpdateAsync(casFilter, update, options);
+                if (newDoc != null)
+                {
+                    doc.EnergyLastRecoverMs = newDoc.EnergyLastRecoverMs;
+                    doc.Energy = newDoc.Energy;
+                    Log.Debug($"Energy 恢复结算跳过(已超软上限) account={accountId} energy={newDoc.Energy} softCap={softCap} lastRecoverMs={newDoc.EnergyLastRecoverMs}");
+                }
+            }
+            catch (MongoException e)
+            {
+                Log.Warning($"RecoverEnergyIfDue 推进 lastMs 失败 account={accountId} ticks={ticks},err={e.Message}");
+            }
+            return;
+        }
+
+        // doc.Energy < softCap:补恢复并钳到 softCap;条件过滤 + $set 直接置目标值,而非 $inc 防超 softCap。
+        var targetEnergy = doc.Energy + ticks * perTick;
+        if (targetEnergy > softCap) targetEnergy = softCap;
+
+        var setUpdate = Builders<PlayerDoc>.Update
             .Set(x => x.Energy, targetEnergy)
             .Set(x => x.EnergyLastRecoverMs, newLastMs);
         try
         {
-            var newDoc = await players.FindOneAndUpdateAsync(filter, update,
-                new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+            var newDoc = await players.FindOneAndUpdateAsync(casFilter, setUpdate, options);
             if (newDoc != null)
             {
                 doc.Energy = newDoc.Energy;

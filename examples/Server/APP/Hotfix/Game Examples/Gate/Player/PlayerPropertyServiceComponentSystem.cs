@@ -63,14 +63,17 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     private const long DefaultGuardianExpUpperBound = 2_000_000L;
 
     /// <summary>
-    /// 玩法体力默认初始 / 上界。值手抄自客户端 xlsx 口径(同 mail/rank/activity 服务端镜像先例):
+    /// 玩法体力默认初始 / 上界 / 被动恢复软上限。值口径(同 mail/rank/activity 服务端镜像先例):
     /// Initial=20 ← 客户端 `MergeOrderConfig.EnergyStart` 常量(MergeOrderConfig.cs);
-    /// UpperBound=30 ← 客户端 `GlobalConfigMgr.EnergyRecoverCapValue` 默认值(global.xlsx id=4)。
+    /// RecoverSoftCap=30 ← 客户端 `MergeOrderConfig.EnergyCap`(= 玩家界面"满体",被动时间恢复天花板);
+    /// UpperBound=9999 = 存储硬顶 / ChangeProperty 单笔变更后余额上界,远大于软上限。
+    ///   订单交付 +8、内购 / 许愿 / 盲盒等主动来源允许把体力顶到 30 以上(规则:其他来源不被软上限钳制);
+    ///   9999 仅作 sanity 天花板挡荒谬值,真业务远不可能撞顶。
     /// 注:本仓库无 global.xlsx,值取自客户端代码内文档化默认;源表被策划调过则需以真表为准再校。
-    /// 源表改了需同步更新此处。
     /// </summary>
     private const long DefaultEnergyInitial = 20L;
-    private const long DefaultEnergyUpperBound = 30L;
+    private const long DefaultEnergyUpperBound = 9999L;
+    private const long DefaultEnergyRecoverSoftCap = 30L;
 
     /// <summary>
     /// 体力恢复 tick 间隔 360000ms = 360 秒。值手抄自客户端 `GlobalConfigMgr.EnergyRecoverIntervalDefault`
@@ -108,10 +111,11 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     /// </summary>
     private const long DefaultGuardianExpSingleDeltaLimit = 5_000L;
     /// <summary>
-    /// 体力单次 delta 上限 30。依据:客户端最大单笔合法发放 = 修庙满补
-    /// `TempleConfig.TempleRepairEnergy`(=30,等于上限本身回满)。
-    /// 与 EnergyUpperBound 同值是 ValidateConfig 允许的上限(校验要求 ∈ (0, UpperBound])。
-    /// 旧占位 120(=4 倍真实上限)形同虚设,且超 UpperBound=30 会启动期拒服。源表改了需同步重审。
+    /// 体力单次 delta 上限 30(仅作客户端 RPC 路径限界信任,服务端权威发放路径 serverAuthoritative=true 绕过)。
+    /// 依据:客户端最大单笔合法发放 = 修庙满补 `TempleConfig.TempleRepairEnergy`(=30)。
+    /// 与 EnergyRecoverSoftCap 同值是巧合 — 它防的是客户端伪造大额 delta,不是体力余额上限。
+    /// 服务端订单交付 +8 走 serverAuthoritative 路径,不受此限亦不受 SoftCap 限,只受 EnergyUpperBound=9999 限。
+    /// 源表改了需同步重审。
     /// </summary>
     private const long DefaultEnergySingleDeltaLimit = 30L;
 
@@ -138,6 +142,7 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         self.GuardianExpUpperBound = DefaultGuardianExpUpperBound;
         self.EnergyInitial = DefaultEnergyInitial;
         self.EnergyUpperBound = DefaultEnergyUpperBound;
+        self.EnergyRecoverSoftCap = DefaultEnergyRecoverSoftCap;
         self.EnergyRecoverIntervalMs = DefaultEnergyRecoverIntervalMs;
         self.EnergyRecoverPerTick = DefaultEnergyRecoverPerTick;
         self.CoinSingleDeltaLimit = DefaultCoinSingleDeltaLimit;
@@ -203,6 +208,12 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         if (self.EnergyRecoverIntervalMs <= 0L || self.EnergyRecoverPerTick <= 0L)
         {
             Log.Error($"PlayerPropertyServiceComponent: EnergyRecoverIntervalMs={self.EnergyRecoverIntervalMs}/PerTick={self.EnergyRecoverPerTick} 非法(必须 > 0)。");
+            return false;
+        }
+        // 被动恢复软上限:必须 > 0 且 <= EnergyUpperBound(软上限不可超硬顶,否则恢复钳上限与存储上界语义冲突)。
+        if (self.EnergyRecoverSoftCap <= 0L || self.EnergyRecoverSoftCap > self.EnergyUpperBound)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: EnergyRecoverSoftCap={self.EnergyRecoverSoftCap} 非法(必须 ∈ (0, EnergyUpperBound={self.EnergyUpperBound}])。");
             return false;
         }
         if (self.PropertyChangeMinIntervalMs < 0L)

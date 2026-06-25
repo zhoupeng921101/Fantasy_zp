@@ -61,8 +61,17 @@ public sealed class PlayerPropertyServiceComponent : Entity
 
     /// <summary>体力首登初始值(玩法体力,与原 Stamina 不复用)。</summary>
     public long EnergyInitial;
-    /// <summary>体力类型上界(= 体力 cap)。</summary>
+    /// <summary>
+    /// 体力类型上界 = 存储硬顶 / ChangeProperty 单笔变更后余额上界(并非被动恢复软上限)。
+    /// 角色拆分:被动时间恢复天花板用 EnergyRecoverSoftCap(默认 30,= 玩家界面"满体"概念);
+    /// 本字段是宽松的安全顶,允许订单交付奖励 / 内购 / 许愿 / 盲盒等"主动来源"把体力顶到 30 以上。
+    /// </summary>
     public long EnergyUpperBound;
+    /// <summary>
+    /// 体力被动恢复软上限:Energy &lt; 此值时按 tick 累恢复、达到此值则停止恢复,但 Energy 已在此值以上时不被钳回。
+    /// 与客户端 MergeOrderConfig.EnergyCap 同语义,30 = 玩家界面"满体"概念。
+    /// </summary>
+    public long EnergyRecoverSoftCap;
 
     /// <summary>
     /// 体力恢复 tick 间隔(Unix 毫秒)。每过这么多毫秒恢复 EnergyRecoverPerTick 点。
@@ -98,6 +107,6 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// </summary>
     public readonly ConcurrentDictionary<string, long> LastChangeAtMs = new ConcurrentDictionary<string, long>();
 
-    /// <summary>玩家数据 schema 版本(常量 3;P2 加四种玩法货币 + 体力恢复时刻后升至 3)。</summary>
-    public const int CurrentSchemaVersion = 3;
+    /// <summary>玩家数据 schema 版本(常量 4;P2 Phase 1 加 OrderCursor / LastOrderRefreshMs / OrderDeliveredMask 后升至 4)。</summary>
+    public const int CurrentSchemaVersion = 4;
 }

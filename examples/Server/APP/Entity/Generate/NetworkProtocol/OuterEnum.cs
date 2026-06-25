@@ -113,6 +113,33 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 交付订单裁决结果码
+	/// </summary>
+	public enum DeliverOrderResultCode
+	{
+		/// <summary>
+		/// 成功:服务端已发奖、推 delta、回带最新快照
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(35 登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 槽位越界 / 该槽空(未刷或已交付被空槽占位)
+		/// </summary>
+		InvalidSlot = 2,
+		/// <summary>
+		/// 本轮该槽已交付(DeliveredMask 已置)
+		/// </summary>
+		AlreadyDelivered = 3,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / ChangeProperty 失败
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
 	/// 属性类型(P2 扩到七类:在原三类基础上新增四种玩法货币,服务端权威化)
 	/// </summary>
 	public enum PropertyType

@@ -802,6 +802,312 @@ namespace Fantasy
         [ProtoMember(2)]
         public List<MailRewardItem> Rewards { get; set; } = new List<MailRewardItem>();
     }
+    /// <summary>
+    /// 单条订单项(= 客户端 GameLogic.BlockBlast.Order;Type 用 int32 与客户端 MergeElement 枚举 1..4 对齐,0=None=空槽)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class OrderItem : AMessage, IDisposable
+    {
+        public static OrderItem Create(bool autoReturn = true)
+        {
+            var orderItem = MessageObjectPool<OrderItem>.Rent();
+            orderItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                orderItem.SetIsPool(false);
+            }
+            
+            return orderItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Type = default;
+            Level = default;
+            Count = default;
+            MessageObjectPool<OrderItem>.Return(this);
+        }
+        /// <summary>
+        /// MergeElement: 0=None(空槽,交付后保留到刷新),1=Butterfly,2=Chalice,3=Scroll,4=Star
+        /// </summary>
+        [ProtoMember(1)]
+        public int Type { get; set; }
+        /// <summary>
+        /// 等级(1..5,MergeOrderConfig.MaxLevel)
+        /// </summary>
+        [ProtoMember(2)]
+        public int Level { get; set; }
+        /// <summary>
+        /// 数量(订单要求该 (Type,Level) 的件数)
+        /// </summary>
+        [ProtoMember(3)]
+        public int Count { get; set; }
+    }
+    /// <summary>
+    /// 订单系统当前状态快照(服务端权威,客户端只持投影)。
+    /// 登录后随玩家信息推送 + 整批刷新后推送 + 每次交付响应附带,客户端整份覆盖本地视图。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class MergeOrderSnapshot : AMessage, IDisposable
+    {
+        public static MergeOrderSnapshot Create(bool autoReturn = true)
+        {
+            var mergeOrderSnapshot = MessageObjectPool<MergeOrderSnapshot>.Rent();
+            mergeOrderSnapshot.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                mergeOrderSnapshot.SetIsPool(false);
+            }
+            
+            return mergeOrderSnapshot;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            foreach (var __t in ActiveOrders) __t.Dispose();
+            ActiveOrders.Clear();
+            OrderCursor = default;
+            LastOrderRefreshMs = default;
+            OrderRefreshIntervalSec = default;
+            OrderRewardEnergy = default;
+            MessageObjectPool<MergeOrderSnapshot>.Return(this);
+        }
+        /// <summary>
+        /// 当前激活订单(长度 = ActiveOrders 配置=3;空槽以 Type=0 占位,槽位次序固定)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<OrderItem> ActiveOrders { get; set; } = new List<OrderItem>();
+        /// <summary>
+        /// 订单池游标(下一张未取的索引,服务端按池长取模;客户端可选地用于校验/排错)
+        /// </summary>
+        [ProtoMember(2)]
+        public int OrderCursor { get; set; }
+        /// <summary>
+        /// 上次整批刷新时刻(Unix 毫秒,服务端权威时钟;客户端可据此 + 间隔显示倒计时)
+        /// </summary>
+        [ProtoMember(3)]
+        public long LastOrderRefreshMs { get; set; }
+        /// <summary>
+        /// 整批刷新间隔秒数(客户端读这个值算下次刷新时刻,不再读本地 GlobalConfigMgr)
+        /// </summary>
+        [ProtoMember(4)]
+        public int OrderRefreshIntervalSec { get; set; }
+        /// <summary>
+        /// 单次交付奖励体力(客户端 toast 预读;服务端发奖时按此值落账,客户端无需自报)
+        /// </summary>
+        [ProtoMember(5)]
+        public int OrderRewardEnergy { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求交付某槽位的订单(身份从会话取,不带账号 / 不带订单类型 / 不带奖励金额——服务端按 OrderCursor + DeliveredMask 自己定)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_DeliverOrderRequest : AMessage, IRequest
+    {
+        public static C2G_DeliverOrderRequest Create(bool autoReturn = true)
+        {
+            var c2G_DeliverOrderRequest = MessageObjectPool<C2G_DeliverOrderRequest>.Rent();
+            c2G_DeliverOrderRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_DeliverOrderRequest.SetIsPool(false);
+            }
+            
+            return c2G_DeliverOrderRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Slot = default;
+            MessageObjectPool<C2G_DeliverOrderRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_DeliverOrderRequest; } 
+        [ProtoIgnore]
+        public G2C_DeliverOrderResponse ResponseType { get; set; }
+        /// <summary>
+        /// 槽位下标 [0, ActiveOrders),客户端按显示槽位填
+        /// </summary>
+        [ProtoMember(1)]
+        public int Slot { get; set; }
+    }
+    /// <summary>
+    /// 服务端交付裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_DeliverOrderResponse : AMessage, IResponse
+    {
+        public static G2C_DeliverOrderResponse Create(bool autoReturn = true)
+        {
+            var g2C_DeliverOrderResponse = MessageObjectPool<G2C_DeliverOrderResponse>.Rent();
+            g2C_DeliverOrderResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_DeliverOrderResponse.SetIsPool(false);
+            }
+            
+            return g2C_DeliverOrderResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Slot = default;
+            EnergyReward = default;
+            PietyReward = default;
+            if (Snapshot != null)
+            {
+                Snapshot.Dispose();
+                Snapshot = null;
+            }
+            MessageObjectPool<G2C_DeliverOrderResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_DeliverOrderResponse; } 
+        [ProtoMember(6)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public DeliverOrderResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 回声槽位
+        /// </summary>
+        [ProtoMember(2)]
+        public int Slot { get; set; }
+        /// <summary>
+        /// 成功时:本次发奖体力实际净增量(可能因服务端上界钳止小于 OrderRewardEnergy);失败时 = 0
+        /// </summary>
+        [ProtoMember(3)]
+        public long EnergyReward { get; set; }
+        /// <summary>
+        /// 成功时:本次发奖虔诚币(= 订单难度 × PietyPerDifficulty);失败时 = 0
+        /// </summary>
+        [ProtoMember(4)]
+        public long PietyReward { get; set; }
+        /// <summary>
+        /// 服务端权威更新后的最新订单快照(含已置空的本槽 + 可能触发的整批刷新);失败时为空数组的占位 snapshot
+        /// </summary>
+        [ProtoMember(5)]
+        public MergeOrderSnapshot Snapshot { get; set; }
+    }
+    /// <summary>
+    /// 服务端主动推送订单快照(登录后初推 + 整批刷新到点后推 + 交付响应路径已带不再 push,避免双发)
+    /// 推送是「绝对快照」,丢失 = 下次登录拉对齐,O6 不重试。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_MergeOrderSnapshotPush : AMessage, IMessage
+    {
+        public static G2C_MergeOrderSnapshotPush Create(bool autoReturn = true)
+        {
+            var g2C_MergeOrderSnapshotPush = MessageObjectPool<G2C_MergeOrderSnapshotPush>.Rent();
+            g2C_MergeOrderSnapshotPush.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_MergeOrderSnapshotPush.SetIsPool(false);
+            }
+            
+            return g2C_MergeOrderSnapshotPush;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            if (Snapshot != null)
+            {
+                Snapshot.Dispose();
+                Snapshot = null;
+            }
+            MessageObjectPool<G2C_MergeOrderSnapshotPush>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_MergeOrderSnapshotPush; } 
+        [ProtoMember(1)]
+        public MergeOrderSnapshot Snapshot { get; set; }
+    }
     [Serializable]
     [ProtoContract]
     public partial class C2G_TestEmptyMessage : AMessage, IMessage

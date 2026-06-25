@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+// MergeOrderMessage.proto
+// 订单系统服务端权威协议(P2 全栈迁移·Phase 1·normal 订单)。
+//
+// 本轮范围:服务端权威 normal 订单池 + 订单进度状态(OrderCursor / LastOrderRefreshMs / DeliveredMask)
+// 持久化到 PlayerDoc;服务端时钟懒结算刷新;交付 RPC 校验槽位 + 服务端权威发奖(Energy + Piety,
+// 经 PlayerPropertyServiceHelper.ChangeProperty 落账 + ledger + delta 推送);登录快照含激活订单;
+// 刷新/交付后推送 G2C_MergeOrderSnapshotPush 同步该会话(整份快照,绝对值非增量,丢失下一次拉时对齐)。
+//
+// 范围外:特殊订单(SpecialOrderTrack)下一轮迁;库存校验 Phase 2;全棋盘服务端模拟暂不做。
+//
+// 设计基线:.claude/rules/data-authority.md(玩家持久数据服务端权威) + 客户端 MergeOrderConfig.OrderPool 数组
+// + Order.Difficulty 公式(数量 × MergeCount^(等级-1))+ TempleConfig.PietyPerDifficulty 奖励系数。
+
+/// 单条订单项(= 客户端 GameLogic.BlockBlast.Order;Type 用 int32 与客户端 MergeElement 枚举 1..4 对齐,0=None=空槽)
+message OrderItem
+{
+	int32 Type = 1;     /// MergeElement: 0=None(空槽,交付后保留到刷新),1=Butterfly,2=Chalice,3=Scroll,4=Star
+	int32 Level = 2;    /// 等级(1..5,MergeOrderConfig.MaxLevel)
+	int32 Count = 3;    /// 数量(订单要求该 (Type,Level) 的件数)
+}
+
+/// 订单系统当前状态快照(服务端权威,客户端只持投影)。
+/// 登录后随玩家信息推送 + 整批刷新后推送 + 每次交付响应附带,客户端整份覆盖本地视图。
+message MergeOrderSnapshot
+{
+	repeated OrderItem ActiveOrders = 1;      /// 当前激活订单(长度 = ActiveOrders 配置=3;空槽以 Type=0 占位,槽位次序固定)
+	int32 OrderCursor = 2;                    /// 订单池游标(下一张未取的索引,服务端按池长取模;客户端可选地用于校验/排错)
+	int64 LastOrderRefreshMs = 3;             /// 上次整批刷新时刻(Unix 毫秒,服务端权威时钟;客户端可据此 + 间隔显示倒计时)
+	int32 OrderRefreshIntervalSec = 4;        /// 整批刷新间隔秒数(客户端读这个值算下次刷新时刻,不再读本地 GlobalConfigMgr)
+	int32 OrderRewardEnergy = 5;              /// 单次交付奖励体力(客户端 toast 预读;服务端发奖时按此值落账,客户端无需自报)
+}
+
+/// 交付订单裁决结果码
+enum DeliverOrderResultCode
+{
+	Success = 0,             /// 成功:服务端已发奖、推 delta、回带最新快照
+	NotLoggedIn = 1,         /// 会话未挂账号(35 登录链路异常)→ 客户端重登
+	InvalidSlot = 2,         /// 槽位越界 / 该槽空(未刷或已交付被空槽占位)
+	AlreadyDelivered = 3,    /// 本轮该槽已交付(DeliveredMask 已置)
+	ServiceUnavailable = 4,  /// MongoDB 不可达 / 服务未就绪 / ChangeProperty 失败
+}
+
+/// 客户端请求交付某槽位的订单(身份从会话取,不带账号 / 不带订单类型 / 不带奖励金额——服务端按 OrderCursor + DeliveredMask 自己定)
+message C2G_DeliverOrderRequest // IRequest,G2C_DeliverOrderResponse
+{
+	int32 Slot = 1;     /// 槽位下标 [0, ActiveOrders),客户端按显示槽位填
+}
+
+/// 服务端交付裁决响应
+message G2C_DeliverOrderResponse // IResponse
+{
+	DeliverOrderResultCode ResultCode = 1;    /// 裁决结果码
+	int32 Slot = 2;                           /// 回声槽位
+	int64 EnergyReward = 3;                   /// 成功时:本次发奖体力实际净增量(可能因服务端上界钳止小于 OrderRewardEnergy);失败时 = 0
+	int64 PietyReward = 4;                    /// 成功时:本次发奖虔诚币(= 订单难度 × PietyPerDifficulty);失败时 = 0
+	MergeOrderSnapshot Snapshot = 5;          /// 服务端权威更新后的最新订单快照(含已置空的本槽 + 可能触发的整批刷新);失败时为空数组的占位 snapshot
+}
+
+/// 服务端主动推送订单快照(登录后初推 + 整批刷新到点后推 + 交付响应路径已带不再 push,避免双发)
+/// 推送是「绝对快照」,丢失 = 下次登录拉对齐,O6 不重试。
+message G2C_MergeOrderSnapshotPush // IMessage
+{
+	MergeOrderSnapshot Snapshot = 1;
+}

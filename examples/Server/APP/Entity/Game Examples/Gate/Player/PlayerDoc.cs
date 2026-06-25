@@ -69,6 +69,35 @@ public sealed class PlayerDoc
     /// <summary>体力上次恢复结算时刻(Unix 毫秒,UTC)。首登 setOnInsert 为 nowMs;每次结算成功后刷新到结算所覆盖的整数倍 tick 末端。</summary>
     public long EnergyLastRecoverMs { get; set; }
 
+    // ---- P2 Phase 1·normal 订单·服务端权威订单进度状态 ----
+    // 服务端不持「激活订单数组」(可由 OrderCursor + DeliveredMask 派生:激活订单 = pool[(cursor - ActiveOrders + i) % poolLen],
+    // 已交付的槽按 mask 位置空)。这样订单池配置/数组长度改了不会让旧 doc 失配,且不冗余存可推导的数据。
+    //
+    // 旧文档反序列化时三字段缺失 → BSON 默认 0 / 0L:OrderCursor==0 等价"首次,游标在 0";LastOrderRefreshMs==0 等价"尚无记录,
+    // 首次结算以 nowMs 初始化、本次不刷"(同 EnergyLastRecoverMs 的 bootstrap 语义);DeliveredMask==0 等价"无槽位已交付"。
+    // 三者都不需要 partial index $ne 配合(数值字段 default==0 直接是合理初值,绕开了字符串 absent vs 空串陷阱)。
+
+    /// <summary>
+    /// 订单池游标(下一张未取的索引,服务端按池长 OrderPool.Length 取模)。
+    /// 每次刷新一批 = cursor += ActiveOrders;交付不动 cursor(只置 DeliveredMask 位)。
+    /// 旧档缺字段 → 0 等价首次。
+    /// </summary>
+    public int OrderCursor { get; set; }
+
+    /// <summary>
+    /// 订单上次整批刷新时刻(Unix 毫秒,UTC,服务端权威时钟)。
+    /// 刷新触发 = 经过 ≥ OrderRefreshIntervalMs 真实毫秒,整批替换激活订单(cursor 推进 ActiveOrders 张)+ 清 DeliveredMask + LastOrderRefreshMs=newMs。
+    /// 旧档缺字段 → 0L 等价"尚无记录,首次接触时 bootstrap 为 nowMs、本次不刷"(同 EnergyLastRecoverMs)。
+    /// </summary>
+    public long LastOrderRefreshMs { get; set; }
+
+    /// <summary>
+    /// 本轮已交付订单的 bitmask(bit i = 第 i 槽已交付,槽 ∈ [0, ActiveOrders))。
+    /// 交付成功置位;整批刷新时清零。ActiveOrders=3 时仅用低 3 位,int32 足够。
+    /// 旧档缺字段 → 0 等价"本轮无交付"(配合 OrderCursor==0 首次,等价首批未交付)。
+    /// </summary>
+    public int OrderDeliveredMask { get; set; }
+
     /// <summary>schema 版本(加字段时升 + 缺字段保底)。</summary>
     public int SchemaVersion { get; set; }
 }
