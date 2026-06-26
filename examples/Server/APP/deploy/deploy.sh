@@ -71,9 +71,32 @@ fi
 echo "==> 停止 fantasy 服务（若已安装）"
 ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "systemctl stop fantasy 2>/dev/null || true"
 
-echo "==> 上传到 $SERVER_USER@$SERVER_HOST:$REMOTE_DIR"
+echo "==> 增量上传到 $SERVER_USER@$SERVER_HOST:$REMOTE_DIR（md5 比对，只传变化/新增文件）"
 ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "mkdir -p '$REMOTE_DIR'"
-scp "${SSH_OPTS[@]}" -r "$OUT/." "$SERVER_USER@$SERVER_HOST:$REMOTE_DIR/"
+
+# 归一化：消除 Git Bash(二进制模式 'hash *path') 与 Linux(文本模式 'hash  path') 的格式差异，
+# 统一成 "hash path"（hash=前32列，path=第35列起）再排序，否则同内容文件会被误判为“变化”。
+norm() { awk 'NF{print substr($0,1,32)" "substr($0,35)}' | LC_ALL=C sort; }
+# 远端清单（目录为空时输出空）
+remote_md5="$(ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" \
+  "cd '$REMOTE_DIR' && find . -type f -exec md5sum {} + 2>/dev/null" | norm || true)"
+# 本地清单
+local_md5="$(cd "$OUT" && find . -type f -exec md5sum {} + | norm)"
+# comm -23 取“只在本地出现”的行（新增 或 内容变更）→ 取路径（第一个空格之后）
+changed="$(LC_ALL=C comm -23 <(printf '%s\n' "$local_md5") <(printf '%s\n' "$remote_md5") | cut -d' ' -f2-)"
+changed="$(printf '%s\n' "$changed" | grep -v '^$' || true)"
+# 注：本方案只增量上传，不删除远端已删本地的文件（避免误删服务器上的 Logs/GameConfigBytes 等）
+
+if [ -z "$changed" ]; then
+  echo "==> 无文件变化，跳过传输。"
+else
+  n="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
+  echo "==> 变化文件 $n 个（共 $(printf '%s\n' "$local_md5" | wc -l | tr -d ' ') 个）："
+  printf '%s\n' "$changed" | sed 's#^\./#    #'
+  # 打包变化文件 → 流式传输 → 远端解包（一次 ssh 连接，保留相对目录结构）
+  printf '%s\n' "$changed" | tar -C "$OUT" -czf - -T - \
+    | ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "tar -C '$REMOTE_DIR' -xzf -"
+fi
 ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "chmod +x '$REMOTE_DIR/Main'"
 
 echo "==> 启动 fantasy 服务"
