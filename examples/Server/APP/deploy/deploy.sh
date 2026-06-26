@@ -67,12 +67,21 @@ if [[ "$UPLOAD" -eq 0 ]]; then
   exit 0
 fi
 
+# 先停服务：正在运行的 Main 无法被 scp 覆盖（Linux 报 Text file busy）
+echo "==> 停止 fantasy 服务（若已安装）"
+ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "systemctl stop fantasy 2>/dev/null || true"
+
 echo "==> 上传到 $SERVER_USER@$SERVER_HOST:$REMOTE_DIR"
 ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "mkdir -p '$REMOTE_DIR'"
 scp "${SSH_OPTS[@]}" -r "$OUT/." "$SERVER_USER@$SERVER_HOST:$REMOTE_DIR/"
 ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "chmod +x '$REMOTE_DIR/Main'"
 
-echo "==> 完成。重启服务："
-KEY_HINT=""
-[[ -n "$SSH_KEY" ]] && KEY_HINT="-i '$SSH_KEY' "
-echo "    ssh ${KEY_HINT}$SERVER_USER@$SERVER_HOST 'sudo systemctl restart fantasy && sudo journalctl -u fantasy -f'"
+echo "==> 启动 fantasy 服务"
+if ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" "systemctl start fantasy" 2>/dev/null; then
+  echo "==> 启动完成，当前状态与最近日志："
+  ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_HOST" \
+    "systemctl is-active fantasy; journalctl -u fantasy -n 15 --no-pager"
+else
+  echo "!! 启动失败：fantasy.service 可能尚未安装（首次部署常见）。"
+  echo "   请在服务器上装一次 systemd 单元（见 deploy/README.md「安装 systemd 单元」一节），之后本脚本即可自动启停。"
+fi

@@ -83,13 +83,28 @@ public static class MergeOrderServiceHelper
         var elapsed = nowMs - lastMs;
         if (elapsed < MergeOrderConfigServer.OrderRefreshIntervalMs) return;
 
-        // 到点:整批刷新。
+        // 到点:整批刷新(行为同 reason="due")。CAS 键 LastOrderRefreshMs==lastMs 防并发双刷。
+        await ApplyBatchRefreshWrite(players, accountId, doc, lastMs, nowMs, "due");
+    }
+
+    /// <summary>
+    /// 整批刷新的 CAS 写库(时基刷新 + 全交付即刷共用,避免两处 CAS 逻辑重复后各自漂移)。
+    /// 语义:cursor += ActiveOrders(下一批)+ OrderDeliveredMask = 0(新批全未交付)+ LastOrderRefreshMs = nowMs(对齐此刻)。
+    ///
+    /// CAS filter 键 = (AccountId, LastOrderRefreshMs == expectedLastMs):
+    ///   并发多路(时基刷新 / 全交付即刷)只一路命中、把 LastOrderRefreshMs 改走,其余路 filter miss → updatedDoc=null,
+    ///   结构性保证每批仅刷一次、不双进一批,不依赖外层判定顺序兜底。
+    /// 成功命中 → 把更新结果写回入参 doc 引用,供调用方据此构造快照。
+    /// 写库失败 → 沿用 catch(MongoException) → Warning、不抛、不阻断(doc 保留调用方读到的值,下次操作前重读重判)。
+    /// </summary>
+    private static async FTask ApplyBatchRefreshWrite(
+        IMongoCollection<PlayerDoc> players, string accountId, PlayerDoc doc, long expectedLastMs, long nowMs, string reason)
+    {
         // cursor 推进 ActiveOrders(让下一批指向 pool[cursor+ActiveOrders..cursor+2*ActiveOrders);等价于客户端 RefreshAllOrders 每槽 NextOrder() 累计推进 ActiveOrders 次)。
-        // mask 清零(新批全部未交付)。lastMs 对齐到 nowMs(离线很久也只刷一批,不堆叠 — 同客户端 LastOrderRefreshTime = nowUnixSec)。
         var newCursor = doc.OrderCursor + MergeOrderConfigServer.ActiveOrders;
         var refreshFilter = Builders<PlayerDoc>.Filter.And(
             Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
-            Builders<PlayerDoc>.Filter.Eq(x => x.LastOrderRefreshMs, lastMs));
+            Builders<PlayerDoc>.Filter.Eq(x => x.LastOrderRefreshMs, expectedLastMs));
         var refreshUpdate = Builders<PlayerDoc>.Update
             .Set(x => x.OrderCursor, newCursor)
             .Set(x => x.OrderDeliveredMask, 0)
@@ -103,13 +118,13 @@ public static class MergeOrderServiceHelper
                 doc.OrderCursor = newDoc.OrderCursor;
                 doc.OrderDeliveredMask = newDoc.OrderDeliveredMask;
                 doc.LastOrderRefreshMs = newDoc.LastOrderRefreshMs;
-                Log.Debug($"MergeOrder 整批刷新 account={accountId} cursor={newDoc.OrderCursor} lastRefreshMs={newDoc.LastOrderRefreshMs}");
+                Log.Debug($"MergeOrder 整批刷新({reason}) account={accountId} cursor={newDoc.OrderCursor} lastRefreshMs={newDoc.LastOrderRefreshMs}");
             }
             // newDoc == null:并发已被另一路刷新,本路当作已完成(下次操作前重读 doc)。
         }
         catch (MongoException e)
         {
-            Log.Warning($"MergeOrderServiceHelper.ApplyOrderRefreshIfDue 刷新失败 account={accountId},err={e.Message}");
+            Log.Warning($"MergeOrderServiceHelper.ApplyBatchRefreshWrite({reason}) 刷新失败 account={accountId},err={e.Message}");
         }
     }
 
@@ -318,7 +333,19 @@ public static class MergeOrderServiceHelper
             Log.Warning($"DeliverOrder Piety 发放失败(Energy 已成功 / mask 已抢占) account={accountId} slot={slot} result={pietyResultCode} reason='{reason}'");
         }
 
-        Log.Debug($"DeliverOrder 成功 account={accountId} slot={slot} energyReward={energyReward} pietyReward={pietyReward} mask={newMask}");
+        // ── 全交付即刷(触发器 ②):本批 ActiveOrders 槽全部交付 → 立即整批刷新一批、重置倒计时 ──
+        // 不变量(时序无双刷):line 199 的时基刷新若已给新批,则本次 claim 落在新批、mask 只置一位不满,
+        //   此分支条件 (mask & fullMask) == fullMask 不成立、不触发;故无需对「时基刷新与全交付即刷同帧」额外防护。
+        // 并发双刷由 ApplyBatchRefreshWrite 的 CAS 键 LastOrderRefreshMs == doc.LastOrderRefreshMs 堵死:
+        //   时基刷新若已占先改走 LastOrderRefreshMs,本次 CAS 自然 miss、不会双进一批。
+        // doc.OrderDeliveredMask 已在抢占成功后同步为 claimedDoc 的值(含本次置位)。
+        var fullMask = (1 << MergeOrderConfigServer.ActiveOrders) - 1;
+        if ((doc.OrderDeliveredMask & fullMask) == fullMask)
+        {
+            await ApplyBatchRefreshWrite(players, accountId, doc, doc.LastOrderRefreshMs, nowMs, "all-delivered");
+        }
+
+        Log.Debug($"DeliverOrder 成功 account={accountId} slot={slot} energyReward={energyReward} pietyReward={pietyReward} mask={doc.OrderDeliveredMask}");
         return (DeliverOrderResultCode.Success, energyReward, pietyReward, BuildSnapshot(doc));
     }
 

@@ -13,6 +13,7 @@ using Fantasy.PacketParser;
 using Fantasy.PacketParser.Interface;
 using Fantasy.Scheduler;
 using Fantasy.Serialize;
+using UnityEngine;
 #if FANTASY_NET
 using Fantasy.Network.Route;
 using Fantasy.Platform.Net;
@@ -203,6 +204,7 @@ namespace Fantasy.Network
         /// <param name="request">请求消息的实例</param>
         /// <param name="address">Address</param>
         /// <returns></returns>
+        [HideInCallstack]
         public virtual FTask<IResponse> Call<T>(T request, long address = 0) where T : IRequest
         {
             if (IsDisposed)

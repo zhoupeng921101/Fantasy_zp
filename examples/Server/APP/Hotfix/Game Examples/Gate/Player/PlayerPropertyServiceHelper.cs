@@ -2,6 +2,7 @@ using System;
 using Fantasy.Async;
 using Fantasy.Helper;
 using Fantasy.Network;
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace Fantasy;
@@ -110,8 +111,15 @@ public static class PlayerPropertyServiceHelper
                 return (1u, null);
             }
 
+            // 旧 schema 文档补字段:setOnInsert 仅 insert 触发,重登 update 路径完全不写,
+            // 故旧档(本次 CurrentSchemaVersion 之前注册的玩家)文档里 P1/P2 新增字段(四货币 / 体力 / 订单进度)
+            // 全部 absent。MongoDB 中「字段缺失」≠「默认值」:absent 字段对 Eq(field,0) / $bitsAllClear 等 filter 永不匹配,
+            // 直接让订单交付 CAS、体力恢复 bootstrap 等依赖「字段 present」的原子裁决全部空命中。
+            // 登录处理链先于一切玩法读写,在此原子补齐到 CurrentSchemaVersion(present 但保留既有值),恢复后续裁决前提。
+            doc = await MigrateSchemaIfNeeded(service, accountId, doc, nowMs);
+
             // P2 体力恢复:登录拉快照前结算一次,保证客户端拿到的 Energy 是「补完恢复」的最新值。
-            // 旧文档(P0/P1 期玩家)缺 EnergyLastRecoverMs 字段 → 反序列化 0 → 走 RecoverEnergyIfDue 的 bootstrap 分支(只刷字段不补量)。
+            // 经上面补字段后 EnergyLastRecoverMs 必 present(旧档补为 nowMs),恢复结算口径稳定。
             await RecoverEnergyIfDue(service, accountId, doc, nowMs);
 
             return (0u, doc);
@@ -121,6 +129,85 @@ public static class PlayerPropertyServiceHelper
             // 写入异常 / 网络抖动 / 集群挂:登录失败、不挂会话身份(沿 35 「服务不可用不本地放行」基线)。
             Log.Warning($"PlayerPropertyServiceHelper.InitOrLoad 失败,accountId={accountId},err={e.Message}");
             return (1u, null);
+        }
+    }
+
+    /// <summary>
+    /// 旧 schema 文档原子补字段:把 SchemaVersion 落后于 CurrentSchemaVersion 的旧档补齐到当前版本。
+    ///
+    /// 背景:InitOrLoad 用 $setOnInsert 写初值,仅在文档 insert 时触发;此后每次重登走 update 路径完全不写新字段。
+    /// 所以 CurrentSchemaVersion 之前注册的玩家文档里,后加的字段(P1/P2 的四货币 / 体力恢复 / 订单进度)全部 absent。
+    /// 「字段缺失(absent)」≠「字段 = 默认值」:absent 字段对 Eq(field,0) / Eq(field,0L) / $bitsAllClear 等 filter 永不命中,
+    /// 直接令订单交付 CAS(MergeOrderServiceHelper.TryDeliver claim)与体力恢复 bootstrap 等依赖「字段 present」的原子裁决空命中。
+    ///
+    /// 修法:用聚合管线 update + $ifNull 把每个字段 set 为「present 则保留既有值,absent 则填默认值」,
+    /// 单条原子 FindOneAndUpdate 完成,既不覆盖玩家既有数据(Coin/Diamond/PlayerId 等已存在的值原样保留),
+    /// 又保证补齐后所有字段 present、SchemaVersion 升到当前。filter 含 SchemaVersion < CurrentSchemaVersion → 幂等:
+    /// 已是当前版本的文档不命中、不重复执行(并发多登录也只一路补成,其余路重读拿到已补齐文档)。
+    ///
+    /// 默认值口径与 InitOrLoad 的 $setOnInsert 完全一致(同一组 service.*Initial 运营配置 + EnergyLastRecoverMs=nowMs):
+    /// 旧玩家本就没有这些新货币 / 订单进度,补为初值即「等价于该字段从一开始就 present 为默认值」,语义正确。
+    ///
+    /// 失败 / 命中 null(已是当前版本,或并发被另一路补完)→ 返回入参 doc 的最新可用视图(命中则用补后文档),不抛、不阻断登录。
+    /// </summary>
+    private static async FTask<PlayerDoc> MigrateSchemaIfNeeded(
+        PlayerPropertyServiceComponent service, string accountId, PlayerDoc doc, long nowMs)
+    {
+        if (doc.SchemaVersion >= PlayerPropertyServiceComponent.CurrentSchemaVersion)
+        {
+            return doc;
+        }
+
+        var players = service.Players;
+        if (players == null) return doc;
+
+        // 聚合管线 $set + $ifNull:字段 present 保留既有值,absent 填默认值。默认值口径对齐 InitOrLoad setOnInsert。
+        var setStage = new BsonDocument
+        {
+            { "Coin",                new BsonDocument("$ifNull", new BsonArray { "$Coin", service.CoinInitial }) },
+            { "Diamond",             new BsonDocument("$ifNull", new BsonArray { "$Diamond", service.DiamondInitial }) },
+            { "Stamina",             new BsonDocument("$ifNull", new BsonArray { "$Stamina", service.StaminaInitial }) },
+            { "SoulPower",           new BsonDocument("$ifNull", new BsonArray { "$SoulPower", service.SoulPowerInitial }) },
+            { "Piety",               new BsonDocument("$ifNull", new BsonArray { "$Piety", service.PietyInitial }) },
+            { "GuardianExp",         new BsonDocument("$ifNull", new BsonArray { "$GuardianExp", service.GuardianExpInitial }) },
+            { "Energy",              new BsonDocument("$ifNull", new BsonArray { "$Energy", service.EnergyInitial }) },
+            { "EnergyLastRecoverMs", new BsonDocument("$ifNull", new BsonArray { "$EnergyLastRecoverMs", nowMs }) },
+            { "OrderCursor",         new BsonDocument("$ifNull", new BsonArray { "$OrderCursor", 0 }) },
+            { "LastOrderRefreshMs",  new BsonDocument("$ifNull", new BsonArray { "$LastOrderRefreshMs", 0L }) },
+            { "OrderDeliveredMask",  new BsonDocument("$ifNull", new BsonArray { "$OrderDeliveredMask", 0 }) },
+            { "PlayerId",            new BsonDocument("$ifNull", new BsonArray { "$PlayerId", string.Empty }) },
+            { "Nickname",            new BsonDocument("$ifNull", new BsonArray { "$Nickname", string.Empty }) },
+            { "Level",               new BsonDocument("$ifNull", new BsonArray { "$Level", 1 }) },
+            { "Exp",                 new BsonDocument("$ifNull", new BsonArray { "$Exp", 0L }) },
+            { "LastChangeUnixMs",    new BsonDocument("$ifNull", new BsonArray { "$LastChangeUnixMs", nowMs }) },
+            { "SchemaVersion",       PlayerPropertyServiceComponent.CurrentSchemaVersion },
+        };
+        var pipeline = new BsonDocument[] { new BsonDocument("$set", setStage) };
+
+        var migrateFilter = Builders<PlayerDoc>.Filter.And(
+            Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
+            Builders<PlayerDoc>.Filter.Lt(x => x.SchemaVersion, PlayerPropertyServiceComponent.CurrentSchemaVersion));
+
+        try
+        {
+            var migrated = await players.FindOneAndUpdateAsync<PlayerDoc>(
+                migrateFilter,
+                Builders<PlayerDoc>.Update.Pipeline(pipeline),
+                new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+            if (migrated != null)
+            {
+                Log.Info($"PlayerPropertyServiceHelper.MigrateSchemaIfNeeded 补字段成功 account={accountId} fromVersion={doc.SchemaVersion} toVersion={PlayerPropertyServiceComponent.CurrentSchemaVersion}");
+                return migrated;
+            }
+            // null:并发已被另一路补完(或刚好被改成 ≥ 当前版本)→ 重读拿最新文档;读失败兜底返入参 doc。
+            var fresh = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
+            return fresh ?? doc;
+        }
+        catch (MongoException e)
+        {
+            // 补字段失败不阻断登录:返入参 doc(后续依赖 present 字段的玩法仍可能空命中,但登录链路不崩;下次登录重试补)。
+            Log.Warning($"PlayerPropertyServiceHelper.MigrateSchemaIfNeeded 失败 account={accountId},err={e.Message}");
+            return doc;
         }
     }
 
