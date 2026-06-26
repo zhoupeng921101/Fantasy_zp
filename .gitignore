@@ -35,3 +35,6 @@ Packages.Unity/**/*.meta
 examples/**/Unity/.vscode
 .claude
 Fantasy.Packages/Fantasy.Cil/Resources
+
+# SSH 私钥，禁止提交
+*.pem

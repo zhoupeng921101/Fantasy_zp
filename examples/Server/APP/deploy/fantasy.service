@@ -14,7 +14,8 @@ After=network.target docker.service
 [Service]
 Type=simple
 WorkingDirectory=/opt/fantasy/server
-ExecStart=/opt/fantasy/server/Main --m Release
+# Release 模式按 --pid 启动指定进程；1 对应 Fantasy.config 里 <process id="1">
+ExecStart=/opt/fantasy/server/Main --m Release --pid 1
 Restart=always
 RestartSec=5
 # 文件日志写到 WorkingDirectory 上一级的 Logs/（NLog 配置为 ${basedir}/../Logs）
