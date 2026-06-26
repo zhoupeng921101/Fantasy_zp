@@ -75,19 +75,8 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         // 放 Online 之后:确保 GateAccountFlagComponent + account.Session 都已挂全,推送通路稳。
         PlayerPropertyServiceHelper.SendPlayerInfoTo(session, accountName, playerDoc);
 
-        // P2 Phase 1·normal 订单:登录拉订单快照(先跑刷新结算 → 派生快照 → 推送)。
-        // 旧文档(P1 期玩家)缺三字段(OrderCursor / LastOrderRefreshMs / OrderDeliveredMask)→ BSON 默认 0/0L,
-        // ApplyOrderRefreshIfDue 会走 bootstrap 分支(LastOrderRefreshMs==0 → 写 nowMs、本次不刷),首登/旧档同口径。
-        // 失败(MongoDB 抖动 / 服务未挂)→ Helper 内 Warning 不抛、不阻断登录链路,客户端拿到的快照可能是空 ActiveOrders 列表,
-        // 客户端段降级显示(无订单可交付)直到下次拉。
-        var propService = session.Scene.GetComponent<PlayerPropertyServiceComponent>();
-        // playerDoc 上面 propErrorCode == 0 分支已保证非 null(InitOrLoad 成功返回的 doc)。
-        if (propService != null && playerDoc != null)
-        {
-            await MergeOrderServiceHelper.ApplyOrderRefreshIfDue(propService, accountName, playerDoc, Fantasy.Helper.TimeHelper.Now);
-            var orderSnapshot = MergeOrderServiceHelper.BuildSnapshot(playerDoc);
-            MergeOrderServiceHelper.SendSnapshotTo(session, orderSnapshot);
-        }
+        // 订单快照初次下发与云存档下载合并由 C2G_EnterMainGameRequest 一次性原子回带,
+        // 由客户端在主游戏 UI 即将就绪时主动发起;登录链路只下发玩家信息快照,不在此处下发订单 / 云存档。
 
         // 活动系统登录触发(设计 39 §3.5 Login 类节律):遍历 Type=Login 活动各自 counter+1 + 判达标 + 抢占 + 发邮件。
         // 不写入 response、不影响 G2C_LoginGameResponse 契约(零客户端协议改);

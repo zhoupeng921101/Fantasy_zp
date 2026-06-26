@@ -125,6 +125,38 @@ public static class CloudSaveServiceHelper
         }
     }
 
+    /// <summary>
+    /// 清档·删除某 playerId 的云存档文档(_id=playerId 单条删除)。
+    /// 下次登录 / 进入主游戏时 Download 返 NoSnapshot,客户端起空盘新局。
+    /// 幂等:文档不存在(DeletedCount=0)同样视为成功(无档可删等价已是无档态)。
+    /// 返回 true = 成功(含本就无档);false = MongoDB 不可达 / 异常。
+    /// </summary>
+    public static async FTask<bool> Delete(CloudSaveServiceComponent service, string playerId)
+    {
+        if (service.Snapshots == null)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(playerId))
+        {
+            // 空身份无任何存档可删,幂等视为成功。
+            return true;
+        }
+
+        try
+        {
+            var filter = Builders<CloudSaveDoc>.Filter.Eq(x => x.PlayerId, playerId);
+            var result = await service.Snapshots.DeleteOneAsync(filter);
+            Log.Debug($"CloudSave 清档删除 playerId={playerId} deletedCount={result.DeletedCount}");
+            return true;
+        }
+        catch (Exception e)
+        {
+            Log.Warning($"CloudSaveServiceHelper.Delete 失败 playerId={playerId} err={e.Message}");
+            return false;
+        }
+    }
+
     private static async FTask<CloudSaveDoc?> ReadCurrent(CloudSaveServiceComponent service, string playerId)
     {
         if (service.Snapshots == null) return null;

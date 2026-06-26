@@ -364,6 +364,122 @@ namespace Fantasy
         public byte[] ServerBlob { get; set; }
     }
     /// <summary>
+    /// 客户端进入主游戏(登录后、主游戏可交互前发起;每次进入主游戏阶段调用一次)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_EnterMainGameRequest : AMessage, IRequest
+    {
+        public static C2G_EnterMainGameRequest Create(bool autoReturn = true)
+        {
+            var c2G_EnterMainGameRequest = MessageObjectPool<C2G_EnterMainGameRequest>.Rent();
+            c2G_EnterMainGameRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_EnterMainGameRequest.SetIsPool(false);
+            }
+            
+            return c2G_EnterMainGameRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_EnterMainGameRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_EnterMainGameRequest; } 
+        [ProtoIgnore]
+        public G2C_EnterMainGameResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端对进入主游戏请求的一次性原子响应:订单快照 + 云存档同包回带
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_EnterMainGameResponse : AMessage, IResponse
+    {
+        public static G2C_EnterMainGameResponse Create(bool autoReturn = true)
+        {
+            var g2C_EnterMainGameResponse = MessageObjectPool<G2C_EnterMainGameResponse>.Rent();
+            g2C_EnterMainGameResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_EnterMainGameResponse.SetIsPool(false);
+            }
+            
+            return g2C_EnterMainGameResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            if (OrderSnapshot != null)
+            {
+                OrderSnapshot.Dispose();
+                OrderSnapshot = null;
+            }
+            CloudSaveResultCode = default;
+            CloudSaveServerVersion = default;
+            CloudSaveServerBlob = null;
+            MessageObjectPool<G2C_EnterMainGameResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_EnterMainGameResponse; } 
+        [ProtoMember(5)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 订单系统当前激活快照(派生自 PlayerDoc 的 OrderCursor / DeliveredMask;
+        /// 若服务不可用 / 玩家文档读不到 → 空 ActiveOrders 占位,客户端按"无订单可交付"降级显示)
+        /// </summary>
+        [ProtoMember(1)]
+        public MergeOrderSnapshot OrderSnapshot { get; set; }
+        /// <summary>
+        /// 云存档下载结果码(沿用 CloudSaveDownloadResultCode:Success / NoSnapshot / NotLoggedIn / ServiceUnavailable)
+        /// </summary>
+        [ProtoMember(2)]
+        public CloudSaveDownloadResultCode CloudSaveResultCode { get; set; }
+        /// <summary>
+        /// 云存档服务端权威版本号(NoSnapshot / 其它失败 = 0)
+        /// </summary>
+        [ProtoMember(3)]
+        public long CloudSaveServerVersion { get; set; }
+        /// <summary>
+        /// 云存档服务端 blob(NoSnapshot / 失败 = 空字节数组)
+        /// </summary>
+        [ProtoMember(4)]
+        public byte[] CloudSaveServerBlob { get; set; }
+    }
+    /// <summary>
     /// 客户端登陆到Gate服务器
     /// </summary>
     [Serializable]
@@ -1057,55 +1173,6 @@ namespace Fantasy
         /// 服务端权威更新后的最新订单快照(含已置空的本槽 + 可能触发的整批刷新);失败时为空数组的占位 snapshot
         /// </summary>
         [ProtoMember(5)]
-        public MergeOrderSnapshot Snapshot { get; set; }
-    }
-    /// <summary>
-    /// 服务端主动推送订单快照(登录后初推 + 整批刷新到点后推 + 交付响应路径已带不再 push,避免双发)
-    /// 推送是「绝对快照」,丢失 = 下次登录拉对齐,O6 不重试。
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class G2C_MergeOrderSnapshotPush : AMessage, IMessage
-    {
-        public static G2C_MergeOrderSnapshotPush Create(bool autoReturn = true)
-        {
-            var g2C_MergeOrderSnapshotPush = MessageObjectPool<G2C_MergeOrderSnapshotPush>.Rent();
-            g2C_MergeOrderSnapshotPush.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                g2C_MergeOrderSnapshotPush.SetIsPool(false);
-            }
-            
-            return g2C_MergeOrderSnapshotPush;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            if (Snapshot != null)
-            {
-                Snapshot.Dispose();
-                Snapshot = null;
-            }
-            MessageObjectPool<G2C_MergeOrderSnapshotPush>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.G2C_MergeOrderSnapshotPush; } 
-        [ProtoMember(1)]
         public MergeOrderSnapshot Snapshot { get; set; }
     }
     [Serializable]
@@ -4548,5 +4615,98 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public PlayerState State { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求清空自己的玩家数据(身份从会话取,不携带 playerId / 不接受指定清别人)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_ClearPlayerDataRequest : AMessage, IRequest
+    {
+        public static C2G_ClearPlayerDataRequest Create(bool autoReturn = true)
+        {
+            var c2G_ClearPlayerDataRequest = MessageObjectPool<C2G_ClearPlayerDataRequest>.Rent();
+            c2G_ClearPlayerDataRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_ClearPlayerDataRequest.SetIsPool(false);
+            }
+            
+            return c2G_ClearPlayerDataRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_ClearPlayerDataRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_ClearPlayerDataRequest; } 
+        [ProtoIgnore]
+        public G2C_ClearPlayerDataResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端清档裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_ClearPlayerDataResponse : AMessage, IResponse
+    {
+        public static G2C_ClearPlayerDataResponse Create(bool autoReturn = true)
+        {
+            var g2C_ClearPlayerDataResponse = MessageObjectPool<G2C_ClearPlayerDataResponse>.Rent();
+            g2C_ClearPlayerDataResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_ClearPlayerDataResponse.SetIsPool(false);
+            }
+            
+            return g2C_ClearPlayerDataResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            MessageObjectPool<G2C_ClearPlayerDataResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_ClearPlayerDataResponse; } 
+        [ProtoMember(2)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public ClearPlayerDataResultCode ResultCode { get; set; }
     }
 }

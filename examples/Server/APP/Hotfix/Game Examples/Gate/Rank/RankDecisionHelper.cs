@@ -212,4 +212,39 @@ public static class RankDecisionHelper
 
     /// <summary>玩家展示名占位:账号标识加前缀(本增量无昵称库, 客户端有本地昵称则替换, §3.5 注 / O5)。</summary>
     private static string DisplayName(string account) => DisplayNamePrefix + account;
+
+    // ── 清档 ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// 清档·删除某账号在 rank_score 的全部分数行(按玩家身份 Account 删,非 _id)。
+    /// 一个账号每参与一个榜各占一行(_id = "{account}|{rankId}"),故 1:N → DeleteMany。
+    /// 删后该账号退出所有榜(查榜不再含其名次)。
+    /// **不**触碰 rank_settle:其 _id=RankId,是全服每榜的结算幂等标记(无 Account 字段),
+    /// 属全局共享状态——删除会让该榜对所有玩家重复结算,不在 per-player 清档范围。
+    /// 幂等:0 匹配(本就未上榜)同样视为成功。返回 true=成功(含本就无行);false=MongoDB 不可达 / 异常。
+    /// </summary>
+    public static async FTask<bool> ClearByAccount(RankServiceComponent self, string account)
+    {
+        if (self.Scores == null)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(account))
+        {
+            return true;
+        }
+
+        try
+        {
+            var filter = Builders<RankScoreDoc>.Filter.Eq(x => x.Account, account);
+            var result = await self.Scores.DeleteManyAsync(filter);
+            Log.Debug($"Rank 清档删除分数 account={account} deletedCount={result.DeletedCount}");
+            return true;
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"RankDecisionHelper.ClearByAccount 失败 account={account},err={e.Message}");
+            return false;
+        }
+    }
 }

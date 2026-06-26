@@ -4,6 +4,7 @@ using Fantasy.Helper;
 using Fantasy.Network;
 using Fantasy.Network.Interface;
 using Fantasy.PacketParser.Interface;
+using UnityEngine;
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 
@@ -86,6 +87,7 @@ namespace Fantasy.Scheduler
             }
         }
 
+        [HideInCallstack]
         private static void LogReceiveMessageJson(Type messageType, APackInfo packInfo, object message)
         {
             if (packInfo.OpCodeIdStruct.Protocol == OpCodeType.OuterPingResponse)
@@ -93,7 +95,7 @@ namespace Fantasy.Scheduler
                 return;
             }
 
-            Log.Debug($"Receive Message: {messageType.Name} ProtocolCode:{packInfo.ProtocolCode} RpcId:{packInfo.RpcId} OpCodeType:{packInfo.OpCodeIdStruct.Protocol} Json:{message.ToJson()}");
+            Log.Debug($"Receive Message: {messageType.Name} ProtocolCode:{packInfo.ProtocolCode} RpcId:{packInfo.RpcId} OpCodeType:{packInfo.OpCodeIdStruct.Protocol} \nJson:{message.ToJsonIndented()}");
         }
     }
 #endif

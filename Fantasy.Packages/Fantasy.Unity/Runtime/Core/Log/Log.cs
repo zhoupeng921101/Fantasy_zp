@@ -67,6 +67,7 @@ namespace Fantasy
         /// 记录调试级别的日志消息。
         /// </summary>
         /// <param name="msg">日志消息。</param>
+        [HideInCallstack]
         public static void Debug(string msg)
         {
             _logCore.Debug(msg);

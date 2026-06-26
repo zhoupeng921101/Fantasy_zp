@@ -125,6 +125,84 @@ public static class PlayerPropertyServiceHelper
     }
 
     /// <summary>
+    /// 清档·把玩家文档重置为默认新手态(保留账号身份:AccountId 与 PlayerId 不动)。
+    ///
+    /// 字段集与 InitOrLoad 的 setOnInsert 完全一致(同一组 service.*Initial 运营配置值 + 同样的
+    /// EnergyLastRecoverMs=nowMs / 订单游标清零 / Nickname 空 / Level=1 / Exp=0 / SchemaVersion=当前版本),
+    /// 故清后重登拿到的快照与全新注册玩家逐字段一致。区别仅在于:
+    ///   - 用单条原子 $set 把所有玩法字段覆盖为默认值(非 $setOnInsert,因为文档已存在);
+    ///   - **不触碰** AccountId(主键)与 PlayerId(账号级稳定身份锚),保证账号→playerId 绑定不变。
+    ///
+    /// 原子性:单条 FindOneAndUpdate($set),整份重置一次性落库,不存在「清一半」的中间态。
+    /// 幂等:重复清同一账号同样把字段刷成默认值,结果不变、不报错。
+    /// IsUpsert=false:账号未首登(理论上清档前必已登录)→ 匹配失败、doc 为 null,返成功(无数据可清等价已是默认态)。
+    ///
+    /// 返回 errorCode:0 = 成功(含 doc 不存在的幂等成功);非 0 = MongoDB 不可达 / 异常。
+    /// </summary>
+    public static async FTask<uint> ResetToNewbie(Scene scene, string accountId)
+    {
+        var service = scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (service == null)
+        {
+            Log.Error("当前 Scene 下没有 PlayerPropertyServiceComponent 组件(应挂在 Gate Scene 上)。");
+            return 1u;
+        }
+
+        var players = service.Players;
+        if (players == null)
+        {
+            return 1u;
+        }
+
+        var nowMs = TimeHelper.Now;
+        var filter = Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId);
+
+        // $set 所有玩法字段为默认值(对齐 InitOrLoad 的 setOnInsert);AccountId 是 _id 主键不可改、
+        // PlayerId 故意不入 update 保留账号级身份锚。
+        var update = Builders<PlayerDoc>.Update
+            .Set(x => x.Coin, service.CoinInitial)
+            .Set(x => x.Diamond, service.DiamondInitial)
+            .Set(x => x.Stamina, service.StaminaInitial)
+            .Set(x => x.SoulPower, service.SoulPowerInitial)
+            .Set(x => x.Piety, service.PietyInitial)
+            .Set(x => x.GuardianExp, service.GuardianExpInitial)
+            .Set(x => x.Energy, service.EnergyInitial)
+            .Set(x => x.EnergyLastRecoverMs, nowMs)
+            .Set(x => x.OrderCursor, 0)
+            .Set(x => x.LastOrderRefreshMs, 0L)
+            .Set(x => x.OrderDeliveredMask, 0)
+            .Set(x => x.Nickname, string.Empty)
+            .Set(x => x.Level, 1)
+            .Set(x => x.Exp, 0L)
+            .Set(x => x.LastChangeUnixMs, nowMs)
+            .Set(x => x.SchemaVersion, PlayerPropertyServiceComponent.CurrentSchemaVersion);
+
+        var options = new FindOneAndUpdateOptions<PlayerDoc>
+        {
+            IsUpsert = false,
+            ReturnDocument = ReturnDocument.After
+        };
+
+        try
+        {
+            var doc = await players.FindOneAndUpdateAsync(filter, update, options);
+            if (doc == null)
+            {
+                // 文档不存在 = 未首登 / 已被清空:无数据可清,等价已是默认态,幂等成功。
+                Log.Debug($"PlayerPropertyServiceHelper.ResetToNewbie: 玩家文档不存在,视为已默认态,account={accountId}。");
+                return 0u;
+            }
+            Log.Debug($"PlayerProperty 清档重置成功 account={accountId} playerId={doc.PlayerId}");
+            return 0u;
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"PlayerPropertyServiceHelper.ResetToNewbie 失败 account={accountId},err={e.Message}");
+            return 1u;
+        }
+    }
+
+    /// <summary>
     /// 签发或认领 playerId,确保返回非空权威值(账号级稳定唯一标识,跨登录不变)。
     ///
     /// 三种入参组合(localPlayerId 经格式校验 + 全局唯一性守卫后规整):

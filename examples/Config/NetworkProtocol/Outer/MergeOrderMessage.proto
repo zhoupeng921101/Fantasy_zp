@@ -5,8 +5,9 @@ syntax = "proto3";
 //
 // 本轮范围:服务端权威 normal 订单池 + 订单进度状态(OrderCursor / LastOrderRefreshMs / DeliveredMask)
 // 持久化到 PlayerDoc;服务端时钟懒结算刷新;交付 RPC 校验槽位 + 服务端权威发奖(Energy + Piety,
-// 经 PlayerPropertyServiceHelper.ChangeProperty 落账 + ledger + delta 推送);登录快照含激活订单;
-// 刷新/交付后推送 G2C_MergeOrderSnapshotPush 同步该会话(整份快照,绝对值非增量,丢失下一次拉时对齐)。
+// 经 PlayerPropertyServiceHelper.ChangeProperty 落账 + ledger + delta 推送);
+// 订单快照初次下发由「进入主游戏请求」(C2G_EnterMainGameRequest)一次性回带,
+// 不再走单独的主动推送通道(整份快照,绝对值非增量,丢失下一次进入主游戏 / 交付时对齐)。
 //
 // 范围外:特殊订单(SpecialOrderTrack)下一轮迁;库存校验 Phase 2;全棋盘服务端模拟暂不做。
 //
@@ -56,11 +57,4 @@ message G2C_DeliverOrderResponse // IResponse
 	int64 EnergyReward = 3;                   /// 成功时:本次发奖体力实际净增量(可能因服务端上界钳止小于 OrderRewardEnergy);失败时 = 0
 	int64 PietyReward = 4;                    /// 成功时:本次发奖虔诚币(= 订单难度 × PietyPerDifficulty);失败时 = 0
 	MergeOrderSnapshot Snapshot = 5;          /// 服务端权威更新后的最新订单快照(含已置空的本槽 + 可能触发的整批刷新);失败时为空数组的占位 snapshot
-}
-
-/// 服务端主动推送订单快照(登录后初推 + 整批刷新到点后推 + 交付响应路径已带不再 push,避免双发)
-/// 推送是「绝对快照」,丢失 = 下次登录拉对齐,O6 不重试。
-message G2C_MergeOrderSnapshotPush // IMessage
-{
-	MergeOrderSnapshot Snapshot = 1;
 }

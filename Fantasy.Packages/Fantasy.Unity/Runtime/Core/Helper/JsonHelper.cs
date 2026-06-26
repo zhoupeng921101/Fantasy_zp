@@ -21,6 +21,17 @@ namespace Fantasy.Helper
         }
 
         /// <summary>
+        /// 将对象序列化为带缩进的 JSON 字符串(用于调试日志的可读输出)。
+        /// </summary>
+        /// <typeparam name="T">要序列化的对象类型。</typeparam>
+        /// <param name="t">要序列化的对象。</param>
+        /// <returns>表示序列化对象的带缩进 JSON 字符串。</returns>
+        public static string ToJsonIndented<T>(this T t)
+        {
+            return JsonConvert.SerializeObject(t, Formatting.Indented);
+        }
+
+        /// <summary>
         /// 反序列化 JSON 字符串为指定类型的对象。
         /// </summary>
         /// <param name="json">要反序列化的 JSON 字符串。</param>

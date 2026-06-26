@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+// EnterMainGameMessage.proto
+// 客户端进入主游戏的一次性原子请求/响应:登录 RPC 完成、主游戏 UI 即将就绪时由客户端发起,
+// 服务端把"订单快照 + 云存档"两块数据在同一响应里原子回带,客户端拿到响应后再统一应用,
+// 消除「登录主动推订单 / 客户端单独 pull 云存档」两条不同时序通道并行带来的竞态。
+//
+// 身份从会话取(GateAccountFlagComponent.Account.PlayerId),请求不带 playerId 字段。
+// 失败降级:订单段沿 MergeOrderServiceHelper 现有基线(MongoDB 抖动 → 警告 + 空 ActiveOrders);
+// 云存档段沿 CloudSaveServiceHelper.Download 现有结果码(NoSnapshot/ServiceUnavailable/NotLoggedIn)。
+// 不引入「整请求级失败」结果码:两段各自独立可降级,客户端按段读结果。
+
+/// 客户端进入主游戏(登录后、主游戏可交互前发起;每次进入主游戏阶段调用一次)
+message C2G_EnterMainGameRequest // IRequest,G2C_EnterMainGameResponse
+{
+}
+
+/// 服务端对进入主游戏请求的一次性原子响应:订单快照 + 云存档同包回带
+message G2C_EnterMainGameResponse // IResponse
+{
+	/// 订单系统当前激活快照(派生自 PlayerDoc 的 OrderCursor / DeliveredMask;
+	/// 若服务不可用 / 玩家文档读不到 → 空 ActiveOrders 占位,客户端按"无订单可交付"降级显示)
+	MergeOrderSnapshot OrderSnapshot = 1;
+
+	/// 云存档下载结果码(沿用 CloudSaveDownloadResultCode:Success / NoSnapshot / NotLoggedIn / ServiceUnavailable)
+	CloudSaveDownloadResultCode CloudSaveResultCode = 2;
+
+	/// 云存档服务端权威版本号(NoSnapshot / 其它失败 = 0)
+	int64 CloudSaveServerVersion = 3;
+
+	/// 云存档服务端 blob(NoSnapshot / 失败 = 空字节数组)
+	bytes CloudSaveServerBlob = 4;
+}

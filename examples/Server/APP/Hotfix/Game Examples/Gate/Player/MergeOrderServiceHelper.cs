@@ -338,13 +338,4 @@ public static class MergeOrderServiceHelper
             return MergeOrderSnapshot.Create();
         }
     }
-
-    /// <summary>把订单快照推送给指定会话(登录初推 + 刷新后推 + 错误 fallback 用)。</summary>
-    public static void SendSnapshotTo(Session session, MergeOrderSnapshot snapshot)
-    {
-        if (session == null || session.IsDisposed || snapshot == null) return;
-        var push = G2C_MergeOrderSnapshotPush.Create();
-        push.Snapshot = snapshot;
-        session.Send(push);
-    }
 }

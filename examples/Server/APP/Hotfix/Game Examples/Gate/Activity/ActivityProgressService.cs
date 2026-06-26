@@ -98,4 +98,35 @@ public static class ActivityProgressService
             return (ActivityIncrementResultCode.ServiceUnavailable, 0L, false);
         }
     }
+
+    /// <summary>
+    /// 清档·删除某账号在 activity_progress 的全部进度行(按玩家身份 Account 删,非 _id)。
+    /// 一个账号在该集合里每个参与过的活动各占一行(_id = "{account}_{activityId}"),故 1:N → DeleteMany。
+    /// 删后该账号所有活动 counter / LastClaimedCycleKey 归零;不动 activity_def(全局配置,见组件 reconcile)。
+    /// 幂等:0 匹配(本就无进度)同样视为成功。返回 true=成功(含本就无行);false=MongoDB 不可达 / 异常。
+    /// </summary>
+    public static async FTask<bool> ClearByAccount(ActivityServiceComponent? self, string account)
+    {
+        if (self?.Progress == null)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(account))
+        {
+            return true;
+        }
+
+        try
+        {
+            var filter = Builders<ActivityProgressDoc>.Filter.Eq(x => x.Account, account);
+            var result = await self.Progress.DeleteManyAsync(filter);
+            Log.Debug($"Activity 清档删除进度 account={account} deletedCount={result.DeletedCount}");
+            return true;
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"ActivityProgressService.ClearByAccount 失败 account={account},err={e.Message}");
+            return false;
+        }
+    }
 }

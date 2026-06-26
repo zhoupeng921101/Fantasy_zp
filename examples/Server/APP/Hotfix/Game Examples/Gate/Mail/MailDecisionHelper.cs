@@ -344,4 +344,43 @@ public static class MailDecisionHelper
         var expireAtMs = sendUnixMs + (long)effectiveDays * 24 * 60 * 60 * 1000;
         return nowMs > expireAtMs;
     }
+
+    // ── 清档 ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// 清档·删除某账号的全部 per-player 邮件数据(按玩家身份 Account 删,非 _id)。
+    /// 两张集合都按 Account 持有该玩家多行 → 1:N → DeleteMany:
+    ///   - mail_directed:投给该账号的全部定向邮件;
+    ///   - mail_record:该账号的全部领取记录(清后此前已领的邮件回到「可再领」态)。
+    /// 不动 mail_template / gift_pool(全服运营广播模板 + 全局奖池,非 per-player)。
+    /// 两步任一失败 → 返 false;两步都成功(含 0 匹配)→ 返 true。幂等:重复清 0 匹配仍成功。
+    /// </summary>
+    public static async FTask<bool> ClearByAccount(MailServiceComponent self, string account)
+    {
+        if (self.Directed == null || self.Records == null)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(account))
+        {
+            return true;
+        }
+
+        try
+        {
+            var directedFilter = Builders<MailDirectedDoc>.Filter.Eq(x => x.Account, account);
+            var directedResult = await self.Directed.DeleteManyAsync(directedFilter);
+
+            var recordFilter = Builders<MailClaimRecordDoc>.Filter.Eq(x => x.Account, account);
+            var recordResult = await self.Records.DeleteManyAsync(recordFilter);
+
+            Log.Debug($"Mail 清档删除 account={account} directedDeleted={directedResult.DeletedCount} recordDeleted={recordResult.DeletedCount}");
+            return true;
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"MailDecisionHelper.ClearByAccount 失败 account={account},err={e.Message}");
+            return false;
+        }
+    }
 }

@@ -347,5 +347,24 @@ namespace Fantasy
 		Away = 3
 	}
 
+	/// <summary>
+	/// 清档裁决结果码
+	/// </summary>
+	public enum ClearPlayerDataResultCode
+	{
+		/// <summary>
+		/// 清档成功(玩家文档已重置为默认新手态、云存档文档已删除或本就不存在)。幂等:重复清同样返 Success。
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号身份(35 登录失败 / 链路异常 / Account.PlayerId 空)。客户端段重登。
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 写入异常)。变更未生效(或部分生效),客户端段提示重试。
+		/// </summary>
+		ServiceUnavailable = 2
+	}
+
 
 }

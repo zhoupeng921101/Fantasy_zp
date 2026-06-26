@@ -175,4 +175,41 @@ public static class AttrLedgerHelper
                         $"before={balanceBefore} after={balanceAfter} source={source} reason='{reasonRaw}' ts={timestampMs},err={e.Message}");
         }
     }
+
+    /// <summary>
+    /// 清档·删除某账号在 player_attr_ledger 的全部流水行(按玩家身份 Account 删,非 _id)。
+    /// 一个账号每笔成功属性变更各占一行(_id = Mongo ObjectId 自增),故 1:N → DeleteMany。
+    ///
+    /// 关于「ledger 永不 update / delete」不变量:该不变量针对**业务运行期路径**(ChangeProperty / 发奖 / 退款),
+    /// 防审计流水被篡改。清档·重置为新手是用户主动发起、把账号整体回退到全新态的边界操作(账号身份保留、
+    /// 玩法数据全清),其语义内含「该账号此前的变更历史一并作废」,是该不变量的明示例外;
+    /// 仅本清档路径 + 上层 ClearPlayerData handler 可调,业务路径仍禁删(grep 守卫的目标是业务路径误删,非此入口)。
+    ///
+    /// 幂等:0 匹配(本就无流水)同样视为成功。返回 true=成功(含本就无行);false=MongoDB 不可达 / 异常。
+    /// </summary>
+    public static async FTask<bool> ClearByAccount(PlayerPropertyServiceComponent service, string account)
+    {
+        var ledger = service.AttrLedger;
+        if (ledger == null)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(account))
+        {
+            return true;
+        }
+
+        try
+        {
+            var filter = Builders<PlayerAttrLedgerDoc>.Filter.Eq(x => x.Account, account);
+            var result = await ledger.DeleteManyAsync(filter);
+            Log.Debug($"AttrLedger 清档删除流水 account={account} deletedCount={result.DeletedCount}");
+            return true;
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"AttrLedgerHelper.ClearByAccount 失败 account={account},err={e.Message}");
+            return false;
+        }
+    }
 }

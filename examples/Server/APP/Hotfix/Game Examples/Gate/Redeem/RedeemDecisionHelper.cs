@@ -179,4 +179,39 @@ public static class RedeemDecisionHelper
             return false;
         }
     }
+
+    // ── 清档 ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// 清档·删除某账号在 redeem_record 的全部已兑记录(按玩家身份 Account 删,非 _id)。
+    /// 一个账号每兑一个码各占一行(_id = "{account}|{code}"),故 1:N → DeleteMany。
+    /// 删后该账号此前已兑的码回到「可再兑」态(在该码自身未过期 / 未达全局上限前提下)。
+    /// **不**触碰 redeem_counter:其 _id=Code,是按码的全局发放计数(无 Account 字段),属全局共享状态——
+    /// 递减它会凭空归还其他玩家已占的全局名额(限量码被超发),不在 per-player 清档范围;redeem_code 同理(全局码表)。
+    /// 幂等:0 匹配(本就未兑过)同样视为成功。返回 true=成功(含本就无行);false=MongoDB 不可达 / 异常。
+    /// </summary>
+    public static async FTask<bool> ClearByAccount(RedeemServiceComponent self, string account)
+    {
+        if (self.Records == null)
+        {
+            return false;
+        }
+        if (string.IsNullOrEmpty(account))
+        {
+            return true;
+        }
+
+        try
+        {
+            var filter = Builders<RedeemRecordDoc>.Filter.Eq(x => x.Account, account);
+            var result = await self.Records.DeleteManyAsync(filter);
+            Log.Debug($"Redeem 清档删除兑换记录 account={account} deletedCount={result.DeletedCount}");
+            return true;
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"RedeemDecisionHelper.ClearByAccount 失败 account={account},err={e.Message}");
+            return false;
+        }
+    }
 }
