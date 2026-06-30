@@ -55,4 +55,28 @@ public static class GameSessionPersistHelper
             Log.Warning($"GameSessionPersistHelper.Save 失败 playerId={doc.PlayerId} gameId={doc.GameId} err={e.Message}");
         }
     }
+
+    /// <summary>
+    /// 终局删档(按 playerId 删除持久对局)。终局即结束本局:删除 Doc 后,下次进入对局 Load 返 null → 走新建(Resumed=false),
+    /// 不复活已结束局。删除而非置 ended 标志:Load「无档=新建」语义已成立,删档即终结,无需在 Doc/GameStart 增态。
+    /// 不可达 / 异常静默吞掉(Warning 留痕):删档失败不应让终局裁决回滚(内存实例已 Dispose、入榜已提交);
+    /// 残留 Doc 下次进入会被当续局恢复成已结束盘面(jam 盘),玩家再落子即再触发终局删档自愈,不造成错误进度。
+    /// </summary>
+    public static async FTask Delete(GameSessionServiceComponent? service, string playerId)
+    {
+        if (service?.Sessions == null || string.IsNullOrEmpty(playerId))
+        {
+            return;
+        }
+
+        try
+        {
+            var filter = Builders<GameSessionDoc>.Filter.Eq(x => x.PlayerId, playerId);
+            await service.Sessions.DeleteOneAsync(filter);
+        }
+        catch (Exception e)
+        {
+            Log.Warning($"GameSessionPersistHelper.Delete 失败 playerId={playerId} err={e.Message}");
+        }
+    }
 }

@@ -507,10 +507,13 @@ namespace Fantasy
                 GeneratorState.Dispose();
                 GeneratorState = null;
             }
+            GameOver = default;
+            FinalScore = default;
+            BestScore = default;
             MessageObjectPool<G2C_PlaceResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_PlaceResponse; } 
-        [ProtoMember(8)]
+        [ProtoMember(11)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 落子裁决结果码
@@ -547,6 +550,21 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(7)]
         public BlockGenState GeneratorState { get; set; }
+        /// <summary>
+        /// 终局信号:服务端判定当前候选无任一放置顺序可放(jam),本局结束
+        /// </summary>
+        [ProtoMember(8)]
+        public bool GameOver { get; set; }
+        /// <summary>
+        /// 终局权威最终分(GameOver=true 时有效;= 终局时 Score)
+        /// </summary>
+        [ProtoMember(9)]
+        public int FinalScore { get; set; }
+        /// <summary>
+        /// 终局入榜后该榜当前最佳分(GameOver=true 且入榜服务可用时有效;否则 0)
+        /// </summary>
+        [ProtoMember(10)]
+        public long BestScore { get; set; }
     }
     /// <summary>
     /// 客户端请求当前对局完整快照(重连 / 恢复)

@@ -210,6 +210,23 @@ public static class GameSessionHelper
         return state;
     }
 
+    /// <summary>
+    /// 终局判定(服务端权威):当前候选队列存在非空候选,且无任一放置顺序能把它们全放下(jam)→ true=本局结束。
+    /// 复用生成核心 BinaryBoard.CheckPutAllBlocks(权威性回归基线同口径):
+    ///   - 候选全空(理论上不出现,落子后整批消耗会立即续发新批)→ CheckPutAllBlocks 返 true(无候选不阻塞)→ 非终局;
+    ///   - 候选非空且全不可放 → CheckPutAllBlocks 返 false → 终局。
+    /// 在 Place 续发新批之后调用:判的是落子裁决后玩家实际面对的候选(剩余候选 / 新发整批)。
+    /// </summary>
+    public static bool IsGameOver(GameSession session)
+    {
+        var ids = new int[session.CandidateQueue.Count];
+        for (int i = 0; i < session.CandidateQueue.Count; i++)
+        {
+            ids[i] = session.CandidateQueue[i];
+        }
+        return !session.Board.CheckPutAllBlocks(ids);
+    }
+
     /// <summary>把权威棋盘 8 行位掩码写进列表(协议 Board 字段)。</summary>
     public static void FillBoard(GameSession session, List<int> dst)
     {

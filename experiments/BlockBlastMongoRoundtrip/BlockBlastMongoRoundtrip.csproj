@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ST2 服务端权威发牌「真往返」集成验证(非生产接线)。
+    引用真实生产程序集 Entity + Hotfix(含 GameSession / GameSessionDoc / GameSessionServiceComponent /
+    GameSessionHelper / GameSessionPersistHelper / BlockGenState / 客户端发牌核心),
+    连接 live MongoDB(fantasy_main1),按 Handler 真实调用序复跑「建局→落子→重连续局→续落」,
+    断言整条链在真 Bson 序列化 + 真 Mongo 读写下逐位接续。
+    覆盖层:Bson + Mongo + BuildDoc/Rehydrate/Init/Place/Save/Load 生产逻辑。
+    未覆盖层:OuterMessage proto wire(源生成、低风险,本步不强求过 socket)。
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>BlockBlastMongoRoundtrip</RootNamespace>
+    <AssemblyName>BlockBlastMongoRoundtrip</AssemblyName>
+    <DefineConstants>TRACE;FANTASY_NET</DefineConstants>
+    <!-- 不在本测试项目跑源生成器:只消费生产类型 + 静态 helper + 原生 Mongo,不创建框架托管 Entity。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 真实生产程序集:GameSession / GameSessionDoc / 服务组件 / helpers / BlockGenState / 发牌核心都在此两层。 -->
+    <ProjectReference Include="..\..\examples\Server\APP\Entity\Entity.csproj" />
+    <ProjectReference Include="..\..\examples\Server\APP\Hotfix\Hotfix.csproj" />
+  </ItemGroup>
+
+</Project>

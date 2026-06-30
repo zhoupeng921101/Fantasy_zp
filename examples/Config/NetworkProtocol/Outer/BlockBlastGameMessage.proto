@@ -63,6 +63,9 @@ message G2C_PlaceResponse // IResponse
 	int32 NewCandidate = 5;              /// 补入队尾的新候选 shapeId(本步补牌时有效;未补为 -1)
 	repeated int32 Board = 6;            /// 最新权威棋盘(8 行位掩码)
 	BlockGenState GeneratorState = 7;    /// 最新完整生成器状态向量
+	bool GameOver = 8;                   /// 终局信号:服务端判定当前候选无任一放置顺序可放(jam),本局结束
+	int32 FinalScore = 9;                /// 终局权威最终分(GameOver=true 时有效;= 终局时 Score)
+	int64 BestScore = 10;                /// 终局入榜后该榜当前最佳分(GameOver=true 且入榜服务可用时有效;否则 0)
 }
 
 /// 落子裁决结果码
