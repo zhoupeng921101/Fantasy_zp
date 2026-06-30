@@ -4,7 +4,7 @@
 
 ## 前提条件
 
-- **.NET SDK**: .NET 8.0 或 .NET 9.0
+- **.NET SDK**: .NET 8.0
 - **IDE**: Visual Studio 2022、Rider 或 VS Code
 
 检查你的 .NET 版本：
@@ -16,7 +16,7 @@ dotnet --version
 > **📌 版本说明：**
 > - Fantasy Framework 当前主版本为 **2.x**
 > - 本文档基于 2.0.0 版本编写，但建议使用最新稳定版本
-> - 框架支持 .NET 8.0 和 .NET 9.0
+> - 框架支持 .NET 8.0
 > - 查看最新版本和更新日志：[NuGet](https://www.nuget.org/packages/Fantasy-Net) | [GitHub Releases](https://github.com/qq362946/Fantasy/releases)
 
 ---
@@ -55,7 +55,7 @@ fantasy init
 
 工具会引导你完成以下配置：
 - 项目名称
-- 目标框架 (.NET 8.0 或 9.0)
+- 目标框架 (.NET 8.0)
 - 是否添加协议导出工具
 - 是否添加网络协议定义
 - 是否添加 NLog 日志组件

@@ -19,16 +19,17 @@ public static class AccountServiceHelper
     public const uint LoginErrorCode = 1;
 
     /// <summary>
-    /// 首连自动注册 / 重连刷新末次登录。返 0 = 成功,非 0 = 失败(MongoDB 不可达 / 异常)。
+    /// 首连自动注册 / 重连刷新末次登录。返回 (errorCode, message):errorCode 0 = 成功(message 空串),
+    /// 非 0 = 失败(message 为面向排障的中文原因:组件未挂 / 数据库连接不可用 / 写入异常)。
     /// 单条原子 upsert,见类文档。
     /// </summary>
-    public static async FTask<uint> RegisterOrLogin(Scene scene, string accountId)
+    public static async FTask<(uint errorCode, string message)> RegisterOrLogin(Scene scene, string accountId)
     {
         var component = scene.GetComponent<AccountServiceComponent>();
         if (component == null)
         {
             Log.Error("当前 Scene 下没有找到 AccountServiceComponent 组件(应挂在 Gate Scene 上)。");
-            return LoginErrorCode;
+            return (LoginErrorCode, "账号服务组件未挂载");
         }
 
         var accounts = component.Accounts;
@@ -36,7 +37,7 @@ public static class AccountServiceHelper
         {
             // MongoDB 不可达 — AwakeSystem 已 Warning,此处不重复 Warning。
             // 登录失败短路:不挂会话身份(plan §3.2 失败硬约束 + 30 「服务不可用不本地放行」)。
-            return LoginErrorCode;
+            return (LoginErrorCode, "账号服务不可用:数据库连接不可用");
         }
 
         var nowMs = TimeHelper.Now;
@@ -54,14 +55,15 @@ public static class AccountServiceHelper
         try
         {
             await accounts.UpdateOneAsync(filter, update, options);
-            return 0;
+            return (0u, string.Empty);
         }
         catch (MongoException e)
         {
             // upsert 失败(写入异常 / 网络抖动 / 集群挂):登录失败、短路后续、不挂会话身份。
             // 不抛异常断连(沿用 Fantasy.Net 错误码非异常基线)。
+            // 回带简短 err(排障期可接受);不含连接串等敏感内部细节。
             Log.Warning($"AccountServiceHelper.RegisterOrLogin 失败,accountId={accountId},err={e.Message}");
-            return LoginErrorCode;
+            return (LoginErrorCode, $"账号写入失败:{e.Message}");
         }
     }
 }

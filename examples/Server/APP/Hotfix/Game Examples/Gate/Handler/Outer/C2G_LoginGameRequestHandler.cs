@@ -15,42 +15,43 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
 
         if (string.IsNullOrEmpty(accountName))
         {
-            // 懒的写错误码，所以只要错误码不是0就是出错了。
-            // 想细化各种情况的可以自己加错误码。
-            // 其实应该是要用配置表来做一个错误码列表用于前后端查询错误码使用的。
-            // 这里只解释一次，后面有错误码的直接使用不会再加注释了。
+            // 错误码沿用「非 0 即失败」契约(不细分数字码);response.ErrorMessage 填具体原因供客户端排障。
             response.ErrorCode = 1;
+            response.ErrorMessage = "账号名为空";
             return;
         }
 
         // 账号账本 upsert(设计 35 §3.2):必须在挂会话身份之前。
         // 单条原子 upsert:不存在则 insert 首次注册时间 / 末次登录时间 / 状态=0(首连自动注册);
         // 存在则仅 update 末次登录时间(重连)。失败 → 返登录失败,短路后续(不挂会话身份)。
-        var accountUpsertErrorCode = await AccountServiceHelper.RegisterOrLogin(session.Scene, accountName);
+        var (accountUpsertErrorCode, accountUpsertMessage) = await AccountServiceHelper.RegisterOrLogin(session.Scene, accountName);
         if (accountUpsertErrorCode != 0)
         {
             response.ErrorCode = accountUpsertErrorCode;
+            response.ErrorMessage = accountUpsertMessage;
             return;
         }
 
         // 玩家数据 setOnInsert + 读整份文档(设计 37 §3.2 处理顺序步骤 4):
         // 首登 → insert 三属性初始值 + 档案初值(昵称/等级/经验);重登 → update 路径不动既有值、读当前文档。
         // 失败 → 返登录失败,短路后续(不挂会话身份,沿 35 + 30 「服务不可用不本地放行」基线)。
-        var (propErrorCode, playerDoc) = await PlayerPropertyServiceHelper.InitOrLoad(session.Scene, accountName);
+        var (propErrorCode, propMessage, playerDoc) = await PlayerPropertyServiceHelper.InitOrLoad(session.Scene, accountName);
         if (propErrorCode != 0)
         {
             response.ErrorCode = propErrorCode;
+            response.ErrorMessage = propMessage;
             return;
         }
 
         // playerId 签发/认领(P0 身份收敛):账号尚无 playerId 时,客户端 localPlayerId 非空 → 认领、空 → 服务端新生成;
         // 账号已有则忽略客户端上传值并回带服务端权威值。结果填进 response.PlayerId 让客户端落到 PlayerPrefs。
         // 失败 → 登录失败短路(不挂会话身份,沿 35 / 37 服务不可用基线)。
-        var (idErrorCode, playerId) = await PlayerPropertyServiceHelper.ClaimOrIssuePlayerId(
+        var (idErrorCode, idMessage, playerId) = await PlayerPropertyServiceHelper.ClaimOrIssuePlayerId(
             session.Scene, accountName, playerDoc, request.LocalPlayerId ?? string.Empty);
         if (idErrorCode != 0)
         {
             response.ErrorCode = idErrorCode;
+            response.ErrorMessage = idMessage;
             return;
         }
         response.PlayerId = playerId;
@@ -58,6 +59,7 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         if (!AccountManageHelper.Add(session.Scene, accountName, out var account))
         {
             response.ErrorCode = 1;
+            response.ErrorMessage = "账号已在线(重复登录),请稍后重试";
             return;
         }
         // var account = Entity.Create<Account>(session.Scene);

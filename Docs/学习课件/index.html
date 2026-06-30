@@ -478,7 +478,7 @@
       <h2>附录 A · 验证工具速查</h2>
       <ul>
         <li><b>启停服务器</b>：Unity 菜单 <code>Fantasy/服务端配置</code>（或 <code>Fantasy/启动服务端</code> / <code>停止服务端</code>）。</li>
-        <li><b>命令行</b>：<code>dotnet run --project examples/Server/APP/Main/Main.csproj -c Debug --framework net9.0 -- --m Develop</code>（<code>--framework</code> 和 <code>--m</code> 都必需）。</li>
+        <li><b>命令行</b>：<code>dotnet run --project examples/Server/APP/Main/Main.csproj -c Debug --framework net8.0 -- --m Develop</code>（<code>--framework</code> 和 <code>--m</code> 都必需）。</li>
         <li><b>启动成功</b>：日志 <code>Process:1 Startup Complete SceneCount:7</code>。监听 KCP 20000、WebSocket 20001、HTTP 20010、Inner TCP 11001–11007。</li>
         <li><b>客户端验证</b>：Unity 进 Play，Console 看 <code>[Fantasy] ...</code> 往返日志。</li>
         <li><b>改协议后</b>：务必重新运行协议导出，确认两侧 opcode 一致。数据库章节需本机 MongoDB。</li>

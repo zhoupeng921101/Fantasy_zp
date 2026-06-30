@@ -12,4 +12,6 @@ message G2C_LoginGameResponse // IResponse
 {
 	/// 服务端签发/认领后的权威 playerId(账号级稳定唯一,后续登录恒返同一值)。
 	string PlayerId = 1;
+	/// 登录失败时的人类可读原因(面向排障,中文);成功时为空串。ErrorCode != 0 时据此说明具体失败点。
+	string ErrorMessage = 2;
 }

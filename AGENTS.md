@@ -70,7 +70,7 @@ Tools/Update-Unity-Source-Generator/update-unity-source-generator.bat
    ```
    SG 会读取 `Fantasy.config` 来生成 `SceneType` 常量、数据库名常量等。`Fantasy.config` 必须放在*直接*引用 Fantasy 的那个项目的根目录下。
 
-目标框架：核心为 `net8.0;net9.0;net10.0`；示例/大多数项目为 `net8.0;net9.0`。
+目标框架：核心为 `net8.0;net9.0;net10.0`；示例/大多数项目为 `net8.0`。
 
 ## 架构：全局视角
 

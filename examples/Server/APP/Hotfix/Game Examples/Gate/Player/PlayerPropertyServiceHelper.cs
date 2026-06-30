@@ -40,17 +40,17 @@ public static class PlayerPropertyServiceHelper
     ///             余额字段稳定 = 上次变更后的值);
     ///   ReturnDocument: After(取写后的当前文档,首登 = 初始值 / 重登 = 既有值)。
     ///
-    /// 返回 (errorCode, doc)。errorCode 0 = 成功(doc = 玩家完整文档:三属性余额 + 昵称/等级/经验);
-    /// 非 0 = MongoDB 不可达 / 异常 / 服务未挂(doc 为 null)。
+    /// 返回 (errorCode, message, doc)。errorCode 0 = 成功(message 空串,doc = 玩家完整文档:三属性余额 + 昵称/等级/经验);
+    /// 非 0 = MongoDB 不可达 / 异常 / 服务未挂(message 为面向排障的中文原因,doc 为 null)。
     /// </summary>
-    public static async FTask<(uint errorCode, PlayerDoc? doc)> InitOrLoad(
+    public static async FTask<(uint errorCode, string message, PlayerDoc? doc)> InitOrLoad(
         Scene scene, string accountId)
     {
         var service = scene.GetComponent<PlayerPropertyServiceComponent>();
         if (service == null)
         {
             Log.Error("当前 Scene 下没有 PlayerPropertyServiceComponent 组件(应挂在 Gate Scene 上)。");
-            return (1u, null);
+            return (1u, "玩家数据初始化失败:数据服务不可用", null);
         }
 
         var players = service.Players;
@@ -58,7 +58,7 @@ public static class PlayerPropertyServiceHelper
         {
             // MongoDB 不可达 — AwakeSystem 已 Warning;此处不重复 Warning。
             // 登录失败短路:不挂会话身份(plan §3.2 失败硬约束 + 35 同口径)。
-            return (1u, null);
+            return (1u, "玩家数据初始化失败:数据服务不可用", null);
         }
 
         var nowMs = TimeHelper.Now;
@@ -108,7 +108,7 @@ public static class PlayerPropertyServiceHelper
             {
                 // 理论上 IsUpsert=true + ReturnDocument.After 不应返 null;防御性处理。
                 Log.Warning($"PlayerPropertyServiceHelper.InitOrLoad: FindOneAndUpdate 返 null,accountId={accountId}。");
-                return (1u, null);
+                return (1u, "玩家数据初始化失败:数据服务不可用", null);
             }
 
             // 旧 schema 文档补字段:setOnInsert 仅 insert 触发,重登 update 路径完全不写,
@@ -122,13 +122,13 @@ public static class PlayerPropertyServiceHelper
             // 经上面补字段后 EnergyLastRecoverMs 必 present(旧档补为 nowMs),恢复结算口径稳定。
             await RecoverEnergyIfDue(service, accountId, doc, nowMs);
 
-            return (0u, doc);
+            return (0u, string.Empty, doc);
         }
         catch (MongoException e)
         {
             // 写入异常 / 网络抖动 / 集群挂:登录失败、不挂会话身份(沿 35 「服务不可用不本地放行」基线)。
             Log.Warning($"PlayerPropertyServiceHelper.InitOrLoad 失败,accountId={accountId},err={e.Message}");
-            return (1u, null);
+            return (1u, "玩家数据初始化失败:数据服务不可用", null);
         }
     }
 
@@ -314,14 +314,15 @@ public static class PlayerPropertyServiceHelper
     /// 并发场景:同账号两连接首登并发,两路径都拿到空 doc 各自要写;先到的 update 命中、后到的 filter 不命中
     /// (PlayerId 已被前者填写),后到回退去读当前 doc 拿到权威值——所以匹配失败必须重读一次。
     ///
-    /// 返回 (errorCode, playerId)。0 = 成功;非 0 = MongoDB 异常或 doc 丢失(playerId 空)。
+    /// 返回 (errorCode, message, playerId)。0 = 成功(message 空串);
+    /// 非 0 = MongoDB 异常或 doc 丢失(message 为面向排障的中文原因,playerId 空)。
     /// </summary>
-    public static async FTask<(uint errorCode, string playerId)> ClaimOrIssuePlayerId(
+    public static async FTask<(uint errorCode, string message, string playerId)> ClaimOrIssuePlayerId(
         Scene scene, string accountId, PlayerDoc? doc, string localPlayerId)
     {
         if (doc == null)
         {
-            return (1u, string.Empty);
+            return (1u, "playerId 签发失败:数据服务不可用", string.Empty);
         }
 
         // Case 1: 已有权威 PlayerId,直接返回(服务端为准,忽略客户端上传值,仅记不一致告警)。
@@ -331,13 +332,13 @@ public static class PlayerPropertyServiceHelper
             {
                 Log.Warning($"PlayerId 不一致 account={accountId} server={doc.PlayerId} client={localPlayerId} → 以服务端为准(忽略客户端上传值)。");
             }
-            return (0u, doc.PlayerId);
+            return (0u, string.Empty, doc.PlayerId);
         }
 
         var service = scene.GetComponent<PlayerPropertyServiceComponent>();
         if (service == null || service.Players == null)
         {
-            return (1u, string.Empty);
+            return (1u, "playerId 签发失败:数据服务不可用", string.Empty);
         }
 
         // 格式校验:客户端身份 id 形态 = 32 位小写 hex(Guid "N",见客户端 PlayerInfo.NewId)。
@@ -368,7 +369,7 @@ public static class PlayerPropertyServiceHelper
             catch (MongoException e)
             {
                 Log.Warning($"PlayerPropertyServiceHelper.ClaimOrIssuePlayerId 唯一性查重失败 account={accountId},err={e.Message}");
-                return (1u, string.Empty);
+                return (1u, "playerId 签发失败:数据服务不可用", string.Empty);
             }
         }
 
@@ -400,7 +401,7 @@ public static class PlayerPropertyServiceHelper
             if (updatedDoc != null)
             {
                 Log.Debug($"PlayerId 签发/认领成功 account={accountId} playerId={updatedDoc.PlayerId} source={sourceTag}");
-                return (0u, updatedDoc.PlayerId);
+                return (0u, string.Empty, updatedDoc.PlayerId);
             }
 
             // filter 未命中:并发场景下另一路已抢先写入,回读当前 doc 拿权威值。
@@ -412,11 +413,11 @@ public static class PlayerPropertyServiceHelper
                 {
                     Log.Warning($"PlayerId 不一致(并发回读) account={accountId} server={currentDoc.PlayerId} client={localPlayerId}");
                 }
-                return (0u, currentDoc.PlayerId);
+                return (0u, string.Empty, currentDoc.PlayerId);
             }
 
             Log.Warning($"PlayerId 签发后回读失败 account={accountId}");
-            return (1u, string.Empty);
+            return (1u, "playerId 签发失败:数据服务不可用", string.Empty);
         }
         catch (MongoWriteException mwe) when (mwe.WriteError != null && mwe.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
@@ -432,7 +433,7 @@ public static class PlayerPropertyServiceHelper
         catch (MongoException e)
         {
             Log.Warning($"PlayerPropertyServiceHelper.ClaimOrIssuePlayerId 失败 account={accountId},err={e.Message}");
-            return (1u, string.Empty);
+            return (1u, "playerId 签发失败:数据服务不可用", string.Empty);
         }
     }
 
@@ -441,7 +442,7 @@ public static class PlayerPropertyServiceHelper
     /// 抽出独立方法以让 MongoWriteException / MongoCommandException 两种 duplicate-key catch 共用同一退回逻辑。
     /// 新 guid 碰撞概率 = 2^-128,实战 = 0,不再循环重试。
     /// </summary>
-    private static async FTask<(uint errorCode, string playerId)> FallbackIssuePlayerId(
+    private static async FTask<(uint errorCode, string message, string playerId)> FallbackIssuePlayerId(
         PlayerPropertyServiceComponent service, string accountId, string originalTarget,
         FilterDefinition<PlayerDoc> filter, FindOneAndUpdateOptions<PlayerDoc> options)
     {
@@ -456,7 +457,7 @@ public static class PlayerPropertyServiceHelper
             if (fallbackDoc != null)
             {
                 Log.Debug($"PlayerId 退回服务端生成成功 account={accountId} playerId={fallbackDoc.PlayerId} source=server-issue(fallback)");
-                return (0u, fallbackDoc.PlayerId);
+                return (0u, string.Empty, fallbackDoc.PlayerId);
             }
 
             // 退回写入仍未命中 filter:并发回读拿权威值。
@@ -464,16 +465,16 @@ public static class PlayerPropertyServiceHelper
                 .FirstOrDefaultAsync();
             if (currentDoc != null && !string.IsNullOrEmpty(currentDoc.PlayerId))
             {
-                return (0u, currentDoc.PlayerId);
+                return (0u, string.Empty, currentDoc.PlayerId);
             }
 
             Log.Warning($"PlayerId 退回服务端生成后回读失败 account={accountId}");
-            return (1u, string.Empty);
+            return (1u, "playerId 签发失败:数据服务不可用", string.Empty);
         }
         catch (MongoException e)
         {
             Log.Warning($"PlayerPropertyServiceHelper.ClaimOrIssuePlayerId 退回写入失败 account={accountId},err={e.Message}");
-            return (1u, string.Empty);
+            return (1u, "playerId 签发失败:数据服务不可用", string.Empty);
         }
     }
 

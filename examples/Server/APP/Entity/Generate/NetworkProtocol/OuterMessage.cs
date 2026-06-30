@@ -567,16 +567,22 @@ namespace Fantasy
             if (!IsPool()) return; 
             ErrorCode = 0;
             PlayerId = default;
+            ErrorMessage = default;
             MessageObjectPool<G2C_LoginGameResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_LoginGameResponse; } 
-        [ProtoMember(2)]
+        [ProtoMember(3)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 服务端签发/认领后的权威 playerId(账号级稳定唯一,后续登录恒返同一值)。
         /// </summary>
         [ProtoMember(1)]
         public string PlayerId { get; set; }
+        /// <summary>
+        /// 登录失败时的人类可读原因(面向排障,中文);成功时为空串。ErrorCode != 0 时据此说明具体失败点。
+        /// </summary>
+        [ProtoMember(2)]
+        public string ErrorMessage { get; set; }
     }
     /// <summary>
     /// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
