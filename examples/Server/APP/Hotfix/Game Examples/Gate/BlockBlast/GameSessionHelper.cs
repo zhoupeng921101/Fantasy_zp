@@ -46,6 +46,89 @@ public static class GameSessionHelper
     }
 
     /// <summary>
+    /// 续局重建:从持久 Doc 还原完整权威态 + 发牌器全运行态(RNG 游标 + 调度标量 + LastAlgo/LastTier),
+    /// 使续局后续发牌与中断前逐位接续(同游标 + 同标量 → 同后续 trio)。
+    ///
+    /// 与 <see cref="Init"/> 的关键区别:不调 Reset()/BeginGame()(那会清零调度标量),
+    /// 而是 new XorShift128PlusRng(s0,s1) 把游标直接落在中断点 → Init(同配置)→ ImportFullState(全态注入)。
+    /// weightcfg 与 Init / harness 同源(DefaultWeightConfig),确保续局后调度判据与中断前同口径。
+    /// </summary>
+    public static void Rehydrate(GameSession session, GameSessionDoc doc)
+    {
+        session.PlayerId = doc.PlayerId;
+        session.GameId = doc.GameId;
+        session.Seed = doc.Seed;
+        session.Step = doc.Step;
+        session.Score = doc.Score;
+        session.LastTrioAlgo = doc.LastTrioAlgo < 0 ? AlgorithmKind.RandomNoDie : (AlgorithmKind)doc.LastTrioAlgo;
+
+        // 还原棋盘 8 行位掩码。
+        session.Board = new BinaryBoard();
+        for (int r = 0; r < BinaryBoard.RowCount && r < doc.Board.Length; r++)
+        {
+            session.Board.RowBinary[r] = doc.Board[r];
+        }
+
+        // 还原候选队列。
+        session.CandidateQueue.Clear();
+        for (int i = 0; i < doc.CandidateQueue.Length; i++)
+        {
+            session.CandidateQueue.Add(doc.CandidateQueue[i]);
+        }
+
+        // 还原发牌器全运行态:RNG 游标经 ctor 复位,Init 装配置(不重置标量),ImportFullState 注入标量 + LastAlgo/LastTier。
+        var cfg = GenCoreDeterminismHarness.DefaultWeightConfig();
+        var rng = new XorShift128PlusRng(unchecked((ulong)doc.RngS0), unchecked((ulong)doc.RngS1));
+        var dyn = new DynamicWeightDiff(rng);
+        dyn.ForceAlgorithm = null;
+        dyn.Init(cfg);
+        var full = new DynamicWeightDiff.FullState(
+            unchecked((ulong)doc.RngS0), unchecked((ulong)doc.RngS1),
+            doc.DynamicWeight, doc.PreDynamicWeight, doc.RefillIndex,
+            doc.BcInWindow, doc.BcCooldown, doc.GenLastAlgo, doc.GenLastTierId);
+        dyn.ImportFullState(full);
+        session.Generator = dyn;
+    }
+
+    /// <summary>把当前权威态(盘面 + 分数 + 步号 + 候选 + 发牌器全态)装进持久文档。</summary>
+    public static GameSessionDoc BuildDoc(GameSession session)
+    {
+        var view = GameSessionGenStateView.From(session.Generator);
+        var doc = new GameSessionDoc
+        {
+            PlayerId = session.PlayerId,
+            GameId = session.GameId,
+            Seed = session.Seed,
+            Step = session.Step,
+            Score = session.Score,
+            LastTrioAlgo = (int)session.LastTrioAlgo,
+            RngS0 = view.RngS0,
+            RngS1 = view.RngS1,
+            DynamicWeight = view.DynamicWeight,
+            PreDynamicWeight = view.PreDynamicWeight,
+            RefillIndex = view.RefillIndex,
+            BcInWindow = view.BcInWindow,
+            BcCooldown = view.BcCooldown,
+            GenLastAlgo = view.LastAlgo,
+            GenLastTierId = view.LastTierId,
+        };
+
+        doc.Board = new int[BinaryBoard.RowCount];
+        for (int r = 0; r < BinaryBoard.RowCount; r++)
+        {
+            doc.Board[r] = session.Board.RowBinary[r];
+        }
+
+        doc.CandidateQueue = new int[session.CandidateQueue.Count];
+        for (int i = 0; i < session.CandidateQueue.Count; i++)
+        {
+            doc.CandidateQueue[i] = session.CandidateQueue[i];
+        }
+
+        return doc;
+    }
+
+    /// <summary>
     /// 落子裁决 + 推进。返回裁决结果码;副作用写入 session(棋盘/分数/步号/候选/发牌器态)。
     /// out 参数回带本步增量(消除行列数 / 本步补入的新候选 shapeId,未补为 -1),供响应回带。
     /// 仅 baseStep == session.Step 时执行;调用方负责 &lt; / &gt; 幂等分支(见 handler)。
@@ -120,6 +203,10 @@ public static class GameSessionHelper
         state.RefillIndex = view.RefillIndex;
         state.BcInWindow = view.BcInWindow;
         state.BcCooldown = view.BcCooldown;
+        state.RngS0 = view.RngS0;
+        state.RngS1 = view.RngS1;
+        state.LastAlgo = view.LastAlgo;
+        state.LastTierId = view.LastTierId;
         return state;
     }
 

@@ -142,8 +142,10 @@ namespace Fantasy
         public bool TargetReached { get; set; }
     }
     /// <summary>
-    /// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态。
-    /// 供重连恢复与将来客户端发牌预测(M3)消费;本步仅作权威态回带,不被客户端反向写入。
+    /// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态 + PRNG 游标。
+    /// 供重连恢复与客户端发牌预测对账消费;权威态回带,不被客户端反向写入。
+    /// 含 PRNG 游标(RngS0/RngS1)后,客户端可在 snapshot / 对账时完全复位预测发牌器游标,
+    /// 即使曾真发散也能从此点逐位接续(不再退化为只靠服务端候选队列覆盖)。
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -185,6 +187,10 @@ namespace Fantasy
             RefillIndex = default;
             BcInWindow = default;
             BcCooldown = default;
+            RngS0 = default;
+            RngS1 = default;
+            LastAlgo = default;
+            LastTierId = default;
             MessageObjectPool<BlockGenState>.Return(this);
         }
         /// <summary>
@@ -217,9 +223,30 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(6)]
         public int BcCooldown { get; set; }
+        /// <summary>
+        /// xorshift128+ 内部状态字 s0(发牌游标;以 int64 承载 ulong 位型)
+        /// </summary>
+        [ProtoMember(7)]
+        public long RngS0 { get; set; }
+        /// <summary>
+        /// xorshift128+ 内部状态字 s1(发牌游标;以 int64 承载 ulong 位型)
+        /// </summary>
+        [ProtoMember(8)]
+        public long RngS1 { get; set; }
+        /// <summary>
+        /// 当前候选批所用算法序号(-1 = 未激活/未发牌;AddWeight 反馈用)
+        /// </summary>
+        [ProtoMember(9)]
+        public int LastAlgo { get; set; }
+        /// <summary>
+        /// 当前候选批所在 tier id(-2147483648 = null)
+        /// </summary>
+        [ProtoMember(10)]
+        public int LastTierId { get; set; }
     }
     /// <summary>
-    /// 客户端请求开局(身份从会话取,不携带账号 / 不上传 seed)
+    /// 客户端请求进入对局(身份从会话取,不携带账号 / 不上传 seed)。
+    /// 续局语义:服务端有在局(内存活实例或持久 Doc)则恢复、无则新建;消息名沿用 GameStart。
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -262,7 +289,8 @@ namespace Fantasy
         public G2C_GameStartResponse ResponseType { get; set; }
     }
     /// <summary>
-    /// 服务端建局回带:gameId + 服务端签发 seed + 初始三候选 + step + 完整生成器状态
+    /// 服务端进入对局回带:gameId + seed + 当前候选(新建=首发 / 续局=恢复) + step + score + 完整生成器状态 + 续局标志。
+    /// 续局时 Step/Score/InitialTrio/Board/GeneratorState 全是恢复出的中断前权威态(非开局 0 态)。
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -308,10 +336,13 @@ namespace Fantasy
                 GeneratorState.Dispose();
                 GeneratorState = null;
             }
+            Resumed = default;
+            Score = default;
+            Board.Clear();
             MessageObjectPool<G2C_GameStartResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_GameStartResponse; } 
-        [ProtoMember(6)]
+        [ProtoMember(9)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 本局唯一 id(服务端签发)
@@ -324,20 +355,35 @@ namespace Fantasy
         [ProtoMember(2)]
         public long Seed { get; set; }
         /// <summary>
-        /// 初始三候选 shapeId(= 生成器首发)
+        /// 当前候选队列 shapeId(新建=首发;续局=恢复出的当前候选)
         /// </summary>
         [ProtoMember(3)]
         public List<int> InitialTrio { get; set; } = new List<int>();
         /// <summary>
-        /// 当前权威步号(开局 = 0)
+        /// 当前权威步号(新建 = 0;续局 = 恢复值)
         /// </summary>
         [ProtoMember(4)]
         public int Step { get; set; }
         /// <summary>
-        /// 完整生成器状态向量
+        /// 完整生成器状态向量(含 PRNG 游标)
         /// </summary>
         [ProtoMember(5)]
         public BlockGenState GeneratorState { get; set; }
+        /// <summary>
+        /// 是否为续局恢复(true=恢复已有对局;false=新建)
+        /// </summary>
+        [ProtoMember(6)]
+        public bool Resumed { get; set; }
+        /// <summary>
+        /// 当前权威分数(新建 = 0;续局 = 恢复值)
+        /// </summary>
+        [ProtoMember(7)]
+        public int Score { get; set; }
+        /// <summary>
+        /// 当前权威棋盘 8 行位掩码(新建=空盘;续局=恢复盘面)
+        /// </summary>
+        [ProtoMember(8)]
+        public List<int> Board { get; set; } = new List<int>();
     }
     /// <summary>
     /// 客户端落子请求:只传输入(候选槽位 + 落点),形状服务端权威、不携带 shapeId(反作弊红线)

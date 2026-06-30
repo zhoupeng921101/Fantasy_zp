@@ -7,8 +7,10 @@ syntax = "proto3";
 // 这是关闭选块作弊面的核心红线。
 // 棋盘以 8 行位掩码(RowBinary,每行低 8 位有效)传输,与 BinaryBoard 内部表示同构。
 
-/// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态。
-/// 供重连恢复与将来客户端发牌预测(M3)消费;本步仅作权威态回带,不被客户端反向写入。
+/// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态 + PRNG 游标。
+/// 供重连恢复与客户端发牌预测对账消费;权威态回带,不被客户端反向写入。
+/// 含 PRNG 游标(RngS0/RngS1)后,客户端可在 snapshot / 对账时完全复位预测发牌器游标,
+/// 即使曾真发散也能从此点逐位接续(不再退化为只靠服务端候选队列覆盖)。
 message BlockGenState
 {
 	repeated int32 CandidateQueue = 1;   /// 当前候选队列 shapeId(队首=下一个待用候选;长度通常为 3)
@@ -17,20 +19,29 @@ message BlockGenState
 	int32 RefillIndex = 4;               /// 本局已发过几次 trio(FirstRound 触发判定用)
 	bool BcInWindow = 5;                 /// 清屏窗口是否激活
 	int32 BcCooldown = 6;                /// 清屏冷却剩余回合
+	int64 RngS0 = 7;                     /// xorshift128+ 内部状态字 s0(发牌游标;以 int64 承载 ulong 位型)
+	int64 RngS1 = 8;                     /// xorshift128+ 内部状态字 s1(发牌游标;以 int64 承载 ulong 位型)
+	int32 LastAlgo = 9;                  /// 当前候选批所用算法序号(-1 = 未激活/未发牌;AddWeight 反馈用)
+	int32 LastTierId = 10;               /// 当前候选批所在 tier id(-2147483648 = null)
 }
 
-/// 客户端请求开局(身份从会话取,不携带账号 / 不上传 seed)
+/// 客户端请求进入对局(身份从会话取,不携带账号 / 不上传 seed)。
+/// 续局语义:服务端有在局(内存活实例或持久 Doc)则恢复、无则新建;消息名沿用 GameStart。
 message C2G_GameStartRequest // IRequest,G2C_GameStartResponse
 {
 }
-/// 服务端建局回带:gameId + 服务端签发 seed + 初始三候选 + step + 完整生成器状态
+/// 服务端进入对局回带:gameId + seed + 当前候选(新建=首发 / 续局=恢复) + step + score + 完整生成器状态 + 续局标志。
+/// 续局时 Step/Score/InitialTrio/Board/GeneratorState 全是恢复出的中断前权威态(非开局 0 态)。
 message G2C_GameStartResponse // IResponse
 {
 	int64 GameId = 1;                    /// 本局唯一 id(服务端签发)
 	int64 Seed = 2;                      /// 服务端签发的本局发牌种子(客户端发牌预测用,非用于服务端复算来源)
-	repeated int32 InitialTrio = 3;      /// 初始三候选 shapeId(= 生成器首发)
-	int32 Step = 4;                      /// 当前权威步号(开局 = 0)
-	BlockGenState GeneratorState = 5;    /// 完整生成器状态向量
+	repeated int32 InitialTrio = 3;      /// 当前候选队列 shapeId(新建=首发;续局=恢复出的当前候选)
+	int32 Step = 4;                      /// 当前权威步号(新建 = 0;续局 = 恢复值)
+	BlockGenState GeneratorState = 5;    /// 完整生成器状态向量(含 PRNG 游标)
+	bool Resumed = 6;                    /// 是否为续局恢复(true=恢复已有对局;false=新建)
+	int32 Score = 7;                     /// 当前权威分数(新建 = 0;续局 = 恢复值)
+	repeated int32 Board = 8;            /// 当前权威棋盘 8 行位掩码(新建=空盘;续局=恢复盘面)
 }
 
 /// 客户端落子请求:只传输入(候选槽位 + 落点),形状服务端权威、不携带 shapeId(反作弊红线)

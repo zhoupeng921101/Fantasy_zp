@@ -50,6 +50,14 @@ public sealed class C2G_PlaceRequestHandler : MessageRPC<C2G_PlaceRequest, G2C_P
                 out int eliminatedLines, out int newCandidate);
             response.EliminatedLines = eliminatedLines;
             response.NewCandidate = newCandidate;
+
+            // 仅在权威态真推进(成功落子)时存盘:盘面/分数/步号/发牌器全态落 Doc,供续局恢复。
+            // 存盘失败不回滚裁决(权威态已在内存推进),下次落子存盘补上(见 GameSessionPersistHelper.Save)。
+            if (response.ResultCode == PlaceResultCode.StepAdvanced)
+            {
+                var persistService = session.Scene.GetComponent<GameSessionServiceComponent>();
+                await GameSessionPersistHelper.Save(persistService, GameSessionHelper.BuildDoc(game));
+            }
         }
 
         // 不论分支,统一回带最新(或当前)权威态。

@@ -31,6 +31,25 @@ namespace BlockBlastGenCore
                 return rcv;
             }
 
+            // 续局忠实性自检:建局→落 N 子→序列化全态→重建→续 M 子,与一气跑完 N+M 逐位 diff。
+            // 全 seed × 多 (N,M) 切点(含「补批边界附近」「跨补批」),覆盖整批消耗/补牌点的续接。
+            if (args.Length > 0 && args[0] == "--verify-resume")
+            {
+                int rcr = 0;
+                var cuts = new (int n, int m)[] { (1, 50), (3, 50), (4, 50), (10, 60), (37, 80), (120, 120) };
+                foreach (int s in GenCoreDeterminismHarness.Seeds)
+                {
+                    foreach (var (n, m) in cuts)
+                    {
+                        rcr |= ResumeContinuityVerify.Run(s, n, m);
+                    }
+                }
+                Console.WriteLine(rcr == 0
+                    ? "[OK] 续局重建后发牌与中断前逐位接续(全 seed × 全切点)。"
+                    : "[FAIL] 续局重建后发牌与一气跑完存在发散,见上。");
+                return rcr;
+            }
+
             // 去单例化后调度器逐局 new,持久化由 harness 内部注入 InMemory;此处无需设全局 Persistence。
             string outDir = args.Length > 0
                 ? args[0]

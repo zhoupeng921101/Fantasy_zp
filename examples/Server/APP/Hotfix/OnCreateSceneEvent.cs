@@ -86,6 +86,9 @@ public sealed class OnCreateSceneEvent : AsyncEventSystem<OnCreateScene>
                 // 云存档(P3)服务端 blob 同步组件:持有 player_cloud_save 集合句柄 + blob 大小上限。
                 // 按 playerId 寻址,身份从会话 → Account.PlayerId 取(登录链 ClaimOrIssuePlayerId 后挂载)。
                 scene.AddComponent<CloudSaveServiceComponent>();
+                // Block Blast 对局持久服务端组件:持有 block_blast_session 集合句柄。
+                // 局内态(盘面/分数/发牌器全态)按 playerId 持久,支持跨开窗/重连/重登续局恢复。
+                scene.AddComponent<GameSessionServiceComponent>();
 
                 var unit = Entity.Create<Unit>(scene);
                 
