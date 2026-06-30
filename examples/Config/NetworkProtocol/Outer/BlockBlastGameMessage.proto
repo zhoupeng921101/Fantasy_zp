@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+// BlockBlastGameMessage.proto
+// Block Blast 服务端权威发牌环路协议(Outer,运行在 Gate Scene)。
+// 服务端是发牌唯一事实源:seed 服务端签发、候选形状(shapeId)服务端权威持有,
+// place 请求只携带玩家输入(候选槽位 + 落点),绝不携带 shapeId —— 形状由客户端无从指定,
+// 这是关闭选块作弊面的核心红线。
+// 棋盘以 8 行位掩码(RowBinary,每行低 8 位有效)传输,与 BinaryBoard 内部表示同构。
+
+/// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态。
+/// 供重连恢复与将来客户端发牌预测(M3)消费;本步仅作权威态回带,不被客户端反向写入。
+message BlockGenState
+{
+	repeated int32 CandidateQueue = 1;   /// 当前候选队列 shapeId(队首=下一个待用候选;长度通常为 3)
+	int32 DynamicWeight = 2;             /// 动态权重(跨手累积)
+	int32 PreDynamicWeight = 3;          /// 上一手权重增量(同向/换向判定用)
+	int32 RefillIndex = 4;               /// 本局已发过几次 trio(FirstRound 触发判定用)
+	bool BcInWindow = 5;                 /// 清屏窗口是否激活
+	int32 BcCooldown = 6;                /// 清屏冷却剩余回合
+}
+
+/// 客户端请求开局(身份从会话取,不携带账号 / 不上传 seed)
+message C2G_GameStartRequest // IRequest,G2C_GameStartResponse
+{
+}
+/// 服务端建局回带:gameId + 服务端签发 seed + 初始三候选 + step + 完整生成器状态
+message G2C_GameStartResponse // IResponse
+{
+	int64 GameId = 1;                    /// 本局唯一 id(服务端签发)
+	int64 Seed = 2;                      /// 服务端签发的本局发牌种子(客户端发牌预测用,非用于服务端复算来源)
+	repeated int32 InitialTrio = 3;      /// 初始三候选 shapeId(= 生成器首发)
+	int32 Step = 4;                      /// 当前权威步号(开局 = 0)
+	BlockGenState GeneratorState = 5;    /// 完整生成器状态向量
+}
+
+/// 客户端落子请求:只传输入(候选槽位 + 落点),形状服务端权威、不携带 shapeId(反作弊红线)
+message C2G_PlaceRequest // IRequest,G2C_PlaceResponse
+{
+	int64 GameId = 1;                    /// 目标对局 id
+	int32 BaseStep = 2;                  /// 客户端认为的当前步号(幂等基准:==执行 / <幂等回当前态 / >拒绝回快照)
+	int32 CandidateIndex = 3;            /// 落哪个候选槽(0..2)
+	int32 PosX = 4;                      /// 落点列(BinaryBoard 坐标 X)
+	int32 PosY = 5;                      /// 落点行(BinaryBoard 坐标 Y)
+}
+/// 服务端落子裁决 + 最新权威态
+message G2C_PlaceResponse // IResponse
+{
+	PlaceResultCode ResultCode = 1;      /// 落子裁决结果码
+	int32 Step = 2;                      /// 执行后(或当前)权威步号
+	int32 Score = 3;                     /// 当前权威分数
+	int32 EliminatedLines = 4;           /// 本次消除的行列数(StepAdvanced 时有效)
+	int32 NewCandidate = 5;              /// 补入队尾的新候选 shapeId(本步补牌时有效;未补为 -1)
+	repeated int32 Board = 6;            /// 最新权威棋盘(8 行位掩码)
+	BlockGenState GeneratorState = 7;    /// 最新完整生成器状态向量
+}
+
+/// 落子裁决结果码
+enum PlaceResultCode
+{
+	/// step 推进成功(baseStep == 权威 step,落子合法已执行)
+	StepAdvanced = 0,
+	/// 幂等命中(baseStep < 权威 step):请求是已执行步的重发,回带当前权威态、不重复执行
+	IdempotentReplay = 1,
+	/// 步号超前(baseStep > 权威 step):客户端落后于权威,拒绝执行、回带当前权威态供重同步
+	StepAhead = 2,
+	/// 落子非法(候选槽空 / 越界 / 与已占冲突):不推进、回带当前权威态
+	IllegalPlacement = 3,
+	/// 对局不存在(gameId 在会话上查无此局)
+	GameNotFound = 4,
+	/// 会话未登录(无法确定身份)
+	NotLoggedIn = 5
+}
+
+/// 客户端请求当前对局完整快照(重连 / 恢复)
+message C2G_GameSnapshotRequest // IRequest,G2C_GameSnapshotResponse
+{
+	int64 GameId = 1;                    /// 目标对局 id
+}
+/// 服务端回带完整权威态
+message G2C_GameSnapshotResponse // IResponse
+{
+	GameSnapshotResultCode ResultCode = 1; /// 结果码
+	repeated int32 Board = 2;            /// 棋盘(8 行位掩码)
+	int32 Score = 3;                     /// 当前权威分数
+	int32 Step = 4;                      /// 当前权威步号
+	repeated int32 CandidateQueue = 5;   /// 当前候选队列 shapeId
+	BlockGenState GeneratorState = 6;    /// 完整生成器状态向量
+}
+
+/// 查询快照结果码
+enum GameSnapshotResultCode
+{
+	/// 查询成功
+	Ok = 0,
+	/// 对局不存在
+	GameNotFound = 1,
+	/// 会话未登录
+	NotLoggedIn = 2
+}

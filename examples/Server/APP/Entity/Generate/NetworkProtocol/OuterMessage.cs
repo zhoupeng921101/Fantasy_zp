@@ -142,6 +142,500 @@ namespace Fantasy
         public bool TargetReached { get; set; }
     }
     /// <summary>
+    /// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态。
+    /// 供重连恢复与将来客户端发牌预测(M3)消费;本步仅作权威态回带,不被客户端反向写入。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class BlockGenState : AMessage, IDisposable
+    {
+        public static BlockGenState Create(bool autoReturn = true)
+        {
+            var blockGenState = MessageObjectPool<BlockGenState>.Rent();
+            blockGenState.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                blockGenState.SetIsPool(false);
+            }
+            
+            return blockGenState;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            CandidateQueue.Clear();
+            DynamicWeight = default;
+            PreDynamicWeight = default;
+            RefillIndex = default;
+            BcInWindow = default;
+            BcCooldown = default;
+            MessageObjectPool<BlockGenState>.Return(this);
+        }
+        /// <summary>
+        /// 当前候选队列 shapeId(队首=下一个待用候选;长度通常为 3)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<int> CandidateQueue { get; set; } = new List<int>();
+        /// <summary>
+        /// 动态权重(跨手累积)
+        /// </summary>
+        [ProtoMember(2)]
+        public int DynamicWeight { get; set; }
+        /// <summary>
+        /// 上一手权重增量(同向/换向判定用)
+        /// </summary>
+        [ProtoMember(3)]
+        public int PreDynamicWeight { get; set; }
+        /// <summary>
+        /// 本局已发过几次 trio(FirstRound 触发判定用)
+        /// </summary>
+        [ProtoMember(4)]
+        public int RefillIndex { get; set; }
+        /// <summary>
+        /// 清屏窗口是否激活
+        /// </summary>
+        [ProtoMember(5)]
+        public bool BcInWindow { get; set; }
+        /// <summary>
+        /// 清屏冷却剩余回合
+        /// </summary>
+        [ProtoMember(6)]
+        public int BcCooldown { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求开局(身份从会话取,不携带账号 / 不上传 seed)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_GameStartRequest : AMessage, IRequest
+    {
+        public static C2G_GameStartRequest Create(bool autoReturn = true)
+        {
+            var c2G_GameStartRequest = MessageObjectPool<C2G_GameStartRequest>.Rent();
+            c2G_GameStartRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_GameStartRequest.SetIsPool(false);
+            }
+            
+            return c2G_GameStartRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_GameStartRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_GameStartRequest; } 
+        [ProtoIgnore]
+        public G2C_GameStartResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端建局回带:gameId + 服务端签发 seed + 初始三候选 + step + 完整生成器状态
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_GameStartResponse : AMessage, IResponse
+    {
+        public static G2C_GameStartResponse Create(bool autoReturn = true)
+        {
+            var g2C_GameStartResponse = MessageObjectPool<G2C_GameStartResponse>.Rent();
+            g2C_GameStartResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_GameStartResponse.SetIsPool(false);
+            }
+            
+            return g2C_GameStartResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            GameId = default;
+            Seed = default;
+            InitialTrio.Clear();
+            Step = default;
+            if (GeneratorState != null)
+            {
+                GeneratorState.Dispose();
+                GeneratorState = null;
+            }
+            MessageObjectPool<G2C_GameStartResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_GameStartResponse; } 
+        [ProtoMember(6)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 本局唯一 id(服务端签发)
+        /// </summary>
+        [ProtoMember(1)]
+        public long GameId { get; set; }
+        /// <summary>
+        /// 服务端签发的本局发牌种子(客户端发牌预测用,非用于服务端复算来源)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Seed { get; set; }
+        /// <summary>
+        /// 初始三候选 shapeId(= 生成器首发)
+        /// </summary>
+        [ProtoMember(3)]
+        public List<int> InitialTrio { get; set; } = new List<int>();
+        /// <summary>
+        /// 当前权威步号(开局 = 0)
+        /// </summary>
+        [ProtoMember(4)]
+        public int Step { get; set; }
+        /// <summary>
+        /// 完整生成器状态向量
+        /// </summary>
+        [ProtoMember(5)]
+        public BlockGenState GeneratorState { get; set; }
+    }
+    /// <summary>
+    /// 客户端落子请求:只传输入(候选槽位 + 落点),形状服务端权威、不携带 shapeId(反作弊红线)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_PlaceRequest : AMessage, IRequest
+    {
+        public static C2G_PlaceRequest Create(bool autoReturn = true)
+        {
+            var c2G_PlaceRequest = MessageObjectPool<C2G_PlaceRequest>.Rent();
+            c2G_PlaceRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_PlaceRequest.SetIsPool(false);
+            }
+            
+            return c2G_PlaceRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            GameId = default;
+            BaseStep = default;
+            CandidateIndex = default;
+            PosX = default;
+            PosY = default;
+            MessageObjectPool<C2G_PlaceRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_PlaceRequest; } 
+        [ProtoIgnore]
+        public G2C_PlaceResponse ResponseType { get; set; }
+        /// <summary>
+        /// 目标对局 id
+        /// </summary>
+        [ProtoMember(1)]
+        public long GameId { get; set; }
+        /// <summary>
+        /// 客户端认为的当前步号(幂等基准:==执行 / <幂等回当前态 / >拒绝回快照)
+        /// </summary>
+        [ProtoMember(2)]
+        public int BaseStep { get; set; }
+        /// <summary>
+        /// 落哪个候选槽(0..2)
+        /// </summary>
+        [ProtoMember(3)]
+        public int CandidateIndex { get; set; }
+        /// <summary>
+        /// 落点列(BinaryBoard 坐标 X)
+        /// </summary>
+        [ProtoMember(4)]
+        public int PosX { get; set; }
+        /// <summary>
+        /// 落点行(BinaryBoard 坐标 Y)
+        /// </summary>
+        [ProtoMember(5)]
+        public int PosY { get; set; }
+    }
+    /// <summary>
+    /// 服务端落子裁决 + 最新权威态
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_PlaceResponse : AMessage, IResponse
+    {
+        public static G2C_PlaceResponse Create(bool autoReturn = true)
+        {
+            var g2C_PlaceResponse = MessageObjectPool<G2C_PlaceResponse>.Rent();
+            g2C_PlaceResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_PlaceResponse.SetIsPool(false);
+            }
+            
+            return g2C_PlaceResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Step = default;
+            Score = default;
+            EliminatedLines = default;
+            NewCandidate = default;
+            Board.Clear();
+            if (GeneratorState != null)
+            {
+                GeneratorState.Dispose();
+                GeneratorState = null;
+            }
+            MessageObjectPool<G2C_PlaceResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_PlaceResponse; } 
+        [ProtoMember(8)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 落子裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public PlaceResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 执行后(或当前)权威步号
+        /// </summary>
+        [ProtoMember(2)]
+        public int Step { get; set; }
+        /// <summary>
+        /// 当前权威分数
+        /// </summary>
+        [ProtoMember(3)]
+        public int Score { get; set; }
+        /// <summary>
+        /// 本次消除的行列数(StepAdvanced 时有效)
+        /// </summary>
+        [ProtoMember(4)]
+        public int EliminatedLines { get; set; }
+        /// <summary>
+        /// 补入队尾的新候选 shapeId(本步补牌时有效;未补为 -1)
+        /// </summary>
+        [ProtoMember(5)]
+        public int NewCandidate { get; set; }
+        /// <summary>
+        /// 最新权威棋盘(8 行位掩码)
+        /// </summary>
+        [ProtoMember(6)]
+        public List<int> Board { get; set; } = new List<int>();
+        /// <summary>
+        /// 最新完整生成器状态向量
+        /// </summary>
+        [ProtoMember(7)]
+        public BlockGenState GeneratorState { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求当前对局完整快照(重连 / 恢复)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_GameSnapshotRequest : AMessage, IRequest
+    {
+        public static C2G_GameSnapshotRequest Create(bool autoReturn = true)
+        {
+            var c2G_GameSnapshotRequest = MessageObjectPool<C2G_GameSnapshotRequest>.Rent();
+            c2G_GameSnapshotRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_GameSnapshotRequest.SetIsPool(false);
+            }
+            
+            return c2G_GameSnapshotRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            GameId = default;
+            MessageObjectPool<C2G_GameSnapshotRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_GameSnapshotRequest; } 
+        [ProtoIgnore]
+        public G2C_GameSnapshotResponse ResponseType { get; set; }
+        /// <summary>
+        /// 目标对局 id
+        /// </summary>
+        [ProtoMember(1)]
+        public long GameId { get; set; }
+    }
+    /// <summary>
+    /// 服务端回带完整权威态
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_GameSnapshotResponse : AMessage, IResponse
+    {
+        public static G2C_GameSnapshotResponse Create(bool autoReturn = true)
+        {
+            var g2C_GameSnapshotResponse = MessageObjectPool<G2C_GameSnapshotResponse>.Rent();
+            g2C_GameSnapshotResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_GameSnapshotResponse.SetIsPool(false);
+            }
+            
+            return g2C_GameSnapshotResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Board.Clear();
+            Score = default;
+            Step = default;
+            CandidateQueue.Clear();
+            if (GeneratorState != null)
+            {
+                GeneratorState.Dispose();
+                GeneratorState = null;
+            }
+            MessageObjectPool<G2C_GameSnapshotResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_GameSnapshotResponse; } 
+        [ProtoMember(7)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public GameSnapshotResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 棋盘(8 行位掩码)
+        /// </summary>
+        [ProtoMember(2)]
+        public List<int> Board { get; set; } = new List<int>();
+        /// <summary>
+        /// 当前权威分数
+        /// </summary>
+        [ProtoMember(3)]
+        public int Score { get; set; }
+        /// <summary>
+        /// 当前权威步号
+        /// </summary>
+        [ProtoMember(4)]
+        public int Step { get; set; }
+        /// <summary>
+        /// 当前候选队列 shapeId
+        /// </summary>
+        [ProtoMember(5)]
+        public List<int> CandidateQueue { get; set; } = new List<int>();
+        /// <summary>
+        /// 完整生成器状态向量
+        /// </summary>
+        [ProtoMember(6)]
+        public BlockGenState GeneratorState { get; set; }
+    }
+    /// <summary>
     /// 客户端上传一份存档快照(身份从会话取,不携带 playerId)
     /// </summary>
     [Serializable]

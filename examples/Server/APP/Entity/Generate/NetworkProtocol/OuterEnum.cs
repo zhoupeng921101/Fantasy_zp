@@ -27,6 +27,56 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 落子裁决结果码
+	/// </summary>
+	public enum PlaceResultCode
+	{
+		/// <summary>
+		/// step 推进成功(baseStep == 权威 step,落子合法已执行)
+		/// </summary>
+		StepAdvanced = 0,
+		/// <summary>
+		/// 幂等命中(baseStep < 权威 step):请求是已执行步的重发,回带当前权威态、不重复执行
+		/// </summary>
+		IdempotentReplay = 1,
+		/// <summary>
+		/// 步号超前(baseStep > 权威 step):客户端落后于权威,拒绝执行、回带当前权威态供重同步
+		/// </summary>
+		StepAhead = 2,
+		/// <summary>
+		/// 落子非法(候选槽空 / 越界 / 与已占冲突):不推进、回带当前权威态
+		/// </summary>
+		IllegalPlacement = 3,
+		/// <summary>
+		/// 对局不存在(gameId 在会话上查无此局)
+		/// </summary>
+		GameNotFound = 4,
+		/// <summary>
+		/// 会话未登录(无法确定身份)
+		/// </summary>
+		NotLoggedIn = 5
+	}
+
+	/// <summary>
+	/// 查询快照结果码
+	/// </summary>
+	public enum GameSnapshotResultCode
+	{
+		/// <summary>
+		/// 查询成功
+		/// </summary>
+		Ok = 0,
+		/// <summary>
+		/// 对局不存在
+		/// </summary>
+		GameNotFound = 1,
+		/// <summary>
+		/// 会话未登录
+		/// </summary>
+		NotLoggedIn = 2
+	}
+
+	/// <summary>
 	/// 上传裁决结果码
 	/// </summary>
 	public enum CloudSaveUploadResultCode

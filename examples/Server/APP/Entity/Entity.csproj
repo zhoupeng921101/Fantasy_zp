@@ -21,6 +21,10 @@
     <PropertyGroup>
       <!-- SG调试输出避免被编译器升级为Error -->
       <WarningsNotAsErrors>$(WarningsNotAsErrors);DebugFantasySG</WarningsNotAsErrors>
+      <!-- 链接进来的 Block Blast 生成核心源在 UnityProject 侧按 Nullable=disable 编写(单一事实源,不在此改),
+           本项目 Nullable=enable 会对其报一片可空引用告警(CS86xx)。这些是上下文不匹配产物、非真实缺陷,
+           故按编号静默仅这一族,不放宽其余告警、不动客户端源。 -->
+      <NoWarn>$(NoWarn);CS8600;CS8601;CS8603;CS8618;CS8625</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
@@ -63,5 +67,33 @@
       <AdditionalFiles Include="Fantasy.config">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </AdditionalFiles>
+    </ItemGroup>
+
+    <!-- Block Blast 服务端权威发牌生成核心:单一事实源在 UnityProject,以 <Compile Include link> 链接编译(不复制)。
+         闭包 0 Unity 依赖(M1a 已去单例化 + 移除 Unity 引用),服务端无需 stub 即可链接;
+         GenCoreDeterminismHarness 链接进同一程序集,供权威性回归自检(harness 访问 DynamicWeightDiff 的 internal 成员)。 -->
+    <PropertyGroup>
+      <BBSrc>..\..\..\..\..\UnityProject\Assets\GameScripts\HotFix\GameLogic\Module\BlockBlast</BBSrc>
+    </PropertyGroup>
+    <ItemGroup>
+      <Compile Include="$(BBSrc)\Core\Vec2Int.cs"            Link="BlockBlastGenCore\Core\Vec2Int.cs" />
+      <Compile Include="$(BBSrc)\Core\BlockShape.cs"         Link="BlockBlastGenCore\Core\BlockShape.cs" />
+      <Compile Include="$(BBSrc)\Core\BlockShapeMap.cs"      Link="BlockBlastGenCore\Core\BlockShapeMap.cs" />
+      <Compile Include="$(BBSrc)\Core\ClearResult.cs"        Link="BlockBlastGenCore\Core\ClearResult.cs" />
+      <Compile Include="$(BBSrc)\Core\BinaryBoard.cs"        Link="BlockBlastGenCore\Core\BinaryBoard.cs" />
+      <Compile Include="$(BBSrc)\Algorithms\AlgorithmKind.cs"     Link="BlockBlastGenCore\Algorithms\AlgorithmKind.cs" />
+      <Compile Include="$(BBSrc)\Algorithms\WeightConfigEntry.cs" Link="BlockBlastGenCore\Algorithms\WeightConfigEntry.cs" />
+      <Compile Include="$(BBSrc)\Algorithms\BoardAnalysis.cs"     Link="BlockBlastGenCore\Algorithms\BoardAnalysis.cs" />
+      <Compile Include="$(BBSrc)\Algorithms\BoardEvaluator.cs"    Link="BlockBlastGenCore\Algorithms\BoardEvaluator.cs" />
+      <Compile Include="$(BBSrc)\Algorithms\BlockAlgorithms.cs"   Link="BlockBlastGenCore\Algorithms\BlockAlgorithms.cs" />
+      <Compile Include="$(BBSrc)\SimpleSingleton.cs"        Link="BlockBlastGenCore\SimpleSingleton.cs" />
+      <Compile Include="$(BBSrc)\RandomSource.cs"           Link="BlockBlastGenCore\RandomSource.cs" />
+      <Compile Include="$(BBSrc)\PortableRng.cs"            Link="BlockBlastGenCore\PortableRng.cs" />
+      <Compile Include="$(BBSrc)\Persistence.cs"            Link="BlockBlastGenCore\Persistence.cs" />
+      <Compile Include="$(BBSrc)\GameConfigBB.cs"           Link="BlockBlastGenCore\GameConfigBB.cs" />
+      <Compile Include="$(BBSrc)\BlockScoring.cs"           Link="BlockBlastGenCore\BlockScoring.cs" />
+      <Compile Include="$(BBSrc)\OfferOverrides.cs"         Link="BlockBlastGenCore\OfferOverrides.cs" />
+      <Compile Include="$(BBSrc)\DynamicWeightDiff.cs"      Link="BlockBlastGenCore\DynamicWeightDiff.cs" />
+      <Compile Include="..\..\..\..\..\UnityProject\Assets\Editor\Tests\BlockBlast\GenCoreDeterminismHarness.cs" Link="BlockBlastGenCore\GenCoreDeterminismHarness.cs" />
     </ItemGroup>
 </Project>

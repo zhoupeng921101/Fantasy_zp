@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    服务端权威发牌移植·跨运行时确定性测量实验(非生产接线)。
+    把客户端 BlockBlast 生成核心源以 <Compile Include link> 方式链接编译(不复制),
+    为 Unity-only 依赖提供 .NET 侧 stub,跑出服务端 trace 供与客户端 Mono trace 跨端 diff。
+    不引用 Fantasy 框架 / 源生成器:本实验只验证"生成核心能否在 .NET 运行时编译运行 + 逐位一致",
+    不涉及 ECS / 协议 / Handler。
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>BlockBlastGenCore</RootNamespace>
+    <AssemblyName>BlockBlastGenCore</AssemblyName>
+    <!-- 客户端源含中文注释,确保编译器按 UTF-8 读取链接进来的源。 -->
+    <CodePage>65001</CodePage>
+  </PropertyGroup>
+
+  <!-- 客户端生成核心闭包(单一事实源在 UnityProject,链接编译不复制)。 -->
+  <PropertyGroup>
+    <BBSrc>..\..\..\UnityProject\Assets\GameScripts\HotFix\GameLogic\Module\BlockBlast</BBSrc>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core -->
+    <Compile Include="$(BBSrc)\Core\Vec2Int.cs"            Link="ClientSrc\Core\Vec2Int.cs" />
+    <Compile Include="$(BBSrc)\Core\BlockShape.cs"         Link="ClientSrc\Core\BlockShape.cs" />
+    <Compile Include="$(BBSrc)\Core\BlockShapeMap.cs"      Link="ClientSrc\Core\BlockShapeMap.cs" />
+    <Compile Include="$(BBSrc)\Core\ClearResult.cs"        Link="ClientSrc\Core\ClearResult.cs" />
+    <Compile Include="$(BBSrc)\Core\BinaryBoard.cs"        Link="ClientSrc\Core\BinaryBoard.cs" />
+
+    <!-- Algorithms -->
+    <Compile Include="$(BBSrc)\Algorithms\AlgorithmKind.cs"     Link="ClientSrc\Algorithms\AlgorithmKind.cs" />
+    <Compile Include="$(BBSrc)\Algorithms\WeightConfigEntry.cs" Link="ClientSrc\Algorithms\WeightConfigEntry.cs" />
+    <Compile Include="$(BBSrc)\Algorithms\BoardAnalysis.cs"     Link="ClientSrc\Algorithms\BoardAnalysis.cs" />
+    <Compile Include="$(BBSrc)\Algorithms\BoardEvaluator.cs"    Link="ClientSrc\Algorithms\BoardEvaluator.cs" />
+    <Compile Include="$(BBSrc)\Algorithms\BlockAlgorithms.cs"   Link="ClientSrc\Algorithms\BlockAlgorithms.cs" />
+
+    <!-- Module root -->
+    <Compile Include="$(BBSrc)\SimpleSingleton.cs"             Link="ClientSrc\SimpleSingleton.cs" />
+    <Compile Include="$(BBSrc)\RandomSource.cs"               Link="ClientSrc\RandomSource.cs" />
+    <Compile Include="$(BBSrc)\PortableRng.cs"               Link="ClientSrc\PortableRng.cs" />
+    <Compile Include="$(BBSrc)\Persistence.cs"               Link="ClientSrc\Persistence.cs" />
+    <Compile Include="$(BBSrc)\GameConfigBB.cs"             Link="ClientSrc\GameConfigBB.cs" />
+    <Compile Include="$(BBSrc)\BlockScoring.cs"             Link="ClientSrc\BlockScoring.cs" />
+    <Compile Include="$(BBSrc)\OfferOverrides.cs"           Link="ClientSrc\OfferOverrides.cs" />
+    <Compile Include="$(BBSrc)\DynamicWeightDiff.cs"         Link="ClientSrc\DynamicWeightDiff.cs" />
+
+    <!-- 测量脚手架已移出生产模块到 Editor-only 测试目录;按新路径链接同一份源。 -->
+    <Compile Include="..\..\..\UnityProject\Assets\Editor\Tests\BlockBlast\GenCoreDeterminismHarness.cs" Link="ClientSrc\GenCoreDeterminismHarness.cs" />
+  </ItemGroup>
+
+</Project>
