@@ -58,6 +58,45 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 消除道具裁决结果码
+	/// </summary>
+	public enum ClearToolResultCode
+	{
+		/// <summary>
+		/// 清除成功(baseStep == 权威 step,体力足额已扣,目标行列已清)
+		/// </summary>
+		Cleared = 0,
+		/// <summary>
+		/// 幂等命中(baseStep < 权威 step):已执行步的重发,回带当前权威态、不重复清、不重复扣体力
+		/// </summary>
+		IdempotentReplay = 1,
+		/// <summary>
+		/// 步号超前(baseStep > 权威 step):客户端落后于权威,拒绝执行、回带当前权威态供重同步
+		/// </summary>
+		StepAhead = 2,
+		/// <summary>
+		/// 目标格越界(row/col 不在 0..7):不清、不扣体力,回带当前权威态
+		/// </summary>
+		OutOfRange = 3,
+		/// <summary>
+		/// 体力不足(不够一次消除道具代价):不清、不扣体力,回带当前权威态(含当前体力)供回滚乐观清
+		/// </summary>
+		NotEnoughEnergy = 4,
+		/// <summary>
+		/// 对局不存在(gameId 在会话上查无此局)
+		/// </summary>
+		GameNotFound = 5,
+		/// <summary>
+		/// 会话未登录(无法确定身份)
+		/// </summary>
+		NotLoggedIn = 6,
+		/// <summary>
+		/// 服务端属性/持久服务不可用(MongoDB 不可达等):不清、不扣体力
+		/// </summary>
+		ServiceUnavailable = 7
+	}
+
+	/// <summary>
 	/// 查询快照结果码
 	/// </summary>
 	public enum GameSnapshotResultCode

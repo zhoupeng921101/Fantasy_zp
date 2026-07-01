@@ -50,4 +50,14 @@ public sealed class GameSession : Entity
 
     /// <summary>客户端会话引用(推送 / 寿命联动)。</summary>
     public EntityReference<Session> Session;
+
+    /// <summary>
+    /// 消除道具在途守卫(同会话同一 ClearTool 动作在途时置位)。
+    /// 消除道具裁决把「扣体力」(await)放在 Step 推进之前,await 窗口内 Step 仍是旧值:
+    /// 弱网重发使两条同 baseStep 的 ClearTool 并发到达,若无守卫会都通过 baseStep==Step 分支 → 双扣体力 + Step 自增 2。
+    /// 落子(Place)的 Step++ 在首个 await 之前同步完成、自带此保护;消除道具的扣费 await 在前,故需显式守卫。
+    /// 守卫在 handler 的 == 分支进入 await 之前**同步**置位、finally 清位:置位期间后到的同动作请求直接回 IdempotentReplay 当前态,
+    /// 不进入扣费/清盘路径。同一 Scene 内 handler 仅在 await 点交错,同步的「查-置」区段原子,故守卫无竞态。
+    /// </summary>
+    public bool ClearToolInFlight;
 }

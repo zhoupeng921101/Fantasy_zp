@@ -66,6 +66,7 @@ message G2C_PlaceResponse // IResponse
 	bool GameOver = 8;                   /// 终局信号:服务端判定当前候选无任一放置顺序可放(jam),本局结束
 	int32 FinalScore = 9;                /// 终局权威最终分(GameOver=true 时有效;= 终局时 Score)
 	int64 BestScore = 10;                /// 终局入榜后该榜当前最佳分(GameOver=true 且入榜服务可用时有效;否则 0)
+	int64 NewEnergy = 11;                /// 落子后玩家权威体力绝对值(StepAdvanced 时服务端派生落账后余额;客户端用它对账体力,先扣 PlaceCost 再消行返还夹 EnergyCap)。非 StepAdvanced 分支或体力服务不可用时回带当前权威余额供对齐
 }
 
 /// 落子裁决结果码
@@ -83,6 +84,49 @@ enum PlaceResultCode
 	GameNotFound = 4,
 	/// 会话未登录(无法确定身份)
 	NotLoggedIn = 5
+}
+
+/// 客户端消除道具请求:清目标格所在整行整列(脱困道具,设计 49 §3.1)。
+/// 只传输入(目标格 + 幂等基准步号),清哪些格 / 消耗多少体力全由服务端权威算,不携带体力值、不携带被清格。
+/// 消除道具作为一次 board-mutating 动作推进 Step(与落子同一步号轴),但不消耗候选、不推进发牌调度、不续发新批。
+message C2G_ClearToolRequest // IRequest,G2C_ClearToolResponse
+{
+	int64 GameId = 1;                    /// 目标对局 id
+	int32 BaseStep = 2;                  /// 客户端认为的当前步号(幂等基准:==执行 / <幂等回当前态 / >拒绝回快照)
+	int32 PosX = 3;                      /// 目标格列(BinaryBoard 坐标 X)
+	int32 PosY = 4;                      /// 目标格行(BinaryBoard 坐标 Y)
+}
+/// 服务端消除道具裁决 + 最新权威态
+message G2C_ClearToolResponse // IResponse
+{
+	ClearToolResultCode ResultCode = 1;  /// 消除道具裁决结果码
+	int32 Step = 2;                      /// 执行后(或当前)权威步号
+	int32 Score = 3;                     /// 当前权威分数(消除道具不计分,回带当前值供对账)
+	int32 ClearedCells = 4;              /// 本次清掉的格数(Cleared 时有效)
+	repeated int32 Board = 5;            /// 最新权威棋盘(8 行位掩码)
+	BlockGenState GeneratorState = 6;    /// 最新完整生成器状态向量(消除道具不推进发牌,回带当前态供对账)
+	int64 NewEnergy = 7;                 /// 玩家体力绝对值:Cleared=扣费后余额 / NotEnoughEnergy=当前余额(供回滚乐观清);其余不改体力的分支为 0(客户端忽略,靠属性推送/快照对齐)
+}
+
+/// 消除道具裁决结果码
+enum ClearToolResultCode
+{
+	/// 清除成功(baseStep == 权威 step,体力足额已扣,目标行列已清)
+	Cleared = 0,
+	/// 幂等命中(baseStep < 权威 step):已执行步的重发,回带当前权威态、不重复清、不重复扣体力
+	IdempotentReplay = 1,
+	/// 步号超前(baseStep > 权威 step):客户端落后于权威,拒绝执行、回带当前权威态供重同步
+	StepAhead = 2,
+	/// 目标格越界(row/col 不在 0..7):不清、不扣体力,回带当前权威态
+	OutOfRange = 3,
+	/// 体力不足(不够一次消除道具代价):不清、不扣体力,回带当前权威态(含当前体力)供回滚乐观清
+	NotEnoughEnergy = 4,
+	/// 对局不存在(gameId 在会话上查无此局)
+	GameNotFound = 5,
+	/// 会话未登录(无法确定身份)
+	NotLoggedIn = 6,
+	/// 服务端属性/持久服务不可用(MongoDB 不可达等):不清、不扣体力
+	ServiceUnavailable = 7
 }
 
 /// 客户端请求当前对局完整快照(重连 / 恢复)

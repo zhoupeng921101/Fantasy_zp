@@ -510,10 +510,11 @@ namespace Fantasy
             GameOver = default;
             FinalScore = default;
             BestScore = default;
+            NewEnergy = default;
             MessageObjectPool<G2C_PlaceResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_PlaceResponse; } 
-        [ProtoMember(11)]
+        [ProtoMember(12)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 落子裁决结果码
@@ -565,6 +566,170 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(10)]
         public long BestScore { get; set; }
+        /// <summary>
+        /// 落子后玩家权威体力绝对值(StepAdvanced 时服务端派生落账后余额;客户端用它对账体力,先扣 PlaceCost 再消行返还夹 EnergyCap)。非 StepAdvanced 分支或体力服务不可用时回带当前权威余额供对齐
+        /// </summary>
+        [ProtoMember(11)]
+        public long NewEnergy { get; set; }
+    }
+    /// <summary>
+    /// 客户端消除道具请求:清目标格所在整行整列(脱困道具,设计 49 §3.1)。
+    /// 只传输入(目标格 + 幂等基准步号),清哪些格 / 消耗多少体力全由服务端权威算,不携带体力值、不携带被清格。
+    /// 消除道具作为一次 board-mutating 动作推进 Step(与落子同一步号轴),但不消耗候选、不推进发牌调度、不续发新批。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_ClearToolRequest : AMessage, IRequest
+    {
+        public static C2G_ClearToolRequest Create(bool autoReturn = true)
+        {
+            var c2G_ClearToolRequest = MessageObjectPool<C2G_ClearToolRequest>.Rent();
+            c2G_ClearToolRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_ClearToolRequest.SetIsPool(false);
+            }
+            
+            return c2G_ClearToolRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            GameId = default;
+            BaseStep = default;
+            PosX = default;
+            PosY = default;
+            MessageObjectPool<C2G_ClearToolRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_ClearToolRequest; } 
+        [ProtoIgnore]
+        public G2C_ClearToolResponse ResponseType { get; set; }
+        /// <summary>
+        /// 目标对局 id
+        /// </summary>
+        [ProtoMember(1)]
+        public long GameId { get; set; }
+        /// <summary>
+        /// 客户端认为的当前步号(幂等基准:==执行 / <幂等回当前态 / >拒绝回快照)
+        /// </summary>
+        [ProtoMember(2)]
+        public int BaseStep { get; set; }
+        /// <summary>
+        /// 目标格列(BinaryBoard 坐标 X)
+        /// </summary>
+        [ProtoMember(3)]
+        public int PosX { get; set; }
+        /// <summary>
+        /// 目标格行(BinaryBoard 坐标 Y)
+        /// </summary>
+        [ProtoMember(4)]
+        public int PosY { get; set; }
+    }
+    /// <summary>
+    /// 服务端消除道具裁决 + 最新权威态
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_ClearToolResponse : AMessage, IResponse
+    {
+        public static G2C_ClearToolResponse Create(bool autoReturn = true)
+        {
+            var g2C_ClearToolResponse = MessageObjectPool<G2C_ClearToolResponse>.Rent();
+            g2C_ClearToolResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_ClearToolResponse.SetIsPool(false);
+            }
+            
+            return g2C_ClearToolResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Step = default;
+            Score = default;
+            ClearedCells = default;
+            Board.Clear();
+            if (GeneratorState != null)
+            {
+                GeneratorState.Dispose();
+                GeneratorState = null;
+            }
+            NewEnergy = default;
+            MessageObjectPool<G2C_ClearToolResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_ClearToolResponse; } 
+        [ProtoMember(8)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 消除道具裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public ClearToolResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 执行后(或当前)权威步号
+        /// </summary>
+        [ProtoMember(2)]
+        public int Step { get; set; }
+        /// <summary>
+        /// 当前权威分数(消除道具不计分,回带当前值供对账)
+        /// </summary>
+        [ProtoMember(3)]
+        public int Score { get; set; }
+        /// <summary>
+        /// 本次清掉的格数(Cleared 时有效)
+        /// </summary>
+        [ProtoMember(4)]
+        public int ClearedCells { get; set; }
+        /// <summary>
+        /// 最新权威棋盘(8 行位掩码)
+        /// </summary>
+        [ProtoMember(5)]
+        public List<int> Board { get; set; } = new List<int>();
+        /// <summary>
+        /// 最新完整生成器状态向量(消除道具不推进发牌,回带当前态供对账)
+        /// </summary>
+        [ProtoMember(6)]
+        public BlockGenState GeneratorState { get; set; }
+        /// <summary>
+        /// 玩家体力绝对值:Cleared=扣费后余额 / NotEnoughEnergy=当前余额(供回滚乐观清);其余不改体力的分支为 0(客户端忽略,靠属性推送/快照对齐)
+        /// </summary>
+        [ProtoMember(7)]
+        public long NewEnergy { get; set; }
     }
     /// <summary>
     /// 客户端请求当前对局完整快照(重连 / 恢复)

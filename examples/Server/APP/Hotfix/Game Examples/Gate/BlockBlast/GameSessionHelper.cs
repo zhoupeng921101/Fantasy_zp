@@ -27,6 +27,7 @@ public static class GameSessionHelper
         session.Step = 0;
         session.Score = 0;
         session.LastTrioAlgo = AlgorithmKind.RandomNoDie;
+        session.ClearToolInFlight = false; // 对象池复用防残留在途标记
         session.Board = new BinaryBoard();
 
         var cfg = GenCoreDeterminismHarness.DefaultWeightConfig();
@@ -61,6 +62,7 @@ public static class GameSessionHelper
         session.Step = doc.Step;
         session.Score = doc.Score;
         session.LastTrioAlgo = doc.LastTrioAlgo < 0 ? AlgorithmKind.RandomNoDie : (AlgorithmKind)doc.LastTrioAlgo;
+        session.ClearToolInFlight = false; // 对象池复用防残留在途标记
 
         // 还原棋盘 8 行位掩码。
         session.Board = new BinaryBoard();
@@ -185,6 +187,50 @@ public static class GameSessionHelper
 
         session.Step++;
         return PlaceResultCode.StepAdvanced;
+    }
+
+    /// <summary>
+    /// 消除道具裁决(服务端权威,设计 49 §3.1):清目标格 (posX,posY) 所在整行整列的全部已占格。
+    /// 只清一行一列,不清空全盘、不触发全清判定、不给全清奖(设计 49 §四);不消耗候选、不推进发牌调度、不续发。
+    /// 作为一次 board-mutating 动作推进 Step(与落子同一步号轴,供幂等)。返回本次清掉的格数。
+    ///
+    /// 越界(row/col 不在 0..7)由调用方(handler)先判并回 OutOfRange,此处不再重复越界回退。
+    /// 与客户端同源逻辑 BlockGameState.ClearToolRowCol 同口径:清一整行 + 一整列,交叉格只清一次(位掩码天然去重)。
+    /// </summary>
+    public static int ClearTool(GameSession session, int posX, int posY)
+    {
+        var board = session.Board;
+        int before = CountOccupied(board);
+
+        // 清整行:该行位掩码全清零。
+        board.RowBinary[posY] = 0;
+
+        // 清整列:每行清掉目标列对应的那一位(位序与 BinaryBoard 一致:bit (ColCount-col-1))。
+        int colClearMask = ~(1 << (BinaryBoard.ColCount - posX - 1)) & BinaryBoard.FullRow;
+        for (int r = 0; r < BinaryBoard.RowCount; r++)
+        {
+            board.RowBinary[r] &= colClearMask;
+        }
+
+        int cleared = before - CountOccupied(board);
+        session.Step++;
+        return cleared;
+    }
+
+    /// <summary>统计棋盘已占格数(消除道具清格数派生用)。</summary>
+    private static int CountOccupied(BinaryBoard board)
+    {
+        int count = 0;
+        for (int r = 0; r < BinaryBoard.RowCount; r++)
+        {
+            int bits = board.RowBinary[r] & BinaryBoard.FullRow;
+            while (bits != 0)
+            {
+                bits &= bits - 1;
+                count++;
+            }
+        }
+        return count;
     }
 
     /// <summary>把生成器状态向量装进协议消息(候选队列 + 跨手累积调度态)。</summary>

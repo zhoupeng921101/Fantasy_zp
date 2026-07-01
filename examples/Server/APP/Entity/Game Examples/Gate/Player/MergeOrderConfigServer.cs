@@ -41,6 +41,25 @@ public static class MergeOrderConfigServer
     /// <summary>单次交付奖励体力(= 客户端 MergeOrderConfig.OrderRewardEnergy)。</summary>
     public const int OrderRewardEnergy = 8;
 
+    /// <summary>
+    /// 每次落子消耗体力(= 客户端 MergeOrderConfig.PlaceCost)。客户端为编译期常量、无 global 表 id,故服务端同样固定常量。
+    /// 落子体力服务端派生:成功落子扣 PlaceCost,消行按行列数返还(夹 EnergyCap 软上限),客户端不再自报此往返。
+    /// </summary>
+    public const int PlaceCost = 1;
+
+    /// <summary>
+    /// 消除道具(清一行一列脱困道具)代价体力。读 Luban global.xlsx id=5,缺表/缺键回退默认 5
+    /// (= 客户端 MergeOrderConfig.ClearToolCost / GlobalConfigMgr.ClearToolEnergyCostValue)。无返还。
+    /// </summary>
+    public static readonly int ClearToolCost = GlobalCfg.GetInt(GlobalCfg.ClearToolEnergyCost, 5);
+
+    /// <summary>
+    /// 体力被动恢复软上限(= 客户端 MergeOrderConfig.EnergyCap / GlobalConfigMgr.EnergyRecoverCapValue)。
+    /// 读 Luban global.xlsx id=4,缺表/缺键回退默认 30。消除道具扣费走服务端权威路径,不受此软上限影响
+    /// (软上限只钳被动恢复,主动扣费直接落 delta);此常量供配置一致性核对与潜在校验用。
+    /// </summary>
+    public static readonly int EnergyCap = GlobalCfg.GetInt(GlobalCfg.EnergyRecoverCap, 30);
+
     /// <summary>合成比(难度计算用):d = Count × MergeCount^(Level-1)。= 客户端 MergeOrderConfig.MergeCount。</summary>
     public const int MergeCount = 4;
 

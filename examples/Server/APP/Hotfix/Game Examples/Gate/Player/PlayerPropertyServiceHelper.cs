@@ -663,6 +663,47 @@ public static class PlayerPropertyServiceHelper
     }
 
     /// <summary>
+    /// 读玩家权威体力(先结算被动恢复,再返回结算后余额)。落子体力服务端派生用:
+    /// 需要一个「与 ChangeProperty 同源、同 nowMs 恢复结算口径」的当前体力 E,才能算出命中绝对目标体力的 netDelta。
+    ///
+    /// 恢复结算口径与 ChangeProperty 完全一致(同一个 RecoverEnergyIfDue + 同一 nowMs = TimeHelper.Now):
+    /// 本方法先 RecoverEnergyIfDue 把体力补到最新,随后调用方紧接着(读 → 算 netDelta 之间无 await)调 ChangeProperty,
+    /// ChangeProperty 内部再次 RecoverEnergyIfDue 因 elapsed &lt; interval 变为 no-op(时间闸只按整 tick 前进,同 nowMs 不重复补),
+    /// 故 ChangeProperty 的 $inc(netDelta) 落在本方法读到的 E 上、命中调用方算定的目标体力。
+    ///
+    /// 返回 (ok, energy):
+    ///   - ok=true:energy = 结算后当前体力(供派生 netDelta);
+    ///   - ok=false:服务不可用 / 账号未首登 / MongoDB 不可达,energy=0(调用方按服务不可用处理,不派生体力)。
+    /// </summary>
+    public static async FTask<(bool ok, long energy)> ReadEnergyAuthoritative(Scene scene, string accountId)
+    {
+        var service = scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (service?.Players is not { } players)
+        {
+            return (false, 0L);
+        }
+
+        var nowMs = TimeHelper.Now;
+        try
+        {
+            var doc = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
+            if (doc == null)
+            {
+                // 未首登(理论上落子前必已登录,防御性):无档可读,按服务不可用返。
+                return (false, 0L);
+            }
+            // 先结算被动恢复(会就地更新 doc.Energy),返回结算后体力。
+            await RecoverEnergyIfDue(service, accountId, doc, nowMs);
+            return (true, doc.Energy);
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"PlayerPropertyServiceHelper.ReadEnergyAuthoritative 失败 account={accountId},err={e.Message}");
+            return (false, 0L);
+        }
+    }
+
+    /// <summary>
     /// 推送属性变更到该 UUID 在线全部会话(§3.3.3 + §5.4)。
     /// 当前 demo Account 内存态字典每 UUID 只持一个 Account / 一个会话(同 UUID 二次登录 Add 返 false,
     /// 见 AccountManageComponentSystem.Add),「全部会话」实际 = 单会话。
