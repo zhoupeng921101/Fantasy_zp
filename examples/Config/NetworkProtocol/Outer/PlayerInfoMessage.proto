@@ -14,6 +14,16 @@ message PlayerInfo
 	int64 Exp = 4;                             /// 经验(首登默认 0)
 	repeated PropertyAmount Properties = 5;    /// 三数值属性当前余额(金币/钻石/体力,复用 PropertyAmount)
 	int32 SchemaVersion = 6;                   /// schema 版本(加字段时升,客户端据此识别)
+	int32 RenameCount = 7;                     /// 改名次数(服务端权威;客户端据此算下次改名费:0=首次免费)
+	int32 CurrentAvatarId = 8;                 /// 当前佩戴头像 id(服务端权威;缺省与客户端 DefaultAvatarId=1 对齐)
+	int32 CurrentFrameId = 9;                  /// 当前佩戴头像框 id(服务端权威;缺省与客户端 DefaultFrameId=101 对齐)
+	repeated int32 UnlockedAvatarIds = 10;     /// 已解锁头像 id 集合(服务端权威;首登空,客户端 bootstrap 上报默认解锁后填入)
+	repeated int32 UnlockedFrameIds = 11;      /// 已解锁头像框 id 集合(服务端权威;同上)
+	int32 WishUsedToday = 12;                  /// 今日已用祈愿次数(服务端权威;快照前已跑懒每日重置,故为重置后当日值)
+	int32 WishDailyLimit = 13;                 /// 每日祈愿次数上限(= WishConfigServer.WishDailyLimit,供客户端算今日剩余)
+	int32 SkinMono = 14;                       /// 皮肤态服务端权威(3b):是否单色皮肤模式(0=彩色 / 1=单色;缺省 0=彩色)
+	int32 SkinMonoId = 15;                     /// 皮肤态服务端权威(3b):当前单色皮肤 id(彩色态 -1;缺省 -1)
+	int64 TempleDecorated = 16;                /// 神庙装饰服务端权威(3b):已装饰厅数标量(前缀语义,= 已修厅数;缺省 0)
 }
 
 /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)

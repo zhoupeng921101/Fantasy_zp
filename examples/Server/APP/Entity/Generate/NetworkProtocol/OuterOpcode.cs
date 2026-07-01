@@ -16,10 +16,10 @@ namespace Fantasy
         public const uint G2C_ClearToolResponse = 402663188;
         public const uint C2G_GameSnapshotRequest = 268445461;
         public const uint G2C_GameSnapshotResponse = 402663189;
-        public const uint C2G_CloudSaveUploadRequest = 268445462;
-        public const uint G2C_CloudSaveUploadResponse = 402663190;
-        public const uint C2G_CloudSaveDownloadRequest = 268445463;
-        public const uint G2C_CloudSaveDownloadResponse = 402663191;
+        public const uint C2G_EquipCosmeticRequest = 268445462;
+        public const uint G2C_EquipCosmeticResponse = 402663190;
+        public const uint C2G_UnlockCosmeticRequest = 268445463;
+        public const uint G2C_UnlockCosmeticResponse = 402663191;
         public const uint C2G_EnterMainGameRequest = 268445464;
         public const uint G2C_EnterMainGameResponse = 402663192;
         public const uint C2G_LoginGameRequest = 268445465;
@@ -89,14 +89,20 @@ namespace Fantasy
         public const uint G2C_PropertyDeltaPush = 134227738;
         public const uint C2G_QueryAttrLedger = 268445482;
         public const uint G2C_QueryAttrLedgerResponse = 402663210;
-        public const uint C2G_RankSubmitScoreRequest = 268445483;
-        public const uint G2C_RankSubmitScoreResponse = 402663211;
-        public const uint C2G_RankQueryRequest = 268445484;
-        public const uint G2C_RankQueryResponse = 402663212;
-        public const uint C2G_RedeemCodeRequest = 268445485;
-        public const uint G2C_RedeemCodeResponse = 402663213;
+        public const uint C2G_SetProfileStateRequest = 268445483;
+        public const uint G2C_SetProfileStateResponse = 402663211;
+        public const uint C2G_RankSubmitScoreRequest = 268445484;
+        public const uint G2C_RankSubmitScoreResponse = 402663212;
+        public const uint C2G_RankQueryRequest = 268445485;
+        public const uint G2C_RankQueryResponse = 402663213;
+        public const uint C2G_RedeemCodeRequest = 268445486;
+        public const uint G2C_RedeemCodeResponse = 402663214;
+        public const uint C2G_RenameRequest = 268445487;
+        public const uint G2C_RenameResponse = 402663215;
         public const uint C2G_TestEnumMessage = 134227739;
-        public const uint C2G_ClearPlayerDataRequest = 268445486;
-        public const uint G2C_ClearPlayerDataResponse = 402663214;
+        public const uint C2G_WishForEnergyRequest = 268445488;
+        public const uint G2C_WishForEnergyResponse = 402663216;
+        public const uint C2G_ClearPlayerDataRequest = 268445489;
+        public const uint G2C_ClearPlayerDataResponse = 402663217;
     }
 }

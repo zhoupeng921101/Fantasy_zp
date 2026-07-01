@@ -37,6 +37,8 @@ public sealed class C2G_GameSnapshotRequestHandler : MessageRPC<C2G_GameSnapshot
         GameSessionHelper.FillBoard(game, response.Board);
         GameSessionHelper.FillCandidateQueue(game, response.CandidateQueue);
         response.GeneratorState = GameSessionHelper.BuildGenState(game);
+        // 局内叠加层切片回带(opaque,客户端 import):当前对局最近一次搭车存下的切片原文,无则空串。
+        response.SliceJson = game.SliceJson ?? string.Empty;
 
         await FTask.CompletedTask;
     }

@@ -46,6 +46,13 @@ public sealed class PlayerDoc
     /// <summary>经验(首登 setOnInsert 默认 0;旧文档缺字段保底 0)。</summary>
     public long Exp { get; set; }
 
+    /// <summary>
+    /// 改名次数(首登 setOnInsert 默认 0;旧文档缺字段保底 0)。服务端权威:改名费按此值派生
+    /// (0 = 首次免费,>0 = 按 RenameConfigServer.PriceFor(RenameCount) 收费),客户端不上报费用/次数。
+    /// 每次改名成功后 +1,与 Nickname 在同一条原子 update 内一起写(改名裁定单条 FindOneAndUpdate)。
+    /// </summary>
+    public int RenameCount { get; set; }
+
     /// <summary>末次属性变更时间(服务端 Unix 毫秒,UTC)。每次 $inc 成功后 $set 刷新;Tier 2+ ledger 落地前作单字段快照。</summary>
     public long LastChangeUnixMs { get; set; }
 
@@ -97,6 +104,84 @@ public sealed class PlayerDoc
     /// 旧档缺字段 → 0 等价"本轮无交付"(配合 OrderCursor==0 首次,等价首批未交付)。
     /// </summary>
     public int OrderDeliveredMask { get; set; }
+
+    // ---- P3 元层进度计数器·服务端权威(原云存档 blob 迁出第 1 批,2026-07 全栈迁移)----
+    // 六个纯数值进度计数器,与既有货币/体力彼此独立、不复用。走同一套 PropertyChange($inc + 限界信任 + ledger + 推送)。
+    // 用 long(非 int)与既有余额字段同类型:变更走 ChangeProperty 的 long 过滤 / $inc / GetFieldValue 统一路径,
+    //   避免 int32 字段与 long delta 在 MongoDB filter(Gte(field, -delta))产生 BSON 数值类型不匹配。
+    // 旧文档反序列化缺字段 → BSON 默认 0L 即合理初值(全新玩家这些进度本就为 0);首登 setOnInsert 显式写 0 使字段 present。
+    // 语义单调性:GoddessLevel/GoddessRating/UnlockedChapter/TempleRepaired/NextRepairIndex 单调递增(玩法/动作只增不减);
+    //   BlindBoxCount 可增可减(攒盒 + / 开盒 -)。骨架限界信任只防异常大跳,不强制单调(宽松,拿不准从宽,见服务组件阈值注)。
+
+    /// <summary>女神等级(玩法产出,消行融合经济产出;单调递增,缺省 0)。</summary>
+    public long GoddessLevel { get; set; }
+
+    /// <summary>女神评级(玩法产出;单调递增,缺省 0)。</summary>
+    public long GoddessRating { get; set; }
+
+    /// <summary>章节解锁数(玩法产出;单调递增,缺省 0)。</summary>
+    public long UnlockedChapter { get; set; }
+
+    /// <summary>盲盒计数(玩法产出;可增可减 —— 攒盒 + / 开盒 -,缺省 0)。</summary>
+    public long BlindBoxCount { get; set; }
+
+    /// <summary>神庙修缮计数(动作产出,修缮动作触发;单调递增,缺省 0)。</summary>
+    public long TempleRepaired { get; set; }
+
+    /// <summary>神庙修缮游标(动作产出,指向下一个待修缮项;单调递增,缺省 0)。</summary>
+    public long NextRepairIndex { get; set; }
+
+    // ---- 头像 / 头像框服务端权威(原云存档 blob 迁出第 2 批·子批 2c,2026-07)----
+    // 当前佩戴 id(两个 int)+ 已解锁集合(两个 List<int>)。修饰服务端权威,解锁走 client-report 限界信任。
+    // 当前 id 缺省与客户端默认对齐(头像 1 / 框 101,= 客户端 PlayerInfo.DefaultAvatarId/DefaultFrameId),
+    //   使客户端登录拉快照时不会因服务端「未佩戴」误判;解锁集合缺省空,客户端登录后 bootstrap 上报默认解锁。
+    // 换装:服务端校验目标 id 已在对应解锁集合内才 $set 当前 id(未解锁拒)。
+    // 解锁上报:$addToSet 幂等加入集合(限界信任 sanity:id 落在合法段 + 集合大小上限防灌爆 + 频率闸)。
+    // 头像与框共 id 段编排:头像 1–100 段、框 101+ 段(靠 Kind 区分,非靠 id 段;段仅作 sanity 边界)。
+
+    /// <summary>当前佩戴头像 id(首登 setOnInsert 默认 CurrentAvatarIdInitial=1,与客户端 DefaultAvatarId 对齐;旧档缺字段补默认)。</summary>
+    public int CurrentAvatarId { get; set; } = 1;
+
+    /// <summary>当前佩戴头像框 id(首登 setOnInsert 默认 CurrentFrameIdInitial=101,与客户端 DefaultFrameId 对齐;旧档缺字段补默认)。</summary>
+    public int CurrentFrameId { get; set; } = 101;
+
+    /// <summary>已解锁头像 id 集合(首登缺省空;客户端 bootstrap 上报默认解锁后 $addToSet 幂等填入。旧档缺字段补空列表)。</summary>
+    public System.Collections.Generic.List<int> UnlockedAvatarIds { get; set; } = new System.Collections.Generic.List<int>();
+
+    /// <summary>已解锁头像框 id 集合(同上)。</summary>
+    public System.Collections.Generic.List<int> UnlockedFrameIds { get; set; } = new System.Collections.Generic.List<int>();
+
+    // ---- 祈愿(每日限领体力)服务端权威(原云存档 blob 迁出第 3 批·子批 3a,2026-07)----
+    // 每日祈愿次数闸服务端权威:计数 WishUsedToday + 上次重置时刻 WishLastResetUnixMs。
+    // 跨天判据用服务端本地日期(TimeHelper.Now.TransitionLocal().Date),与客户端本地日期口径对齐。
+    // 灵力扣 / 体力发不在此持有(走既有 SoulPower / Energy 字段 + ChangeProperty),此处只持每日闸状态。
+    // 缺省:WishUsedToday=0;WishLastResetUnixMs 首登 setOnInsert=nowMs(同 EnergyLastRecoverMs 手法,避免 0 值误判整段流逝跨天)。
+
+    /// <summary>今日已用祈愿次数(首登 setOnInsert 默认 0;懒每日重置跨天归零)。</summary>
+    public int WishUsedToday { get; set; }
+
+    /// <summary>
+    /// 上次祈愿每日重置时刻(Unix 毫秒,UTC)。跨天判据 = 本值与 nowMs 的服务端本地日期不同日。
+    /// 首登 setOnInsert=nowMs;每次懒重置成功后刷新到 nowMs。旧文档缺字段反序列化为 0L,
+    /// 由 InitOrLoad 补字段迁移补为 nowMs(0L 会被 TransitionLocal 判为 1970 年,与今日必跨天,虽仍收敛但补 nowMs 更稳)。
+    /// </summary>
+    public long WishLastResetUnixMs { get; set; }
+
+    // ---- 皮肤态 / 神庙装饰标志服务端权威(原云存档 blob 迁出第 3 批·子批 3b,2026-07)----
+    // 三个「设置状态」(SET 语义,非累加计数):皮肤单色开关 + 当前单色 id + 已装饰厅数。
+    // 皮肤 / 装饰纯装饰、低危,走 client-report 限界信任(存客户端上报值 + 基本 sanity),不建服务端配置自算。
+    // 缺省对齐客户端默认:SkinMono=0(彩色)、SkinMonoId=-1(Unselected,彩色态客户端记 -1 且忽略)、TempleDecorated=0(无装饰)。
+    // TempleDecorated 是标量已装饰厅数:客户端活态是 bool[] 前缀数组,装饰与修缮 1:1 同序耦合,已装饰集恒为前缀 [0, count),
+    //   与既有 TempleRepaired 计数器同套「标量 ↔ 布尔数组」换算(客户端 MetaCurrencySync 已有转换器)。用 long 与既有计数器同类型。
+
+    /// <summary>是否单色皮肤模式(0=彩色 / 1=单色;首登 setOnInsert 默认 0,旧档缺字段补 0)。</summary>
+    public int SkinMono { get; set; }
+
+    /// <summary>当前单色皮肤 id(彩色态 -1=Unselected;首登 setOnInsert 默认 -1,旧档缺字段补 -1)。</summary>
+    public int SkinMonoId { get; set; } = -1;
+
+    /// <summary>已装饰厅数标量(前缀语义,= 已修厅数;首登 setOnInsert 默认 0,旧档缺字段补 0)。</summary>
+    public long TempleDecorated { get; set; }
 
     /// <summary>schema 版本(加字段时升 + 缺字段保底)。</summary>
     public int SchemaVersion { get; set; }

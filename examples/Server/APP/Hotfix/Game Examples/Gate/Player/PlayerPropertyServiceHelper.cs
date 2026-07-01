@@ -89,9 +89,30 @@ public static class PlayerPropertyServiceHelper
             .SetOnInsert(x => x.OrderCursor, 0)
             .SetOnInsert(x => x.LastOrderRefreshMs, 0L)
             .SetOnInsert(x => x.OrderDeliveredMask, 0)
+            // P3 六元层进度计数器首登 setOnInsert(全新玩家进度为 0;显式写使字段 present)。
+            .SetOnInsert(x => x.GoddessLevel, service.GoddessLevelInitial)
+            .SetOnInsert(x => x.GoddessRating, service.GoddessRatingInitial)
+            .SetOnInsert(x => x.UnlockedChapter, service.UnlockedChapterInitial)
+            .SetOnInsert(x => x.BlindBoxCount, service.BlindBoxCountInitial)
+            .SetOnInsert(x => x.TempleRepaired, service.TempleRepairedInitial)
+            .SetOnInsert(x => x.NextRepairIndex, service.NextRepairIndexInitial)
+            // 头像 / 框服务端权威(2c):当前 id 缺省与客户端默认对齐;解锁集合缺省空(客户端 bootstrap 上报默认解锁)。
+            .SetOnInsert(x => x.CurrentAvatarId, service.CurrentAvatarIdInitial)
+            .SetOnInsert(x => x.CurrentFrameId, service.CurrentFrameIdInitial)
+            .SetOnInsert(x => x.UnlockedAvatarIds, new System.Collections.Generic.List<int>())
+            .SetOnInsert(x => x.UnlockedFrameIds, new System.Collections.Generic.List<int>())
+            // 祈愿服务端权威(3a):今日次数首登 0;上次重置时刻 setOnInsert=nowMs(同 EnergyLastRecoverMs 手法,
+            //   避免 0L 被 TransitionLocal 判为 1970 年、首登即误判跨天)。
+            .SetOnInsert(x => x.WishUsedToday, 0)
+            .SetOnInsert(x => x.WishLastResetUnixMs, nowMs)
+            // 皮肤态 / 神庙装饰标志服务端权威(3b):缺省对齐客户端默认(彩色 0 / 单色 id -1=Unselected / 无装饰 0)。
+            .SetOnInsert(x => x.SkinMono, 0)
+            .SetOnInsert(x => x.SkinMonoId, -1)
+            .SetOnInsert(x => x.TempleDecorated, 0L)
             .SetOnInsert(x => x.Nickname, string.Empty)
             .SetOnInsert(x => x.Level, 1)
             .SetOnInsert(x => x.Exp, 0L)
+            .SetOnInsert(x => x.RenameCount, 0)
             .SetOnInsert(x => x.LastChangeUnixMs, nowMs)
             .SetOnInsert(x => x.SchemaVersion, PlayerPropertyServiceComponent.CurrentSchemaVersion);
 
@@ -121,6 +142,10 @@ public static class PlayerPropertyServiceHelper
             // P2 体力恢复:登录拉快照前结算一次,保证客户端拿到的 Energy 是「补完恢复」的最新值。
             // 经上面补字段后 EnergyLastRecoverMs 必 present(旧档补为 nowMs),恢复结算口径稳定。
             await RecoverEnergyIfDue(service, accountId, doc, nowMs);
+
+            // 祈愿每日重置(3a):登录拉快照前跑一次懒重置,保证客户端登录看到的 WishUsedToday 是「重置后」的当日值。
+            // 经上面补字段后 WishLastResetUnixMs 必 present(旧档补为 nowMs),跨天判据口径稳定。
+            await WishHelper.ResetWishIfDue(service, accountId, doc, nowMs);
 
             return (0u, string.Empty, doc);
         }
@@ -175,10 +200,33 @@ public static class PlayerPropertyServiceHelper
             { "OrderCursor",         new BsonDocument("$ifNull", new BsonArray { "$OrderCursor", 0 }) },
             { "LastOrderRefreshMs",  new BsonDocument("$ifNull", new BsonArray { "$LastOrderRefreshMs", 0L }) },
             { "OrderDeliveredMask",  new BsonDocument("$ifNull", new BsonArray { "$OrderDeliveredMask", 0 }) },
+            // P3 六元层进度计数器:旧档(schema < 5)缺字段 → 补 Initial(默认 0),present 则保留既有值。
+            { "GoddessLevel",        new BsonDocument("$ifNull", new BsonArray { "$GoddessLevel", service.GoddessLevelInitial }) },
+            { "GoddessRating",       new BsonDocument("$ifNull", new BsonArray { "$GoddessRating", service.GoddessRatingInitial }) },
+            { "UnlockedChapter",     new BsonDocument("$ifNull", new BsonArray { "$UnlockedChapter", service.UnlockedChapterInitial }) },
+            { "BlindBoxCount",       new BsonDocument("$ifNull", new BsonArray { "$BlindBoxCount", service.BlindBoxCountInitial }) },
+            { "TempleRepaired",      new BsonDocument("$ifNull", new BsonArray { "$TempleRepaired", service.TempleRepairedInitial }) },
+            { "NextRepairIndex",     new BsonDocument("$ifNull", new BsonArray { "$NextRepairIndex", service.NextRepairIndexInitial }) },
             { "PlayerId",            new BsonDocument("$ifNull", new BsonArray { "$PlayerId", string.Empty }) },
             { "Nickname",            new BsonDocument("$ifNull", new BsonArray { "$Nickname", string.Empty }) },
             { "Level",               new BsonDocument("$ifNull", new BsonArray { "$Level", 1 }) },
             { "Exp",                 new BsonDocument("$ifNull", new BsonArray { "$Exp", 0L }) },
+            // 改名服务端权威:旧档(schema < 6)缺 RenameCount → 补 0(等价该玩家从未改名),present 则保留既有值。
+            { "RenameCount",         new BsonDocument("$ifNull", new BsonArray { "$RenameCount", 0 }) },
+            // 头像 / 框服务端权威(2c):旧档(schema < 7)缺当前 id → 补客户端默认(头像 1 / 框 101),present 则保留;
+            //   缺解锁集合 → 补空数组(客户端 bootstrap 上报默认解锁),present 则保留既有集合。
+            { "CurrentAvatarId",     new BsonDocument("$ifNull", new BsonArray { "$CurrentAvatarId", service.CurrentAvatarIdInitial }) },
+            { "CurrentFrameId",      new BsonDocument("$ifNull", new BsonArray { "$CurrentFrameId", service.CurrentFrameIdInitial }) },
+            { "UnlockedAvatarIds",   new BsonDocument("$ifNull", new BsonArray { "$UnlockedAvatarIds", new BsonArray() }) },
+            { "UnlockedFrameIds",    new BsonDocument("$ifNull", new BsonArray { "$UnlockedFrameIds", new BsonArray() }) },
+            // 祈愿服务端权威(3a):旧档(schema < 8)缺祈愿字段 → 次数补 0、上次重置时刻补 nowMs
+            //   (补 nowMs 而非 0,避免旧档补齐当次即被 TransitionLocal 判 1970 年跨天;present 则保留既有值)。
+            { "WishUsedToday",       new BsonDocument("$ifNull", new BsonArray { "$WishUsedToday", 0 }) },
+            { "WishLastResetUnixMs", new BsonDocument("$ifNull", new BsonArray { "$WishLastResetUnixMs", nowMs }) },
+            // 皮肤态 / 神庙装饰标志服务端权威(3b):旧档(schema < 9)缺字段 → 补客户端默认(彩色 0 / 单色 id -1 / 无装饰 0),present 则保留既有值。
+            { "SkinMono",            new BsonDocument("$ifNull", new BsonArray { "$SkinMono", 0 }) },
+            { "SkinMonoId",          new BsonDocument("$ifNull", new BsonArray { "$SkinMonoId", -1 }) },
+            { "TempleDecorated",     new BsonDocument("$ifNull", new BsonArray { "$TempleDecorated", 0L }) },
             { "LastChangeUnixMs",    new BsonDocument("$ifNull", new BsonArray { "$LastChangeUnixMs", nowMs }) },
             { "SchemaVersion",       PlayerPropertyServiceComponent.CurrentSchemaVersion },
         };
@@ -258,9 +306,29 @@ public static class PlayerPropertyServiceHelper
             .Set(x => x.OrderCursor, 0)
             .Set(x => x.LastOrderRefreshMs, 0L)
             .Set(x => x.OrderDeliveredMask, 0)
+            // P3 六元层进度计数器:清档重置为默认值(对齐 InitOrLoad setOnInsert)。
+            .Set(x => x.GoddessLevel, service.GoddessLevelInitial)
+            .Set(x => x.GoddessRating, service.GoddessRatingInitial)
+            .Set(x => x.UnlockedChapter, service.UnlockedChapterInitial)
+            .Set(x => x.BlindBoxCount, service.BlindBoxCountInitial)
+            .Set(x => x.TempleRepaired, service.TempleRepairedInitial)
+            .Set(x => x.NextRepairIndex, service.NextRepairIndexInitial)
+            // 头像 / 框服务端权威(2c):清档重置当前 id 为默认、解锁集合清空(对齐首登 setOnInsert)。
+            .Set(x => x.CurrentAvatarId, service.CurrentAvatarIdInitial)
+            .Set(x => x.CurrentFrameId, service.CurrentFrameIdInitial)
+            .Set(x => x.UnlockedAvatarIds, new System.Collections.Generic.List<int>())
+            .Set(x => x.UnlockedFrameIds, new System.Collections.Generic.List<int>())
+            // 祈愿服务端权威(3a):清档重置今日次数为 0、上次重置时刻为 nowMs(对齐首登 setOnInsert)。
+            .Set(x => x.WishUsedToday, 0)
+            .Set(x => x.WishLastResetUnixMs, nowMs)
+            // 皮肤态 / 神庙装饰标志服务端权威(3b):清档重置为客户端默认(彩色 0 / 单色 id -1 / 无装饰 0)。
+            .Set(x => x.SkinMono, 0)
+            .Set(x => x.SkinMonoId, -1)
+            .Set(x => x.TempleDecorated, 0L)
             .Set(x => x.Nickname, string.Empty)
             .Set(x => x.Level, 1)
             .Set(x => x.Exp, 0L)
+            .Set(x => x.RenameCount, 0)
             .Set(x => x.LastChangeUnixMs, nowMs)
             .Set(x => x.SchemaVersion, PlayerPropertyServiceComponent.CurrentSchemaVersion);
 
@@ -751,7 +819,21 @@ public static class PlayerPropertyServiceHelper
         info.Nickname = doc.Nickname;
         info.Level = doc.Level;
         info.Exp = doc.Exp;
+        info.RenameCount = doc.RenameCount;
         info.SchemaVersion = PlayerPropertyServiceComponent.CurrentSchemaVersion;
+        // 头像 / 框服务端权威(2c):当前佩戴 id + 已解锁集合并入登录快照,客户端据此拿权威初值(替代从 blob 读)。
+        info.CurrentAvatarId = doc.CurrentAvatarId;
+        info.CurrentFrameId = doc.CurrentFrameId;
+        if (doc.UnlockedAvatarIds != null) info.UnlockedAvatarIds.AddRange(doc.UnlockedAvatarIds);
+        if (doc.UnlockedFrameIds != null) info.UnlockedFrameIds.AddRange(doc.UnlockedFrameIds);
+        // 祈愿服务端权威(3a):今日次数(InitOrLoad 已跑 ResetWishIfDue,doc.WishUsedToday 为重置后当日值)+ 每日上限,
+        //   客户端据此算今日剩余祈愿次数(替代从 blob 读)。
+        info.WishUsedToday = doc.WishUsedToday;
+        info.WishDailyLimit = WishConfigServer.WishDailyLimit;
+        // 皮肤态 / 神庙装饰标志服务端权威(3b):三态并入登录快照,客户端据此拿权威初值(替代从 blob 读)。
+        info.SkinMono = doc.SkinMono;
+        info.SkinMonoId = doc.SkinMonoId;
+        info.TempleDecorated = doc.TempleDecorated;
         AddProperty(info, PropertyType.Coin, doc.Coin);
         AddProperty(info, PropertyType.Diamond, doc.Diamond);
         AddProperty(info, PropertyType.Stamina, doc.Stamina);
@@ -760,6 +842,13 @@ public static class PlayerPropertyServiceHelper
         AddProperty(info, PropertyType.Piety, doc.Piety);
         AddProperty(info, PropertyType.GuardianExp, doc.GuardianExp);
         AddProperty(info, PropertyType.Energy, doc.Energy);
+        // P3 六元层进度计数器并入登录快照,客户端据此拿权威初值(替代从 blob 读)。
+        AddProperty(info, PropertyType.GoddessLevel, doc.GoddessLevel);
+        AddProperty(info, PropertyType.GoddessRating, doc.GoddessRating);
+        AddProperty(info, PropertyType.UnlockedChapter, doc.UnlockedChapter);
+        AddProperty(info, PropertyType.BlindBoxCount, doc.BlindBoxCount);
+        AddProperty(info, PropertyType.TempleRepaired, doc.TempleRepaired);
+        AddProperty(info, PropertyType.NextRepairIndex, doc.NextRepairIndex);
 
         session.Send(new G2C_PlayerInfoSnapshot { Info = info });
     }
@@ -818,6 +907,37 @@ public static class PlayerPropertyServiceHelper
                 upperBound = service.EnergyUpperBound;
                 singleDeltaLimit = service.EnergySingleDeltaLimit;
                 return true;
+            // P3 六元层进度计数器:同套原子写 / 限界信任(纯 $inc 计数器,无体力式恢复结算)。
+            case PropertyType.GoddessLevel:
+                fieldName = nameof(PlayerDoc.GoddessLevel);
+                upperBound = service.GoddessLevelUpperBound;
+                singleDeltaLimit = service.GoddessLevelSingleDeltaLimit;
+                return true;
+            case PropertyType.GoddessRating:
+                fieldName = nameof(PlayerDoc.GoddessRating);
+                upperBound = service.GoddessRatingUpperBound;
+                singleDeltaLimit = service.GoddessRatingSingleDeltaLimit;
+                return true;
+            case PropertyType.UnlockedChapter:
+                fieldName = nameof(PlayerDoc.UnlockedChapter);
+                upperBound = service.UnlockedChapterUpperBound;
+                singleDeltaLimit = service.UnlockedChapterSingleDeltaLimit;
+                return true;
+            case PropertyType.BlindBoxCount:
+                fieldName = nameof(PlayerDoc.BlindBoxCount);
+                upperBound = service.BlindBoxCountUpperBound;
+                singleDeltaLimit = service.BlindBoxCountSingleDeltaLimit;
+                return true;
+            case PropertyType.TempleRepaired:
+                fieldName = nameof(PlayerDoc.TempleRepaired);
+                upperBound = service.TempleRepairedUpperBound;
+                singleDeltaLimit = service.TempleRepairedSingleDeltaLimit;
+                return true;
+            case PropertyType.NextRepairIndex:
+                fieldName = nameof(PlayerDoc.NextRepairIndex);
+                upperBound = service.NextRepairIndexUpperBound;
+                singleDeltaLimit = service.NextRepairIndexSingleDeltaLimit;
+                return true;
             default:
                 fieldName = string.Empty;
                 upperBound = 0L;
@@ -838,6 +958,12 @@ public static class PlayerPropertyServiceHelper
             PropertyType.Piety => doc.Piety,
             PropertyType.GuardianExp => doc.GuardianExp,
             PropertyType.Energy => doc.Energy,
+            PropertyType.GoddessLevel => doc.GoddessLevel,
+            PropertyType.GoddessRating => doc.GoddessRating,
+            PropertyType.UnlockedChapter => doc.UnlockedChapter,
+            PropertyType.BlindBoxCount => doc.BlindBoxCount,
+            PropertyType.TempleRepaired => doc.TempleRepaired,
+            PropertyType.NextRepairIndex => doc.NextRepairIndex,
             _ => 0L
         };
     }

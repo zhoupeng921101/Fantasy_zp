@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+// CosmeticMessage.proto
+// 头像 / 头像框服务端权威协议(原云存档 blob 退役·第 2 批·子批 2c)。
+//
+// 当前佩戴 id + 已解锁集合服务端权威(PlayerDoc.CurrentAvatarId/CurrentFrameId/UnlockedAvatarIds/UnlockedFrameIds);
+// 当前佩戴 id 缺省与客户端默认对齐(头像 1 / 框 101),解锁集合首登空、客户端登录后 bootstrap 上报默认解锁。
+//
+// 换装 C2G_EquipCosmetic:服务端校验目标 id 已在对应解锁集合内(未解锁拒)→ $set 当前 id;身份从会话取,不接受客户端上报账号。
+// 解锁上报 C2G_UnlockCosmetic:client-report 限界信任 —— 客户端按等级配置算出解锁上报 id,服务端 sanity
+//   (id 落合法段 + 集合大小上限 + 频率闸)后 $addToSet 幂等加入集合(重复上报同 id 无副作用)。
+//   饰品低危,不在服务端建整套头像等级配置自算(设计决策)。
+//
+// Kind 取值与客户端 AvatarType 对齐(1=头像 / 2=头像框)。
+// 设计基线:.claude/rules/data-authority.md(修饰服务端权威、解锁 client-report 限界信任、身份服务端)。
+
+/// 修饰种类(与客户端 AvatarType 对齐:1=头像 / 2=头像框)
+enum CosmeticKind
+{
+	CosmeticKindNone = 0,     /// 占位(proto3 枚举须含 0;请求填此值视为非法 Kind 拒)
+	Avatar = 1,               /// 头像
+	Frame = 2,                /// 头像框
+}
+
+/// 换装裁决结果码
+enum EquipCosmeticResultCode
+{
+	Success = 0,              /// 成功:当前佩戴 id 已切换;响应回带最新当前头像 id + 当前框 id
+	NotLoggedIn = 1,          /// 会话未挂账号(35 登录链路异常)→ 客户端重登
+	InvalidKind = 2,          /// Kind 非法(非 1/2)
+	NotUnlocked = 3,          /// 目标 id 不在对应已解锁集合内(未解锁,拒换)→ 客户端回退显示
+	ServiceUnavailable = 4,   /// MongoDB 不可达 / 服务未就绪 / 写库异常
+}
+
+/// 解锁上报裁决结果码
+enum UnlockCosmeticResultCode
+{
+	Success = 0,              /// 成功:id 已幂等加入对应解锁集合(重复上报同 id 也返 Success)
+	NotLoggedIn = 1,          /// 会话未挂账号 → 客户端重登
+	InvalidKind = 2,          /// Kind 非法(非 1/2)
+	InvalidId = 3,            /// id 落在对应合法段外(sanity 拒)
+	SetFull = 4,              /// 该已解锁集合已达大小上限(防灌爆,拒新增)
+	RateLimited = 5,          /// 修饰操作频率过密(限界信任·频率闸,拒)
+	ServiceUnavailable = 6,   /// MongoDB 不可达 / 服务未就绪 / 写库异常
+}
+
+/// 客户端请求换装(身份从会话取,不带账号;服务端校验目标已解锁才切换)
+message C2G_EquipCosmeticRequest // IRequest,G2C_EquipCosmeticResponse
+{
+	int32 Kind = 1;                   /// 修饰种类(CosmeticKind:1=头像 / 2=头像框)
+	int32 Id = 2;                     /// 目标佩戴 id
+}
+
+/// 服务端换装裁决响应
+message G2C_EquipCosmeticResponse // IResponse
+{
+	int32 ResultCode = 1;             /// 裁决结果码(EquipCosmeticResultCode)
+	int32 CurrentAvatarId = 2;        /// 服务端当前权威佩戴头像 id(成功 = 切换后;失败 = 当前值供客户端回退)
+	int32 CurrentFrameId = 3;         /// 服务端当前权威佩戴头像框 id(同上)
+}
+
+/// 客户端上报解锁(client-report:客户端按等级配置算出解锁、上报 id,服务端 sanity 后幂等加入集合)
+message C2G_UnlockCosmeticRequest // IRequest,G2C_UnlockCosmeticResponse
+{
+	int32 Kind = 1;                   /// 修饰种类(CosmeticKind:1=头像 / 2=头像框)
+	int32 Id = 2;                     /// 待解锁 id
+}
+
+/// 服务端解锁上报裁决响应
+message G2C_UnlockCosmeticResponse // IResponse
+{
+	int32 ResultCode = 1;             /// 裁决结果码(UnlockCosmeticResultCode)
+	repeated int32 UnlockedIds = 2;   /// 更新后的对应已解锁集合(成功回带,供客户端对账;失败为当前集合或空)
+}

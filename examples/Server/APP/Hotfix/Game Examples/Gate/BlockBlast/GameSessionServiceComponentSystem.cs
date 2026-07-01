@@ -7,13 +7,13 @@ namespace Fantasy;
 /// <summary>
 /// Block Blast 对局持久服务端组件初始化:绑定 block_blast_session 集合句柄。
 /// 集合首次写入(upsert)时由 MongoDB 自动创建;_id = playerId 主键天然唯一,无范围查询、不需额外索引。
-/// MongoDB 不可达 → Warning + 不绑句柄,后续存盘静默跳过、读盘返 null(等价新建对局),沿 CloudSave 同基线。
+/// MongoDB 不可达 → Warning + 不绑句柄,后续存盘静默跳过、读盘返 null(等价新建对局),不阻断玩法。
 /// </summary>
 public sealed class GameSessionServiceComponentAwakeSystem : AwakeSystem<GameSessionServiceComponent>
 {
     protected override void Awake(GameSessionServiceComponent self)
     {
-        // 初始化放协程里执行(AwakeSystem 本身是同步签名),失败不阻断 Scene 创建(沿 CloudSave 先例)。
+        // 初始化放协程里执行(AwakeSystem 本身是同步签名),失败不阻断 Scene 创建。
         Init(self).Coroutine();
     }
 

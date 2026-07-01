@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+// ProfileStateMessage.proto
+// 皮肤态 / 神庙装饰标志服务端权威协议(原云存档 blob 退役·第 3 批·子批 3b)。
+//
+// 三个「设置状态」(SET 语义,非累加计数,故不走 PropertyChange delta 通道):
+//   SkinMono        —— 是否单色皮肤模式(0=彩色 / 1=单色),全清发奖切皮时置位。
+//   SkinMonoId      —— 当前单色皮肤 id(单色态为在用 sprite 编号;彩色态客户端记 -1 且忽略此值)。
+//   TempleDecorated —— 已装饰厅数标量(客户端活态是 bool[] 前缀数组,装饰与修缮 1:1 同序耦合,
+//                      故已装饰集恒为前缀 [0, count),与 PropertyType.TempleRepaired 同套「标量 ↔ 布尔数组」换算)。
+//
+// C2G_SetProfileState:客户端把这三态一次性全量上报,服务端 sanity(SkinMono ∈ {0,1};SkinMonoId 与
+//   TempleDecorated 落合法段)后原子 $set 到 PlayerDoc。身份从会话取,不接受客户端上报账号。
+//   幂等:重复上报同值 $set 无副作用。皮肤 / 装饰纯装饰、低危,client-report 限界信任(存客户端设的值 + 基本 sanity),
+//   不在服务端建整套皮肤 / 神庙配置自算(设计决策,同头像解锁 client-report)。
+//
+// 登录快照 G2C_PlayerInfoSnapshot 加带这三态下发,客户端据此拿权威初值(替代从 blob 读)。
+// 设计基线:.claude/rules/data-authority.md(装饰服务端权威、client-report 限界信任、身份服务端)。
+
+/// 设置玩家档案状态裁决结果码
+enum SetProfileStateResultCode
+{
+	Success = 0,              /// 成功:三态已原子 $set;响应回带服务端当前权威三态
+	NotLoggedIn = 1,          /// 会话未挂账号(35 登录链路异常)→ 客户端重登
+	InvalidRequest = 2,       /// sanity 拒(SkinMono 非 0/1,或 SkinMonoId / TempleDecorated 落合法段外)
+	ServiceUnavailable = 3,   /// MongoDB 不可达 / 服务未就绪 / 写库异常
+}
+
+/// 客户端全量上报三态(身份从会话取,不带账号;SET 语义,服务端存客户端设的值 + sanity)
+message C2G_SetProfileStateRequest // IRequest,G2C_SetProfileStateResponse
+{
+	int32 SkinMono = 1;               /// 是否单色皮肤模式(0=彩色 / 1=单色)
+	int32 SkinMonoId = 2;             /// 当前单色皮肤 id(彩色态客户端记 -1;单色态为在用编号)
+	int64 TempleDecorated = 3;        /// 已装饰厅数标量(前缀语义,= 已修厅数)
+}
+
+/// 服务端设置三态裁决响应(回带当前权威三态供客户端对账)
+message G2C_SetProfileStateResponse // IResponse
+{
+	int32 ResultCode = 1;             /// 裁决结果码(SetProfileStateResultCode)
+	int32 SkinMono = 2;               /// 服务端当前权威:是否单色(成功 = set 后;失败 = 当前值供客户端回退)
+	int32 SkinMonoId = 3;             /// 服务端当前权威:当前单色皮肤 id(同上)
+	int64 TempleDecorated = 4;        /// 服务端当前权威:已装饰厅数(同上)
+}

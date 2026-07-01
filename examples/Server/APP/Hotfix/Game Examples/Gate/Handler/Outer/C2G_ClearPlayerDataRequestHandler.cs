@@ -10,13 +10,15 @@ namespace Fantasy;
 /// 从零开始、与全新玩家一致。
 ///
 /// 身份从会话取(GateAccountFlagComponent.Account):Account.Name = accountId(= PlayerDoc 主键),
-/// Account.PlayerId = playerId(= CloudSaveDoc 主键)。请求无字段、不接受指定清别人 → 无跨玩家面。
+/// Account.PlayerId = playerId(= GameSessionDoc 主键)。请求无字段、不接受指定清别人 → 无跨玩家面。
 /// 未挂会话身份(组件缺失 / Account 空 / PlayerId 空)→ NotLoggedIn。
 ///
 /// 清的范围 = 该玩家全部 per-player 持久数据(键全部来自会话身份,不接受客户端传参):
 ///   1. 玩家文档(players,_id=accountId):字段重置为默认新手态(保留 AccountId / PlayerId),
 ///      走 PlayerPropertyServiceHelper.ResetToNewbie(与首登 setOnInsert 同一组默认值,清后重登逐字段一致)。
-///   2. 云存档文档(player_cloud_save,_id=playerId):整条删除,下次 Download 返 NoSnapshot 起空盘。
+///   2. 在局对局文档(block_blast_session,_id=playerId,含盘面/分数/发牌器全态/局内叠加层切片):整条删除,
+///      下次进入对局 Load 返 null → 新建(Resumed=false),不复活已清对局。删除经 GameSessionPersistHelper.Delete
+///      (对不可达/异常静默吞掉、幂等无档=已删),故此步不因 DB 抖动回 ServiceUnavailable。
 ///   3. 活动进度(activity_progress,按 Account 删多行):该玩家全部活动 counter / 周期键归零。
 ///   4. 邮件定向 + 领取记录(mail_directed / mail_record,按 Account 删多行)。
 ///   5. 排行榜分数(rank_score,按 Account 删多行):退出所有榜。
@@ -34,7 +36,7 @@ namespace Fantasy;
 /// 故不存在「清库后旧内存值被保存钩子刷回」的竞态。残余窄窗仅为:清档与某并发服务端权威写
 /// (订单交付 / 登录活动结算)交错 → 由客户端段「清完强制重连重登」收口(重登从快照重置内存视图)。
 ///
-/// 幂等:重复清同一账号同样把字段刷成默认值 + 删云存档(本就无则 DeletedCount=0),结果不变、不报错。
+/// 幂等:重复清同一账号同样把字段刷成默认值 + 删在局对局档(本就无则 DeletedCount=0),结果不变、不报错。
 /// </summary>
 public sealed class C2G_ClearPlayerDataRequestHandler
     : MessageRPC<C2G_ClearPlayerDataRequest, G2C_ClearPlayerDataResponse>
@@ -53,7 +55,7 @@ public sealed class C2G_ClearPlayerDataRequestHandler
         }
 
         var accountName = account.Name;   // = accountId,PlayerDoc 主键
-        var playerId = account.PlayerId;  // = CloudSaveDoc 主键
+        var playerId = account.PlayerId;  // = GameSessionDoc 主键
 
         // ── 玩家文档重置 ──────────────────────────────────────────
         var resetErrorCode = await PlayerPropertyServiceHelper.ResetToNewbie(session.Scene, accountName);
@@ -63,21 +65,19 @@ public sealed class C2G_ClearPlayerDataRequestHandler
             return;
         }
 
-        // ── 云存档文档删除 ────────────────────────────────────────
-        var cloudSaveService = session.Scene.GetComponent<CloudSaveServiceComponent>();
-        if (cloudSaveService == null)
+        // ── 在局对局文档删除 ──────────────────────────────────────
+        // 清档把该玩家在局对局(block_blast_session,_id=playerId,含盘面/分数/发牌器全态/局内叠加层切片)一并删,
+        // 使清完重登从零开始(下次进入对局 Load 返 null → 新建 Resumed=false)。
+        var gameSessionService = session.Scene.GetComponent<GameSessionServiceComponent>();
+        if (gameSessionService == null)
         {
-            Log.Error("当前 Scene 下没有 CloudSaveServiceComponent,无法删除云存档。");
+            Log.Error("当前 Scene 下没有 GameSessionServiceComponent,无法删除在局对局档。");
             response.ResultCode = ClearPlayerDataResultCode.ServiceUnavailable;
             return;
         }
 
-        var cloudSaveDeleted = await CloudSaveServiceHelper.Delete(cloudSaveService, playerId);
-        if (!cloudSaveDeleted)
-        {
-            response.ResultCode = ClearPlayerDataResultCode.ServiceUnavailable;
-            return;
-        }
+        // GameSessionPersistHelper.Delete 对不可达 / 异常静默吞掉(Warning 留痕)、幂等:无档等价已删。
+        await GameSessionPersistHelper.Delete(gameSessionService, playerId);
 
         // ── 活动进度删除(activity_progress,按 accountId 删多行) ──
         var activityService = session.Scene.GetComponent<ActivityServiceComponent>();
@@ -150,6 +150,6 @@ public sealed class C2G_ClearPlayerDataRequestHandler
         }
 
         response.ResultCode = ClearPlayerDataResultCode.Success;
-        Log.Info($"ClearPlayerData 清档成功 account={accountName} playerId={playerId}(玩家文档已重置默认态;云存档/活动进度/邮件/排行榜分数/兑换记录/属性流水已删除)。");
+        Log.Info($"ClearPlayerData 清档成功 account={accountName} playerId={playerId}(玩家文档已重置默认态;在局对局档/活动进度/邮件/排行榜分数/兑换记录/属性流水已删除)。");
     }
 }

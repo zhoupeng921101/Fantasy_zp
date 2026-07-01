@@ -75,6 +75,8 @@ public sealed class C2G_GameStartRequestHandler : MessageRPC<C2G_GameStartReques
         response.Step = game.Step;
         response.Score = game.Score;
         response.Resumed = resumed;
+        // 局内叠加层切片回带:续局=Rehydrate 恢复出的切片原文;新建=空串(Init 已清)。opaque,客户端 import。
+        response.SliceJson = game.SliceJson ?? string.Empty;
         GameSessionHelper.FillCandidateQueue(game, response.InitialTrio);
         GameSessionHelper.FillBoard(game, response.Board);
         response.GeneratorState = GameSessionHelper.BuildGenState(game);

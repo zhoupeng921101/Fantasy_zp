@@ -94,6 +94,42 @@ public sealed class PlayerPropertyServiceComponent : Entity
     public long GuardianExpSingleDeltaLimit;
     public long EnergySingleDeltaLimit;
 
+    // ---- P3 新增:六种元层进度计数器的初始值 / 类型上界 / 单次变更上限(原云存档 blob 迁出第 1 批,2026-07)----
+    // 计数器均 Initial=0(全新玩家进度为 0);上界是宽松 sanity 天花板(纯挡荒谬值,非玩法硬上限)。
+    // 单次 delta 上限是限界信任主杠杆:必须 ≥ 真实单次最大跳变(玩法一次结算涨几级/几盒),否则正常上报被误拒;
+    // 拿不准从宽(设计 data-authority 限界信任「只防异常大跳」)。真实玩法产销速率确定后按 playflow 调参。
+
+    /// <summary>女神等级首登初始值 / 上界。</summary>
+    public long GoddessLevelInitial;
+    public long GoddessLevelUpperBound;
+
+    /// <summary>女神评级首登初始值 / 上界。</summary>
+    public long GoddessRatingInitial;
+    public long GoddessRatingUpperBound;
+
+    /// <summary>章节解锁数首登初始值 / 上界。</summary>
+    public long UnlockedChapterInitial;
+    public long UnlockedChapterUpperBound;
+
+    /// <summary>盲盒计数首登初始值 / 上界。</summary>
+    public long BlindBoxCountInitial;
+    public long BlindBoxCountUpperBound;
+
+    /// <summary>神庙修缮计数首登初始值 / 上界。</summary>
+    public long TempleRepairedInitial;
+    public long TempleRepairedUpperBound;
+
+    /// <summary>神庙修缮游标首登初始值 / 上界。</summary>
+    public long NextRepairIndexInitial;
+    public long NextRepairIndexUpperBound;
+
+    public long GoddessLevelSingleDeltaLimit;
+    public long GoddessRatingSingleDeltaLimit;
+    public long UnlockedChapterSingleDeltaLimit;
+    public long BlindBoxCountSingleDeltaLimit;
+    public long TempleRepairedSingleDeltaLimit;
+    public long NextRepairIndexSingleDeltaLimit;
+
     /// <summary>
     /// 同账号同属性两次变更最小间隔(Unix 毫秒,限界信任·频率限制)。短于此判定脚本刷分,拒。
     /// 进程内 ConcurrentDictionary 持(account|propertyType → 上次变更时刻),进程重启清零(沿 P1 RankAntiCheatPolicy 同款做法,反作弊收益高于代价低于跨进程复杂度)。
@@ -107,6 +143,48 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// </summary>
     public readonly ConcurrentDictionary<string, long> LastChangeAtMs = new ConcurrentDictionary<string, long>();
 
-    /// <summary>玩家数据 schema 版本(常量 4;P2 Phase 1 加 OrderCursor / LastOrderRefreshMs / OrderDeliveredMask 后升至 4)。</summary>
-    public const int CurrentSchemaVersion = 4;
+    // ---- 头像 / 头像框服务端权威(原云存档 blob 迁出第 2 批·子批 2c,2026-07)----
+    // 当前佩戴 id 缺省 + 已解锁集合 sanity 边界。当前 id 缺省与客户端默认对齐(头像 1 / 框 101)。
+    // 换装校验目标 id 是否已解锁,不依赖服务端整套头像表;解锁走 client-report 限界信任:
+    //   id 落在合法段([MinAvatarId, MaxAvatarId] / [MinFrameId, MaxFrameId])+ 集合大小上限防灌爆 + 频率闸。
+    // 段边界与集合上限均为**占位值**,后续引入服务端头像配置表(或与客户端 Luban 同源)时收紧。
+
+    /// <summary>当前佩戴头像 id 首登缺省(= 客户端 PlayerInfo.DefaultAvatarId)。</summary>
+    public int CurrentAvatarIdInitial;
+    /// <summary>当前佩戴头像框 id 首登缺省(= 客户端 PlayerInfo.DefaultFrameId)。</summary>
+    public int CurrentFrameIdInitial;
+
+    /// <summary>头像合法 id 段下 / 上界(sanity:解锁上报 id 落此段外拒;客户端编排头像用 1–100 段)。</summary>
+    public int MinAvatarId;
+    public int MaxAvatarId;
+    /// <summary>头像框合法 id 段下 / 上界(sanity:客户端编排框用 101+ 段)。</summary>
+    public int MinFrameId;
+    public int MaxFrameId;
+
+    /// <summary>单个已解锁集合大小上限(防客户端灌爆文档;超上限则解锁上报拒)。</summary>
+    public int UnlockedSetMaxSize;
+
+    /// <summary>同账号两次修饰操作(换装 / 解锁上报)最小间隔(Unix 毫秒,限界信任·频率闸)。</summary>
+    public long CosmeticMinIntervalMs;
+
+    /// <summary>
+    /// 进程内修饰操作频率追踪表(限界信任·防脚本刷:key = "account|op",value = 上次操作时刻 Unix 毫秒)。
+    /// 进程重启清零(沿 LastChangeAtMs 同款做法;攻击者重启服务端成本远高于刷解锁收益)。
+    /// </summary>
+    public readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> LastCosmeticAtMs
+        = new System.Collections.Concurrent.ConcurrentDictionary<string, long>();
+
+    // ---- 皮肤态 / 神庙装饰标志服务端权威 sanity 配置(原云存档 blob 迁出第 3 批·子批 3b,2026-07)----
+    // client-report 限界信任:皮肤 / 装饰纯装饰低危,只做基本 sanity(SkinMono ∈ {0,1} 由 helper 直判;
+    //   SkinMonoId / TempleDecorated 落合法段由下列边界界定)。段边界均为占位值,后续引入服务端皮肤 / 神庙配置表时收紧。
+
+    /// <summary>单色皮肤 id 合法段下 / 上界(sanity:客户端上报 id 落此段外拒。彩色态哨兵 -1 单独放行,见 helper)。</summary>
+    public int SkinMonoIdMin;
+    public int SkinMonoIdMax;
+
+    /// <summary>已装饰厅数标量上界(sanity:客户端上报超此值拒。0 到上界闭区间合法;= 神庙厅数宽松天花板)。</summary>
+    public long TempleDecoratedMax;
+
+    /// <summary>玩家数据 schema 版本(常量 9;皮肤态 / 神庙装饰加 SkinMono / SkinMonoId / TempleDecorated 3 字段后由 8 升至 9)。</summary>
+    public const int CurrentSchemaVersion = 9;
 }

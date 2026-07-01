@@ -28,6 +28,7 @@ public static class GameSessionHelper
         session.Score = 0;
         session.LastTrioAlgo = AlgorithmKind.RandomNoDie;
         session.ClearToolInFlight = false; // 对象池复用防残留在途标记
+        session.SliceJson = string.Empty;  // 新建局无切片,清对象池复用残留
         session.Board = new BinaryBoard();
 
         var cfg = GenCoreDeterminismHarness.DefaultWeightConfig();
@@ -63,6 +64,7 @@ public static class GameSessionHelper
         session.Score = doc.Score;
         session.LastTrioAlgo = doc.LastTrioAlgo < 0 ? AlgorithmKind.RandomNoDie : (AlgorithmKind)doc.LastTrioAlgo;
         session.ClearToolInFlight = false; // 对象池复用防残留在途标记
+        session.SliceJson = doc.SliceJson ?? string.Empty; // 还原局内叠加层切片(opaque,不解析)
 
         // 还原棋盘 8 行位掩码。
         session.Board = new BinaryBoard();
@@ -113,6 +115,7 @@ public static class GameSessionHelper
             BcCooldown = view.BcCooldown,
             GenLastAlgo = view.LastAlgo,
             GenLastTierId = view.LastTierId,
+            SliceJson = session.SliceJson ?? string.Empty, // opaque 切片原样落盘,服务端不解析
         };
 
         doc.Board = new int[BinaryBoard.RowCount];

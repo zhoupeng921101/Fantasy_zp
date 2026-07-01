@@ -52,6 +52,13 @@ public sealed class GameSession : Entity
     public EntityReference<Session> Session;
 
     /// <summary>
+    /// 局内 cosmetic + 合成经济叠加层不透明切片(客户端 MergeIngameSave 的 JSON 原文)。
+    /// opaque:服务端只搬运、不解析——落子/消除道具请求把客户端当前切片搭车带来,存盘时随 Doc 一并写;
+    /// 续局 / 快照恢复时从 Doc 原样回带供客户端 import。空串 = 无切片(新建局)。
+    /// </summary>
+    public string SliceJson = string.Empty;
+
+    /// <summary>
     /// 消除道具在途守卫(同会话同一 ClearTool 动作在途时置位)。
     /// 消除道具裁决把「扣体力」(await)放在 Step 推进之前,await 窗口内 Step 仍是旧值:
     /// 弱网重发使两条同 baseStep 的 ClearTool 并发到达,若无守卫会都通过 baseStep==Step 分支 → 双扣体力 + Step 自增 2。

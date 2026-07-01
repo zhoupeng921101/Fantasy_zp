@@ -4,7 +4,7 @@ syntax = "proto3";
 // 清空玩家数据·重置为新手:客户端按当前会话 playerId 请求把自己的持久数据清掉/重置为默认新手态,
 // 保留账号身份(playerId 不变、账号→playerId 绑定不变),使该号下次登录从零开始、与全新玩家一致。
 // 范围:玩家文档(四货币 / 体力恢复锚点 / 订单状态等所有持久字段)字段重置为默认值;
-// 云存档文档(CloudSaveDoc,_id=playerId)整条删除。
+// 在局对局文档(block_blast_session,_id=playerId,含盘面/分数/发牌器全态/局内叠加层切片)整条删除。
 // 身份从会话取(GateAccountFlagComponent.Account),请求不带任何参数,只清调用方自己,无跨玩家面。
 //
 // 文件名 Z 前缀刻意排到所有现存 .proto 之后:导出工具按文件名字母序遍历分配 opcode(单调计数器),
@@ -13,7 +13,7 @@ syntax = "proto3";
 /// 清档裁决结果码
 enum ClearPlayerDataResultCode
 {
-	/// 清档成功(玩家文档已重置为默认新手态、云存档文档已删除或本就不存在)。幂等:重复清同样返 Success。
+	/// 清档成功(玩家文档已重置为默认新手态、在局对局文档已删除或本就不存在)。幂等:重复清同样返 Success。
 	Success = 0,
 	/// 会话未挂账号身份(35 登录失败 / 链路异常 / Account.PlayerId 空)。客户端段重登。
 	NotLoggedIn = 1,

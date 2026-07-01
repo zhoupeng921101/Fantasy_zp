@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+// WishMessage.proto
+// 祈愿(每日限领体力)服务端权威协议(原云存档 blob 退役·第 3 批·子批 3a)。
+//
+// 每日祈愿次数闸 + 灵力扣 + 体力发一律服务端裁决(PlayerDoc.WishUsedToday / WishLastResetUnixMs)。
+// 请求不带账号 / 不带费用 / 不带次数——身份从会话取,灵力费与体力发由服务端按 WishConfigServer 派生(反作弊红线)。
+// 处理原子:懒每日重置(按服务端本地日期跨天则 WishUsedToday=0)→ 门控(WishUsedToday >= WishDailyLimit 拒)→
+//   扣灵力 WishSoulCost(灵力不足拒、不发)→ 发体力 WishEnergyGain(服务端夹 EnergyCap 软上限,复刻客户端
+//   Math.Min(EnergyCap, Energy+gain))→ WishUsedToday+1。两笔资源变更走 ChangeProperty(serverAuthoritative:true)。
+//
+// 设计基线:.claude/rules/data-authority.md(每日限领资源=服务端闸 + 派生、限界信任、身份服务端)。
+
+/// 祈愿裁决结果码
+enum WishForEnergyResultCode
+{
+	Success = 0,              /// 成功:灵力已扣、体力已发(夹软上限)、WishUsedToday+1;响应回带最新值供客户端对账
+	NotLoggedIn = 1,          /// 会话未挂账号(35 登录链路异常)→ 客户端重登
+	DailyLimitReached = 2,    /// 今日祈愿次数已达上限(懒重置后仍 >= WishDailyLimit),不扣不发
+	NotEnoughSoul = 3,        /// 灵力不足(扣灵力失败),不发体力
+	ServiceUnavailable = 4,   /// MongoDB 不可达 / 服务未就绪 / 写库异常
+}
+
+/// 客户端请求祈愿兑体力(身份从会话取,不带账号 / 费用 / 次数——服务端按 WishConfigServer 派生 + 按 PlayerDoc 判每日闸)
+message C2G_WishForEnergyRequest // IRequest,G2C_WishForEnergyResponse
+{
+}
+
+/// 服务端祈愿裁决响应
+message G2C_WishForEnergyResponse // IResponse
+{
+	int32 ResultCode = 1;              /// 裁决结果码(WishForEnergyResultCode)
+	int64 SoulPower = 2;               /// 服务端当前权威灵力(成功 = 扣后;失败 = 当前余额供客户端回退;读取失败为 0)
+	int64 Energy = 3;                  /// 服务端当前权威体力(成功 = 发后夹软上限;失败 = 当前值;读取失败为 0)
+	int32 WishUsedToday = 4;           /// 今日已用祈愿次数(懒重置 + 本次成功 +1 后的权威值;失败 = 懒重置后当前值)
+	int32 WishDailyLimit = 5;          /// 每日祈愿次数上限(= WishConfigServer.WishDailyLimit,供客户端算今日剩余次数)
+}

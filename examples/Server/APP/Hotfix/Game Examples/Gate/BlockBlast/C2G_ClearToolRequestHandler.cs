@@ -145,6 +145,9 @@ public sealed class C2G_ClearToolRequestHandler : MessageRPC<C2G_ClearToolReques
         response.ClearedCells = clearedCells;
         response.NewEnergy = energyAfter;
 
+        // 搭车的局内叠加层切片(opaque,不解析)写进实体,随下方 BuildDoc 存盘;供续局 / 快照回带。
+        game.SliceJson = request.SliceJson ?? string.Empty;
+
         // 清行列成功后存盘:盘面/步号落 Doc,供续局 / 快照恢复(与落子成功后存盘同口径)。
         var persistService = session.Scene.GetComponent<GameSessionServiceComponent>();
         await GameSessionPersistHelper.Save(persistService, GameSessionHelper.BuildDoc(game));

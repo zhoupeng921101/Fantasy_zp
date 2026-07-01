@@ -6,6 +6,11 @@ syntax = "proto3";
 // place 请求只携带玩家输入(候选槽位 + 落点),绝不携带 shapeId —— 形状由客户端无从指定,
 // 这是关闭选块作弊面的核心红线。
 // 棋盘以 8 行位掩码(RowBinary,每行低 8 位有效)传输,与 BinaryBoard 内部表示同构。
+//
+// 局内叠加层切片(SliceJson):盘面颜色 / 元素叠加层 / 手牌 cosmetic / 合成区库存 / 连消态 / 订单本地统计等
+// 叠在权威 shapeId 序列上、无法从服务端盘面重推的 cosmetic + 合成经济层,以不透明 JSON 字符串携带
+// (客户端 MergeIngameSave 原文)。服务端只搬运、绝不解析/校验;搭车每步落子 / 消除道具上行,
+// 随对局文档存盘;续局 / 快照下行原样回带供客户端 import。是云存档 blob 退役后该层的唯一服务端归属。
 
 /// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态 + PRNG 游标。
 /// 供重连恢复与客户端发牌预测对账消费;权威态回带,不被客户端反向写入。
@@ -42,6 +47,7 @@ message G2C_GameStartResponse // IResponse
 	bool Resumed = 6;                    /// 是否为续局恢复(true=恢复已有对局;false=新建)
 	int32 Score = 7;                     /// 当前权威分数(新建 = 0;续局 = 恢复值)
 	repeated int32 Board = 8;            /// 当前权威棋盘 8 行位掩码(新建=空盘;续局=恢复盘面)
+	string SliceJson = 9;                /// 局内 cosmetic + 合成经济叠加层不透明切片(续局=恢复出的切片原文;新建=空串)。服务端只搬运不解析,客户端 import
 }
 
 /// 客户端落子请求:只传输入(候选槽位 + 落点),形状服务端权威、不携带 shapeId(反作弊红线)
@@ -52,6 +58,7 @@ message C2G_PlaceRequest // IRequest,G2C_PlaceResponse
 	int32 CandidateIndex = 3;            /// 落哪个候选槽(0..2)
 	int32 PosX = 4;                      /// 落点列(BinaryBoard 坐标 X)
 	int32 PosY = 5;                      /// 落点行(BinaryBoard 坐标 Y)
+	string SliceJson = 6;                /// 客户端当前局内叠加层不透明切片(MergeIngameSave JSON),搭车每步落子。服务端只搬运不解析,成功推进时随 Doc 存盘
 }
 /// 服务端落子裁决 + 最新权威态
 message G2C_PlaceResponse // IResponse
@@ -95,6 +102,7 @@ message C2G_ClearToolRequest // IRequest,G2C_ClearToolResponse
 	int32 BaseStep = 2;                  /// 客户端认为的当前步号(幂等基准:==执行 / <幂等回当前态 / >拒绝回快照)
 	int32 PosX = 3;                      /// 目标格列(BinaryBoard 坐标 X)
 	int32 PosY = 4;                      /// 目标格行(BinaryBoard 坐标 Y)
+	string SliceJson = 5;                /// 客户端当前局内叠加层不透明切片(MergeIngameSave JSON),搭车每次消除道具。服务端只搬运不解析,成功清行列时随 Doc 存盘
 }
 /// 服务端消除道具裁决 + 最新权威态
 message G2C_ClearToolResponse // IResponse
@@ -143,6 +151,7 @@ message G2C_GameSnapshotResponse // IResponse
 	int32 Step = 4;                      /// 当前权威步号
 	repeated int32 CandidateQueue = 5;   /// 当前候选队列 shapeId
 	BlockGenState GeneratorState = 6;    /// 完整生成器状态向量
+	string SliceJson = 7;                /// 局内 cosmetic + 合成经济叠加层不透明切片(恢复出的切片原文;无切片=空串)。服务端只搬运不解析,客户端 import
 }
 
 /// 查询快照结果码

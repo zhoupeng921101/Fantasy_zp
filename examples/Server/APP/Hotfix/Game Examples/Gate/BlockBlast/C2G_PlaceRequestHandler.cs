@@ -66,6 +66,8 @@ public sealed class C2G_PlaceRequestHandler : MessageRPC<C2G_PlaceRequest, G2C_P
             // 存盘失败不回滚裁决(权威态已在内存推进),下次落子存盘补上(见 GameSessionPersistHelper.Save)。
             if (response.ResultCode == PlaceResultCode.StepAdvanced)
             {
+                // 搭车的局内叠加层切片(opaque,不解析)写进实体,随下方 BuildDoc 存盘;供续局 / 快照回带。
+                game.SliceJson = request.SliceJson ?? string.Empty;
                 var persistService = session.Scene.GetComponent<GameSessionServiceComponent>();
 
                 // 落子体力服务端派生:放在 IsGameOver 判定之前,故触发终局那一手也照常派生体力。

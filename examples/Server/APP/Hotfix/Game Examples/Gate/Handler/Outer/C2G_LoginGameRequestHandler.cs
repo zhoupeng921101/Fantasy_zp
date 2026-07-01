@@ -64,8 +64,8 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         }
         // var account = Entity.Create<Account>(session.Scene);
         account.Session = session;
-        // 把签发/认领得到的 playerId 一并挂到会话级 Account 实体上,后续 handler(如 P3 云存档)直接读
-        // flag.Account.PlayerId,不必为每次请求回库读 PlayerDoc(身份取用 fast path)。
+        // 把签发/认领得到的 playerId 一并挂到会话级 Account 实体上,后续 handler(如按 playerId 寻址的在局对局档)
+        // 直接读 flag.Account.PlayerId,不必为每次请求回库读 PlayerDoc(身份取用 fast path)。
         account.PlayerId = playerId;
         // 挂载组件用来标记这个Session下的Account，后面下线流程也会用到
         session.AddComponent<GateAccountFlagComponent>().Account = account;
@@ -77,8 +77,8 @@ public sealed class C2G_LoginGameRequestHandler : MessageRPC<C2G_LoginGameReques
         // 放 Online 之后:确保 GateAccountFlagComponent + account.Session 都已挂全,推送通路稳。
         PlayerPropertyServiceHelper.SendPlayerInfoTo(session, accountName, playerDoc);
 
-        // 订单快照初次下发与云存档下载合并由 C2G_EnterMainGameRequest 一次性原子回带,
-        // 由客户端在主游戏 UI 即将就绪时主动发起;登录链路只下发玩家信息快照,不在此处下发订单 / 云存档。
+        // 订单快照初次下发由 C2G_EnterMainGameRequest 回带,由客户端在主游戏 UI 即将就绪时主动发起;
+        // 登录链路只下发玩家信息快照,不在此处下发订单。
 
         // 活动系统登录触发(设计 39 §3.5 Login 类节律):遍历 Type=Login 活动各自 counter+1 + 判达标 + 抢占 + 发邮件。
         // 不写入 response、不影响 G2C_LoginGameResponse 契约(零客户端协议改);

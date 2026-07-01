@@ -339,10 +339,11 @@ namespace Fantasy
             Resumed = default;
             Score = default;
             Board.Clear();
+            SliceJson = default;
             MessageObjectPool<G2C_GameStartResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_GameStartResponse; } 
-        [ProtoMember(9)]
+        [ProtoMember(10)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 本局唯一 id(服务端签发)
@@ -384,6 +385,11 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(8)]
         public List<int> Board { get; set; } = new List<int>();
+        /// <summary>
+        /// 局内 cosmetic + 合成经济叠加层不透明切片(续局=恢复出的切片原文;新建=空串)。服务端只搬运不解析,客户端 import
+        /// </summary>
+        [ProtoMember(9)]
+        public string SliceJson { get; set; }
     }
     /// <summary>
     /// 客户端落子请求:只传输入(候选槽位 + 落点),形状服务端权威、不携带 shapeId(反作弊红线)
@@ -427,6 +433,7 @@ namespace Fantasy
             CandidateIndex = default;
             PosX = default;
             PosY = default;
+            SliceJson = default;
             MessageObjectPool<C2G_PlaceRequest>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.C2G_PlaceRequest; } 
@@ -457,6 +464,11 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(5)]
         public int PosY { get; set; }
+        /// <summary>
+        /// 客户端当前局内叠加层不透明切片(MergeIngameSave JSON),搭车每步落子。服务端只搬运不解析,成功推进时随 Doc 存盘
+        /// </summary>
+        [ProtoMember(6)]
+        public string SliceJson { get; set; }
     }
     /// <summary>
     /// 服务端落子裁决 + 最新权威态
@@ -615,6 +627,7 @@ namespace Fantasy
             BaseStep = default;
             PosX = default;
             PosY = default;
+            SliceJson = default;
             MessageObjectPool<C2G_ClearToolRequest>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.C2G_ClearToolRequest; } 
@@ -640,6 +653,11 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(4)]
         public int PosY { get; set; }
+        /// <summary>
+        /// 客户端当前局内叠加层不透明切片(MergeIngameSave JSON),搭车每次消除道具。服务端只搬运不解析,成功清行列时随 Doc 存盘
+        /// </summary>
+        [ProtoMember(5)]
+        public string SliceJson { get; set; }
     }
     /// <summary>
     /// 服务端消除道具裁决 + 最新权威态
@@ -828,10 +846,11 @@ namespace Fantasy
                 GeneratorState.Dispose();
                 GeneratorState = null;
             }
+            SliceJson = default;
             MessageObjectPool<G2C_GameSnapshotResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_GameSnapshotResponse; } 
-        [ProtoMember(7)]
+        [ProtoMember(8)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 结果码
@@ -863,25 +882,30 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(6)]
         public BlockGenState GeneratorState { get; set; }
+        /// <summary>
+        /// 局内 cosmetic + 合成经济叠加层不透明切片(恢复出的切片原文;无切片=空串)。服务端只搬运不解析,客户端 import
+        /// </summary>
+        [ProtoMember(7)]
+        public string SliceJson { get; set; }
     }
     /// <summary>
-    /// 客户端上传一份存档快照(身份从会话取,不携带 playerId)
+    /// 客户端请求换装(身份从会话取,不带账号;服务端校验目标已解锁才切换)
     /// </summary>
     [Serializable]
     [ProtoContract]
-    public partial class C2G_CloudSaveUploadRequest : AMessage, IRequest
+    public partial class C2G_EquipCosmeticRequest : AMessage, IRequest
     {
-        public static C2G_CloudSaveUploadRequest Create(bool autoReturn = true)
+        public static C2G_EquipCosmeticRequest Create(bool autoReturn = true)
         {
-            var c2G_CloudSaveUploadRequest = MessageObjectPool<C2G_CloudSaveUploadRequest>.Rent();
-            c2G_CloudSaveUploadRequest.AutoReturn = autoReturn;
+            var c2G_EquipCosmeticRequest = MessageObjectPool<C2G_EquipCosmeticRequest>.Rent();
+            c2G_EquipCosmeticRequest.AutoReturn = autoReturn;
             
             if (!autoReturn)
             {
-                c2G_CloudSaveUploadRequest.SetIsPool(false);
+                c2G_EquipCosmeticRequest.SetIsPool(false);
             }
             
-            return c2G_CloudSaveUploadRequest;
+            return c2G_EquipCosmeticRequest;
         }
         
         public void Return()
@@ -901,42 +925,42 @@ namespace Fantasy
         public void Dispose()
         {
             if (!IsPool()) return; 
-            Version = default;
-            Blob = null;
-            MessageObjectPool<C2G_CloudSaveUploadRequest>.Return(this);
+            Kind = default;
+            Id = default;
+            MessageObjectPool<C2G_EquipCosmeticRequest>.Return(this);
         }
-        public uint OpCode() { return OuterOpcode.C2G_CloudSaveUploadRequest; } 
+        public uint OpCode() { return OuterOpcode.C2G_EquipCosmeticRequest; } 
         [ProtoIgnore]
-        public G2C_CloudSaveUploadResponse ResponseType { get; set; }
+        public G2C_EquipCosmeticResponse ResponseType { get; set; }
         /// <summary>
-        /// 客户端本地基线版本号(本次上传期望推进到的版本;必须 > 0 且 > 上次本端拉到的 ServerVersion)
+        /// 修饰种类(CosmeticKind:1=头像 / 2=头像框)
         /// </summary>
         [ProtoMember(1)]
-        public long Version { get; set; }
+        public int Kind { get; set; }
         /// <summary>
-        /// 客户端序列化好的存档字节流(服务端不解析其内部结构,原样存)
+        /// 目标佩戴 id
         /// </summary>
         [ProtoMember(2)]
-        public byte[] Blob { get; set; }
+        public int Id { get; set; }
     }
     /// <summary>
-    /// 服务端上传裁决响应
+    /// 服务端换装裁决响应
     /// </summary>
     [Serializable]
     [ProtoContract]
-    public partial class G2C_CloudSaveUploadResponse : AMessage, IResponse
+    public partial class G2C_EquipCosmeticResponse : AMessage, IResponse
     {
-        public static G2C_CloudSaveUploadResponse Create(bool autoReturn = true)
+        public static G2C_EquipCosmeticResponse Create(bool autoReturn = true)
         {
-            var g2C_CloudSaveUploadResponse = MessageObjectPool<G2C_CloudSaveUploadResponse>.Rent();
-            g2C_CloudSaveUploadResponse.AutoReturn = autoReturn;
+            var g2C_EquipCosmeticResponse = MessageObjectPool<G2C_EquipCosmeticResponse>.Rent();
+            g2C_EquipCosmeticResponse.AutoReturn = autoReturn;
             
             if (!autoReturn)
             {
-                g2C_CloudSaveUploadResponse.SetIsPool(false);
+                g2C_EquipCosmeticResponse.SetIsPool(false);
             }
             
-            return g2C_CloudSaveUploadResponse;
+            return g2C_EquipCosmeticResponse;
         }
         
         public void Return()
@@ -958,47 +982,47 @@ namespace Fantasy
             if (!IsPool()) return; 
             ErrorCode = 0;
             ResultCode = default;
-            ServerVersion = default;
-            ServerBlob = null;
-            MessageObjectPool<G2C_CloudSaveUploadResponse>.Return(this);
+            CurrentAvatarId = default;
+            CurrentFrameId = default;
+            MessageObjectPool<G2C_EquipCosmeticResponse>.Return(this);
         }
-        public uint OpCode() { return OuterOpcode.G2C_CloudSaveUploadResponse; } 
+        public uint OpCode() { return OuterOpcode.G2C_EquipCosmeticResponse; } 
         [ProtoMember(4)]
         public uint ErrorCode { get; set; }
         /// <summary>
-        /// 裁决结果码
+        /// 裁决结果码(EquipCosmeticResultCode)
         /// </summary>
         [ProtoMember(1)]
-        public CloudSaveUploadResultCode ResultCode { get; set; }
+        public int ResultCode { get; set; }
         /// <summary>
-        /// 服务端当前权威版本号(Accepted = 本次 version;Stale = 已存 version;无存档 / 其它失败 = 0)
+        /// 服务端当前权威佩戴头像 id(成功 = 切换后;失败 = 当前值供客户端回退)
         /// </summary>
         [ProtoMember(2)]
-        public long ServerVersion { get; set; }
+        public int CurrentAvatarId { get; set; }
         /// <summary>
-        /// 仅 Stale 时回带服务端当前权威 blob,便于客户端合并;其它情况为空
+        /// 服务端当前权威佩戴头像框 id(同上)
         /// </summary>
         [ProtoMember(3)]
-        public byte[] ServerBlob { get; set; }
+        public int CurrentFrameId { get; set; }
     }
     /// <summary>
-    /// 客户端拉取自己当前 playerId 的存档快照(身份从会话取)
+    /// 客户端上报解锁(client-report:客户端按等级配置算出解锁、上报 id,服务端 sanity 后幂等加入集合)
     /// </summary>
     [Serializable]
     [ProtoContract]
-    public partial class C2G_CloudSaveDownloadRequest : AMessage, IRequest
+    public partial class C2G_UnlockCosmeticRequest : AMessage, IRequest
     {
-        public static C2G_CloudSaveDownloadRequest Create(bool autoReturn = true)
+        public static C2G_UnlockCosmeticRequest Create(bool autoReturn = true)
         {
-            var c2G_CloudSaveDownloadRequest = MessageObjectPool<C2G_CloudSaveDownloadRequest>.Rent();
-            c2G_CloudSaveDownloadRequest.AutoReturn = autoReturn;
+            var c2G_UnlockCosmeticRequest = MessageObjectPool<C2G_UnlockCosmeticRequest>.Rent();
+            c2G_UnlockCosmeticRequest.AutoReturn = autoReturn;
             
             if (!autoReturn)
             {
-                c2G_CloudSaveDownloadRequest.SetIsPool(false);
+                c2G_UnlockCosmeticRequest.SetIsPool(false);
             }
             
-            return c2G_CloudSaveDownloadRequest;
+            return c2G_UnlockCosmeticRequest;
         }
         
         public void Return()
@@ -1018,30 +1042,42 @@ namespace Fantasy
         public void Dispose()
         {
             if (!IsPool()) return; 
-            MessageObjectPool<C2G_CloudSaveDownloadRequest>.Return(this);
+            Kind = default;
+            Id = default;
+            MessageObjectPool<C2G_UnlockCosmeticRequest>.Return(this);
         }
-        public uint OpCode() { return OuterOpcode.C2G_CloudSaveDownloadRequest; } 
+        public uint OpCode() { return OuterOpcode.C2G_UnlockCosmeticRequest; } 
         [ProtoIgnore]
-        public G2C_CloudSaveDownloadResponse ResponseType { get; set; }
+        public G2C_UnlockCosmeticResponse ResponseType { get; set; }
+        /// <summary>
+        /// 修饰种类(CosmeticKind:1=头像 / 2=头像框)
+        /// </summary>
+        [ProtoMember(1)]
+        public int Kind { get; set; }
+        /// <summary>
+        /// 待解锁 id
+        /// </summary>
+        [ProtoMember(2)]
+        public int Id { get; set; }
     }
     /// <summary>
-    /// 服务端下载响应
+    /// 服务端解锁上报裁决响应
     /// </summary>
     [Serializable]
     [ProtoContract]
-    public partial class G2C_CloudSaveDownloadResponse : AMessage, IResponse
+    public partial class G2C_UnlockCosmeticResponse : AMessage, IResponse
     {
-        public static G2C_CloudSaveDownloadResponse Create(bool autoReturn = true)
+        public static G2C_UnlockCosmeticResponse Create(bool autoReturn = true)
         {
-            var g2C_CloudSaveDownloadResponse = MessageObjectPool<G2C_CloudSaveDownloadResponse>.Rent();
-            g2C_CloudSaveDownloadResponse.AutoReturn = autoReturn;
+            var g2C_UnlockCosmeticResponse = MessageObjectPool<G2C_UnlockCosmeticResponse>.Rent();
+            g2C_UnlockCosmeticResponse.AutoReturn = autoReturn;
             
             if (!autoReturn)
             {
-                g2C_CloudSaveDownloadResponse.SetIsPool(false);
+                g2C_UnlockCosmeticResponse.SetIsPool(false);
             }
             
-            return g2C_CloudSaveDownloadResponse;
+            return g2C_UnlockCosmeticResponse;
         }
         
         public void Return()
@@ -1063,28 +1099,22 @@ namespace Fantasy
             if (!IsPool()) return; 
             ErrorCode = 0;
             ResultCode = default;
-            ServerVersion = default;
-            ServerBlob = null;
-            MessageObjectPool<G2C_CloudSaveDownloadResponse>.Return(this);
+            UnlockedIds.Clear();
+            MessageObjectPool<G2C_UnlockCosmeticResponse>.Return(this);
         }
-        public uint OpCode() { return OuterOpcode.G2C_CloudSaveDownloadResponse; } 
-        [ProtoMember(4)]
+        public uint OpCode() { return OuterOpcode.G2C_UnlockCosmeticResponse; } 
+        [ProtoMember(3)]
         public uint ErrorCode { get; set; }
         /// <summary>
-        /// 裁决结果码
+        /// 裁决结果码(UnlockCosmeticResultCode)
         /// </summary>
         [ProtoMember(1)]
-        public CloudSaveDownloadResultCode ResultCode { get; set; }
+        public int ResultCode { get; set; }
         /// <summary>
-        /// 服务端当前权威版本号(NoSnapshot / 其它失败 = 0)
+        /// 更新后的对应已解锁集合(成功回带,供客户端对账;失败为当前集合或空)
         /// </summary>
         [ProtoMember(2)]
-        public long ServerVersion { get; set; }
-        /// <summary>
-        /// 服务端存储的存档字节流(NoSnapshot / 失败 = 空)
-        /// </summary>
-        [ProtoMember(3)]
-        public byte[] ServerBlob { get; set; }
+        public List<int> UnlockedIds { get; set; } = new List<int>();
     }
     /// <summary>
     /// 客户端进入主游戏(登录后、主游戏可交互前发起;每次进入主游戏阶段调用一次)
@@ -1130,7 +1160,7 @@ namespace Fantasy
         public G2C_EnterMainGameResponse ResponseType { get; set; }
     }
     /// <summary>
-    /// 服务端对进入主游戏请求的一次性原子响应:订单快照 + 云存档同包回带
+    /// 服务端对进入主游戏请求的响应:订单快照
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -1172,13 +1202,10 @@ namespace Fantasy
                 OrderSnapshot.Dispose();
                 OrderSnapshot = null;
             }
-            CloudSaveResultCode = default;
-            CloudSaveServerVersion = default;
-            CloudSaveServerBlob = null;
             MessageObjectPool<G2C_EnterMainGameResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_EnterMainGameResponse; } 
-        [ProtoMember(5)]
+        [ProtoMember(2)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 订单系统当前激活快照(派生自 PlayerDoc 的 OrderCursor / DeliveredMask;
@@ -1186,21 +1213,6 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(1)]
         public MergeOrderSnapshot OrderSnapshot { get; set; }
-        /// <summary>
-        /// 云存档下载结果码(沿用 CloudSaveDownloadResultCode:Success / NoSnapshot / NotLoggedIn / ServiceUnavailable)
-        /// </summary>
-        [ProtoMember(2)]
-        public CloudSaveDownloadResultCode CloudSaveResultCode { get; set; }
-        /// <summary>
-        /// 云存档服务端权威版本号(NoSnapshot / 其它失败 = 0)
-        /// </summary>
-        [ProtoMember(3)]
-        public long CloudSaveServerVersion { get; set; }
-        /// <summary>
-        /// 云存档服务端 blob(NoSnapshot / 失败 = 空字节数组)
-        /// </summary>
-        [ProtoMember(4)]
-        public byte[] CloudSaveServerBlob { get; set; }
     }
     /// <summary>
     /// 客户端登陆到Gate服务器
@@ -4315,6 +4327,16 @@ namespace Fantasy
             foreach (var __t in Properties) __t.Dispose();
             Properties.Clear();
             SchemaVersion = default;
+            RenameCount = default;
+            CurrentAvatarId = default;
+            CurrentFrameId = default;
+            UnlockedAvatarIds.Clear();
+            UnlockedFrameIds.Clear();
+            WishUsedToday = default;
+            WishDailyLimit = default;
+            SkinMono = default;
+            SkinMonoId = default;
+            TempleDecorated = default;
             MessageObjectPool<PlayerInfo>.Return(this);
         }
         /// <summary>
@@ -4347,6 +4369,56 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(6)]
         public int SchemaVersion { get; set; }
+        /// <summary>
+        /// 改名次数(服务端权威;客户端据此算下次改名费:0=首次免费)
+        /// </summary>
+        [ProtoMember(7)]
+        public int RenameCount { get; set; }
+        /// <summary>
+        /// 当前佩戴头像 id(服务端权威;缺省与客户端 DefaultAvatarId=1 对齐)
+        /// </summary>
+        [ProtoMember(8)]
+        public int CurrentAvatarId { get; set; }
+        /// <summary>
+        /// 当前佩戴头像框 id(服务端权威;缺省与客户端 DefaultFrameId=101 对齐)
+        /// </summary>
+        [ProtoMember(9)]
+        public int CurrentFrameId { get; set; }
+        /// <summary>
+        /// 已解锁头像 id 集合(服务端权威;首登空,客户端 bootstrap 上报默认解锁后填入)
+        /// </summary>
+        [ProtoMember(10)]
+        public List<int> UnlockedAvatarIds { get; set; } = new List<int>();
+        /// <summary>
+        /// 已解锁头像框 id 集合(服务端权威;同上)
+        /// </summary>
+        [ProtoMember(11)]
+        public List<int> UnlockedFrameIds { get; set; } = new List<int>();
+        /// <summary>
+        /// 今日已用祈愿次数(服务端权威;快照前已跑懒每日重置,故为重置后当日值)
+        /// </summary>
+        [ProtoMember(12)]
+        public int WishUsedToday { get; set; }
+        /// <summary>
+        /// 每日祈愿次数上限(= WishConfigServer.WishDailyLimit,供客户端算今日剩余)
+        /// </summary>
+        [ProtoMember(13)]
+        public int WishDailyLimit { get; set; }
+        /// <summary>
+        /// 皮肤态服务端权威(3b):是否单色皮肤模式(0=彩色 / 1=单色;缺省 0=彩色)
+        /// </summary>
+        [ProtoMember(14)]
+        public int SkinMono { get; set; }
+        /// <summary>
+        /// 皮肤态服务端权威(3b):当前单色皮肤 id(彩色态 -1;缺省 -1)
+        /// </summary>
+        [ProtoMember(15)]
+        public int SkinMonoId { get; set; }
+        /// <summary>
+        /// 神庙装饰服务端权威(3b):已装饰厅数标量(前缀语义,= 已修厅数;缺省 0)
+        /// </summary>
+        [ProtoMember(16)]
+        public long TempleDecorated { get; set; }
     }
     /// <summary>
     /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)
@@ -4763,7 +4835,7 @@ namespace Fantasy
         [ProtoIgnore]
         public G2C_QueryAttrLedgerResponse ResponseType { get; set; }
         /// <summary>
-        /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
+        /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy / 8=GoddessLevel / 9=GoddessRating / 10=UnlockedChapter / 11=BlindBoxCount / 12=TempleRepaired / 13=NextRepairIndex,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
         /// </summary>
         [ProtoMember(1)]
         public int Kind { get; set; }
@@ -4840,6 +4912,135 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public bool HasMore { get; set; }
+    }
+    /// <summary>
+    /// 客户端全量上报三态(身份从会话取,不带账号;SET 语义,服务端存客户端设的值 + sanity)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_SetProfileStateRequest : AMessage, IRequest
+    {
+        public static C2G_SetProfileStateRequest Create(bool autoReturn = true)
+        {
+            var c2G_SetProfileStateRequest = MessageObjectPool<C2G_SetProfileStateRequest>.Rent();
+            c2G_SetProfileStateRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_SetProfileStateRequest.SetIsPool(false);
+            }
+            
+            return c2G_SetProfileStateRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            SkinMono = default;
+            SkinMonoId = default;
+            TempleDecorated = default;
+            MessageObjectPool<C2G_SetProfileStateRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_SetProfileStateRequest; } 
+        [ProtoIgnore]
+        public G2C_SetProfileStateResponse ResponseType { get; set; }
+        /// <summary>
+        /// 是否单色皮肤模式(0=彩色 / 1=单色)
+        /// </summary>
+        [ProtoMember(1)]
+        public int SkinMono { get; set; }
+        /// <summary>
+        /// 当前单色皮肤 id(彩色态客户端记 -1;单色态为在用编号)
+        /// </summary>
+        [ProtoMember(2)]
+        public int SkinMonoId { get; set; }
+        /// <summary>
+        /// 已装饰厅数标量(前缀语义,= 已修厅数)
+        /// </summary>
+        [ProtoMember(3)]
+        public long TempleDecorated { get; set; }
+    }
+    /// <summary>
+    /// 服务端设置三态裁决响应(回带当前权威三态供客户端对账)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_SetProfileStateResponse : AMessage, IResponse
+    {
+        public static G2C_SetProfileStateResponse Create(bool autoReturn = true)
+        {
+            var g2C_SetProfileStateResponse = MessageObjectPool<G2C_SetProfileStateResponse>.Rent();
+            g2C_SetProfileStateResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_SetProfileStateResponse.SetIsPool(false);
+            }
+            
+            return g2C_SetProfileStateResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            SkinMono = default;
+            SkinMonoId = default;
+            TempleDecorated = default;
+            MessageObjectPool<G2C_SetProfileStateResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_SetProfileStateResponse; } 
+        [ProtoMember(5)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码(SetProfileStateResultCode)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ResultCode { get; set; }
+        /// <summary>
+        /// 服务端当前权威:是否单色(成功 = set 后;失败 = 当前值供客户端回退)
+        /// </summary>
+        [ProtoMember(2)]
+        public int SkinMono { get; set; }
+        /// <summary>
+        /// 服务端当前权威:当前单色皮肤 id(同上)
+        /// </summary>
+        [ProtoMember(3)]
+        public int SkinMonoId { get; set; }
+        /// <summary>
+        /// 服务端当前权威:已装饰厅数(同上)
+        /// </summary>
+        [ProtoMember(4)]
+        public long TempleDecorated { get; set; }
     }
     /// <summary>
     /// 榜单一条条目：名次 + 玩家展示名 + 分数（§3.5）
@@ -5287,6 +5488,123 @@ namespace Fantasy
         public List<RedeemRewardItem> Rewards { get; set; } = new List<RedeemRewardItem>();
     }
     /// <summary>
+    /// 客户端请求改名(身份从会话取,不带账号 / 不带费用 / 不带次数——服务端按 PlayerDoc.RenameCount 自己算)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_RenameRequest : AMessage, IRequest
+    {
+        public static C2G_RenameRequest Create(bool autoReturn = true)
+        {
+            var c2G_RenameRequest = MessageObjectPool<C2G_RenameRequest>.Rent();
+            c2G_RenameRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_RenameRequest.SetIsPool(false);
+            }
+            
+            return c2G_RenameRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            NewNickname = default;
+            MessageObjectPool<C2G_RenameRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_RenameRequest; } 
+        [ProtoIgnore]
+        public G2C_RenameResponse ResponseType { get; set; }
+        /// <summary>
+        /// 新昵称(客户端已做合法性/屏蔽字校验;服务端本批信任并存,仅挡长度/空串等基本 sanity)
+        /// </summary>
+        [ProtoMember(1)]
+        public string NewNickname { get; set; }
+    }
+    /// <summary>
+    /// 服务端改名裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_RenameResponse : AMessage, IResponse
+    {
+        public static G2C_RenameResponse Create(bool autoReturn = true)
+        {
+            var g2C_RenameResponse = MessageObjectPool<G2C_RenameResponse>.Rent();
+            g2C_RenameResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_RenameResponse.SetIsPool(false);
+            }
+            
+            return g2C_RenameResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Nickname = default;
+            RenameCount = default;
+            Diamond = default;
+            MessageObjectPool<G2C_RenameResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_RenameResponse; } 
+        [ProtoMember(5)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public RenameResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 成功 = 新昵称;失败 = 服务端当前权威昵称(供客户端回退显示)
+        /// </summary>
+        [ProtoMember(2)]
+        public string Nickname { get; set; }
+        /// <summary>
+        /// 成功 = +1 后的次数;失败 = 当前次数(供客户端算下次费用)
+        /// </summary>
+        [ProtoMember(3)]
+        public int RenameCount { get; set; }
+        /// <summary>
+        /// 成功且扣费 = 扣后钻石余额;免费成功 / 钻不足 / 其它失败 = 当前钻石余额;读取失败为 0
+        /// </summary>
+        [ProtoMember(4)]
+        public long Diamond { get; set; }
+    }
+    /// <summary>
     /// 测试使用ErrorCode枚举的消息
     /// </summary>
     [Serializable]
@@ -5344,6 +5662,123 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public PlayerState State { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求祈愿兑体力(身份从会话取,不带账号 / 费用 / 次数——服务端按 WishConfigServer 派生 + 按 PlayerDoc 判每日闸)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_WishForEnergyRequest : AMessage, IRequest
+    {
+        public static C2G_WishForEnergyRequest Create(bool autoReturn = true)
+        {
+            var c2G_WishForEnergyRequest = MessageObjectPool<C2G_WishForEnergyRequest>.Rent();
+            c2G_WishForEnergyRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_WishForEnergyRequest.SetIsPool(false);
+            }
+            
+            return c2G_WishForEnergyRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_WishForEnergyRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_WishForEnergyRequest; } 
+        [ProtoIgnore]
+        public G2C_WishForEnergyResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端祈愿裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_WishForEnergyResponse : AMessage, IResponse
+    {
+        public static G2C_WishForEnergyResponse Create(bool autoReturn = true)
+        {
+            var g2C_WishForEnergyResponse = MessageObjectPool<G2C_WishForEnergyResponse>.Rent();
+            g2C_WishForEnergyResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_WishForEnergyResponse.SetIsPool(false);
+            }
+            
+            return g2C_WishForEnergyResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            SoulPower = default;
+            Energy = default;
+            WishUsedToday = default;
+            WishDailyLimit = default;
+            MessageObjectPool<G2C_WishForEnergyResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_WishForEnergyResponse; } 
+        [ProtoMember(6)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码(WishForEnergyResultCode)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ResultCode { get; set; }
+        /// <summary>
+        /// 服务端当前权威灵力(成功 = 扣后;失败 = 当前余额供客户端回退;读取失败为 0)
+        /// </summary>
+        [ProtoMember(2)]
+        public long SoulPower { get; set; }
+        /// <summary>
+        /// 服务端当前权威体力(成功 = 发后夹软上限;失败 = 当前值;读取失败为 0)
+        /// </summary>
+        [ProtoMember(3)]
+        public long Energy { get; set; }
+        /// <summary>
+        /// 今日已用祈愿次数(懒重置 + 本次成功 +1 后的权威值;失败 = 懒重置后当前值)
+        /// </summary>
+        [ProtoMember(4)]
+        public int WishUsedToday { get; set; }
+        /// <summary>
+        /// 每日祈愿次数上限(= WishConfigServer.WishDailyLimit,供客户端算今日剩余次数)
+        /// </summary>
+        [ProtoMember(5)]
+        public int WishDailyLimit { get; set; }
     }
     /// <summary>
     /// 客户端请求清空自己的玩家数据(身份从会话取,不携带 playerId / 不接受指定清别人)

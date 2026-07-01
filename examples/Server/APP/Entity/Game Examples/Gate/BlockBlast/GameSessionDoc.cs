@@ -74,4 +74,13 @@ public sealed class GameSessionDoc
 
     /// <summary>末次存盘服务端时刻(Unix 毫秒, UTC),供排查 / 审计。</summary>
     public long LastUpdateUnixMs { get; set; }
+
+    /// <summary>
+    /// 局内 cosmetic + 合成经济叠加层不透明切片(客户端 MergeIngameSave 的 JSON 原文)。
+    /// 承载盘面颜色 / 元素叠加层 / 手牌颜色元素 algo / 合成区库存 / pending 元素预算 / 连消态 / 订单本地统计——
+    /// 这些叠在权威 shapeId 序列上、无法从服务端盘面位掩码重推,故随对局文档一并携带。
+    /// opaque:服务端只搬运、绝不 Deserialize / 校验其内容;按 playerId 隔离(随 _id 走);随会话文档同生共死
+    /// (GameOver 删档时切片一并没,下一局无切片,客户端走缺省重置)。空串 = 无切片。
+    /// </summary>
+    public string SliceJson { get; set; } = string.Empty;
 }

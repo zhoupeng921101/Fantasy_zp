@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+// RenameMessage.proto
+// 改名服务端权威协议(云存档 blob 退役·第 2 批·子批 2a)。
+//
+// 昵称与改名次数服务端权威(PlayerDoc.Nickname / RenameCount);改名费服务端按自己的 RenameCount 派生
+// (RenameCount==0 免费,否则 RenameConfigServer.PriceFor(RenameCount)),客户端不上报费用/次数——反作弊红线。
+// 处理原子:算费 → 需扣费则走 PlayerPropertyServiceHelper.ChangeProperty(Diamond, -cost, serverAuthoritative:true,
+// reason="player_rename")(钻不足回拒、不改名)→ 扣成功(或免费)后原子 set Nickname + RenameCount+1。
+// 屏蔽字/合法性:客户端已做,服务端本批只挡长度/空串等基本 sanity,屏蔽字列表留后续加固。
+//
+// 设计基线:.claude/rules/data-authority.md(身份/修饰服务端权威、费用服务端派生、限界信任)。
+
+/// 改名裁决结果码
+enum RenameResultCode
+{
+	Success = 0,              /// 成功:昵称已写、RenameCount+1、(若扣费)钻石已扣;响应回带最新值供客户端对账
+	NotLoggedIn = 1,          /// 会话未挂账号(35 登录链路异常)→ 客户端重登
+	InvalidName = 2,          /// 昵称非法(空串 / 全空白 / 超长;服务端基本 sanity 校验未过)
+	NotEnoughDiamond = 3,     /// 钻石不足(改名费扣减失败),昵称未改
+	ServiceUnavailable = 4,   /// MongoDB 不可达 / 服务未就绪 / 写库异常,昵称未改
+}
+
+/// 客户端请求改名(身份从会话取,不带账号 / 不带费用 / 不带次数——服务端按 PlayerDoc.RenameCount 自己算)
+message C2G_RenameRequest // IRequest,G2C_RenameResponse
+{
+	string NewNickname = 1;   /// 新昵称(客户端已做合法性/屏蔽字校验;服务端本批信任并存,仅挡长度/空串等基本 sanity)
+}
+
+/// 服务端改名裁决响应
+message G2C_RenameResponse // IResponse
+{
+	RenameResultCode ResultCode = 1;   /// 裁决结果码
+	string Nickname = 2;               /// 成功 = 新昵称;失败 = 服务端当前权威昵称(供客户端回退显示)
+	int32 RenameCount = 3;             /// 成功 = +1 后的次数;失败 = 当前次数(供客户端算下次费用)
+	int64 Diamond = 4;                 /// 成功且扣费 = 扣后钻石余额;免费成功 / 钻不足 / 其它失败 = 当前钻石余额;读取失败为 0
+}

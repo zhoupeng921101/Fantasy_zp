@@ -109,6 +109,78 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     /// <summary>变更频率最小间隔(占位 100ms):同账号同属性 100ms 内重复变更视为脚本刷,拒。</summary>
     private const long DefaultPropertyChangeMinIntervalMs = 100L;
 
+    // ---- P3 新增:六种元层进度计数器默认值 + 限界信任阈值(原云存档 blob 迁出第 1 批,2026-07)----
+    // 全部 Initial=0(全新玩家进度为 0)。上界 = 宽松 sanity 天花板(纯挡荒谬值,非玩法硬上限);
+    // 单次 delta 上限 = 限界信任主杠杆,取值远大于「玩法一次结算的最大合法跳变」以避免误拒(拿不准从宽)。
+    // 这些是**占位值**:女神/章节/修缮的真实产出速率与硬上限来自客户端玩法配置(章节数、修缮项总数、女神满级等),
+    // 待第 4/5 批抽奖/合成迁移把玩法产出建模上服务端时再收紧;本批只做「计数器权威落账」,不建模产出逻辑。
+
+    /// <summary>女神等级:初始 0 / 上界 10_000(宽松天花板)/ 单次上限 100(一次结算最多涨几级,留大余量)。</summary>
+    private const long DefaultGoddessLevelInitial = 0L;
+    private const long DefaultGoddessLevelUpperBound = 10_000L;
+    private const long DefaultGoddessLevelSingleDeltaLimit = 100L;
+
+    /// <summary>女神评级:初始 0 / 上界 10_000 / 单次上限 100。</summary>
+    private const long DefaultGoddessRatingInitial = 0L;
+    private const long DefaultGoddessRatingUpperBound = 10_000L;
+    private const long DefaultGoddessRatingSingleDeltaLimit = 100L;
+
+    /// <summary>章节解锁数:初始 0 / 上界 10_000 / 单次上限 100。</summary>
+    private const long DefaultUnlockedChapterInitial = 0L;
+    private const long DefaultUnlockedChapterUpperBound = 10_000L;
+    private const long DefaultUnlockedChapterSingleDeltaLimit = 100L;
+
+    /// <summary>盲盒计数:初始 0 / 上界 1_000_000 / 单次上限 1_000(攒/开盒批量跳变留余量;可增可减)。</summary>
+    private const long DefaultBlindBoxCountInitial = 0L;
+    private const long DefaultBlindBoxCountUpperBound = 1_000_000L;
+    private const long DefaultBlindBoxCountSingleDeltaLimit = 1_000L;
+
+    /// <summary>神庙修缮计数:初始 0 / 上界 100_000 / 单次上限 1_000。</summary>
+    private const long DefaultTempleRepairedInitial = 0L;
+    private const long DefaultTempleRepairedUpperBound = 100_000L;
+    private const long DefaultTempleRepairedSingleDeltaLimit = 1_000L;
+
+    /// <summary>神庙修缮游标:初始 0 / 上界 100_000 / 单次上限 1_000。</summary>
+    private const long DefaultNextRepairIndexInitial = 0L;
+    private const long DefaultNextRepairIndexUpperBound = 100_000L;
+    private const long DefaultNextRepairIndexSingleDeltaLimit = 1_000L;
+
+    // ---- 头像 / 头像框服务端权威默认配置(原云存档 blob 迁出第 2 批·子批 2c,2026-07)----
+    // 当前佩戴 id 缺省与客户端默认对齐(头像 1 / 框 101,= 客户端 PlayerInfo.DefaultAvatarId/DefaultFrameId)。
+    // id 合法段 sanity 边界:客户端编排头像用 1–100 段、框用 101+ 段(见 AvatarEntry.Id 注)。上界取宽松天花板,
+    //   仅挡荒谬值;真正防冒解锁的是「换装校验目标在解锁集合内」+「解锁上报走 client-report 幂等 addToSet」。
+    // 段边界 / 集合上限均为**占位值**,后续引入服务端头像配置表(或与客户端 Luban avatar 表同源)时收紧。
+
+    /// <summary>当前佩戴头像 id 缺省(= 客户端 PlayerInfo.DefaultAvatarId=1)。</summary>
+    private const int DefaultCurrentAvatarIdInitial = 1;
+    /// <summary>当前佩戴头像框 id 缺省(= 客户端 PlayerInfo.DefaultFrameId=101)。</summary>
+    private const int DefaultCurrentFrameIdInitial = 101;
+
+    /// <summary>头像合法 id 段 [1, 100](客户端编排头像用 1–100 段)。</summary>
+    private const int DefaultMinAvatarId = 1;
+    private const int DefaultMaxAvatarId = 100;
+    /// <summary>头像框合法 id 段 [101, 100000](客户端编排框用 101+ 段;上界宽松 sanity 天花板)。</summary>
+    private const int DefaultMinFrameId = 101;
+    private const int DefaultMaxFrameId = 100_000;
+
+    /// <summary>单个已解锁集合大小上限 4096(宽松 sanity 天花板,防客户端灌爆文档;正常玩家远不可能撞顶)。</summary>
+    private const int DefaultUnlockedSetMaxSize = 4096;
+
+    /// <summary>修饰操作(换装 / 解锁上报)频率最小间隔(占位 100ms):同账号 100ms 内重复视为脚本刷,拒。</summary>
+    private const long DefaultCosmeticMinIntervalMs = 100L;
+
+    // ---- 皮肤态 / 神庙装饰标志服务端权威 sanity 配置默认(原云存档 blob 迁出第 3 批·子批 3b,2026-07)----
+    // client-report 限界信任:皮肤 / 装饰纯装饰低危,只做基本 sanity(SkinMono ∈ {0,1} 由 helper 直判;
+    //   SkinMonoId / TempleDecorated 落合法段)。段边界均为**占位值**(宽松天花板,只挡荒谬值),
+    //   后续引入服务端皮肤 sprite 段 / 神庙厅数配置(或与客户端 Luban 同源)时收紧。
+
+    /// <summary>单色皮肤 id 合法段 [1, 100000](宽松 sanity;彩色态哨兵 -1 由 helper 单独放行,不在此段内)。</summary>
+    private const int DefaultSkinMonoIdMin = 1;
+    private const int DefaultSkinMonoIdMax = 100_000;
+
+    /// <summary>已装饰厅数标量上界 100000(宽松 sanity 天花板,与 TempleRepaired 上界同量级;真实厅数远不可能撞顶)。</summary>
+    private const long DefaultTempleDecoratedMax = 100_000L;
+
     protected override void Awake(PlayerPropertyServiceComponent self)
     {
         // 装入运营默认配置(本子单未引入运营热改面,常量即权威源;Tier 2+ 真要热改时,
@@ -147,6 +219,41 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         self.EnergySingleDeltaLimit = DefaultEnergySingleDeltaLimit;
         self.PropertyChangeMinIntervalMs = DefaultPropertyChangeMinIntervalMs;
 
+        // P3 六元层进度计数器。
+        self.GoddessLevelInitial = DefaultGoddessLevelInitial;
+        self.GoddessLevelUpperBound = DefaultGoddessLevelUpperBound;
+        self.GoddessLevelSingleDeltaLimit = DefaultGoddessLevelSingleDeltaLimit;
+        self.GoddessRatingInitial = DefaultGoddessRatingInitial;
+        self.GoddessRatingUpperBound = DefaultGoddessRatingUpperBound;
+        self.GoddessRatingSingleDeltaLimit = DefaultGoddessRatingSingleDeltaLimit;
+        self.UnlockedChapterInitial = DefaultUnlockedChapterInitial;
+        self.UnlockedChapterUpperBound = DefaultUnlockedChapterUpperBound;
+        self.UnlockedChapterSingleDeltaLimit = DefaultUnlockedChapterSingleDeltaLimit;
+        self.BlindBoxCountInitial = DefaultBlindBoxCountInitial;
+        self.BlindBoxCountUpperBound = DefaultBlindBoxCountUpperBound;
+        self.BlindBoxCountSingleDeltaLimit = DefaultBlindBoxCountSingleDeltaLimit;
+        self.TempleRepairedInitial = DefaultTempleRepairedInitial;
+        self.TempleRepairedUpperBound = DefaultTempleRepairedUpperBound;
+        self.TempleRepairedSingleDeltaLimit = DefaultTempleRepairedSingleDeltaLimit;
+        self.NextRepairIndexInitial = DefaultNextRepairIndexInitial;
+        self.NextRepairIndexUpperBound = DefaultNextRepairIndexUpperBound;
+        self.NextRepairIndexSingleDeltaLimit = DefaultNextRepairIndexSingleDeltaLimit;
+
+        // 头像 / 头像框服务端权威默认配置(2c)。
+        self.CurrentAvatarIdInitial = DefaultCurrentAvatarIdInitial;
+        self.CurrentFrameIdInitial = DefaultCurrentFrameIdInitial;
+        self.MinAvatarId = DefaultMinAvatarId;
+        self.MaxAvatarId = DefaultMaxAvatarId;
+        self.MinFrameId = DefaultMinFrameId;
+        self.MaxFrameId = DefaultMaxFrameId;
+        self.UnlockedSetMaxSize = DefaultUnlockedSetMaxSize;
+        self.CosmeticMinIntervalMs = DefaultCosmeticMinIntervalMs;
+
+        // 皮肤态 / 神庙装饰标志服务端权威 sanity 配置(3b)。
+        self.SkinMonoIdMin = DefaultSkinMonoIdMin;
+        self.SkinMonoIdMax = DefaultSkinMonoIdMax;
+        self.TempleDecoratedMax = DefaultTempleDecoratedMax;
+
         // 启动期校验:配置非法 → 服务端拒服(§5.1 + §5.3 风险表)。
         // 这里用 Log.Error + 不绑句柄(等价于「服务不可用」),不抛异常断 Awake(框架要求 AwakeSystem 不抛)。
         if (!ValidateConfig(self))
@@ -176,6 +283,13 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
             (self.PietyInitial, self.PietyUpperBound, self.PietySingleDeltaLimit, "Piety"),
             (self.GuardianExpInitial, self.GuardianExpUpperBound, self.GuardianExpSingleDeltaLimit, "GuardianExp"),
             (self.EnergyInitial, self.EnergyUpperBound, self.EnergySingleDeltaLimit, "Energy"),
+            // P3 六元层进度计数器(同套校验:初始 ∈ [0, 上界]、上界 ∈ [0, long.MaxValue/2]、单次上限 ∈ (0, 上界])。
+            (self.GoddessLevelInitial, self.GoddessLevelUpperBound, self.GoddessLevelSingleDeltaLimit, "GoddessLevel"),
+            (self.GoddessRatingInitial, self.GoddessRatingUpperBound, self.GoddessRatingSingleDeltaLimit, "GoddessRating"),
+            (self.UnlockedChapterInitial, self.UnlockedChapterUpperBound, self.UnlockedChapterSingleDeltaLimit, "UnlockedChapter"),
+            (self.BlindBoxCountInitial, self.BlindBoxCountUpperBound, self.BlindBoxCountSingleDeltaLimit, "BlindBoxCount"),
+            (self.TempleRepairedInitial, self.TempleRepairedUpperBound, self.TempleRepairedSingleDeltaLimit, "TempleRepaired"),
+            (self.NextRepairIndexInitial, self.NextRepairIndexUpperBound, self.NextRepairIndexSingleDeltaLimit, "NextRepairIndex"),
         };
         foreach (var c in checks)
         {
@@ -212,6 +326,43 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         if (self.PropertyChangeMinIntervalMs < 0L)
         {
             Log.Error($"PlayerPropertyServiceComponent: PropertyChangeMinIntervalMs={self.PropertyChangeMinIntervalMs} 非法(必须 >= 0)。");
+            return false;
+        }
+
+        // 头像 / 头像框服务端权威配置校验(2c):id 段边界升序且正、集合上限 > 0、频率间隔 >= 0、
+        // 当前 id 缺省落在对应段内(否则首登默认佩戴一个非法 id,换装校验 / sanity 会永远拒)。
+        if (self.MinAvatarId <= 0 || self.MaxAvatarId < self.MinAvatarId ||
+            self.MinFrameId <= 0 || self.MaxFrameId < self.MinFrameId)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: 头像 / 框 id 段非法(avatar=[{self.MinAvatarId},{self.MaxAvatarId}] frame=[{self.MinFrameId},{self.MaxFrameId}],须正且下 <= 上)。");
+            return false;
+        }
+        if (self.CurrentAvatarIdInitial < self.MinAvatarId || self.CurrentAvatarIdInitial > self.MaxAvatarId ||
+            self.CurrentFrameIdInitial < self.MinFrameId || self.CurrentFrameIdInitial > self.MaxFrameId)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: 当前佩戴 id 缺省越段(avatar={self.CurrentAvatarIdInitial}∉[{self.MinAvatarId},{self.MaxAvatarId}] 或 frame={self.CurrentFrameIdInitial}∉[{self.MinFrameId},{self.MaxFrameId}])。");
+            return false;
+        }
+        if (self.UnlockedSetMaxSize <= 0)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: UnlockedSetMaxSize={self.UnlockedSetMaxSize} 非法(必须 > 0)。");
+            return false;
+        }
+        if (self.CosmeticMinIntervalMs < 0L)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: CosmeticMinIntervalMs={self.CosmeticMinIntervalMs} 非法(必须 >= 0)。");
+            return false;
+        }
+
+        // 皮肤态 / 神庙装饰标志服务端权威 sanity 配置校验(3b):id 段升序且正、装饰上界非负。
+        if (self.SkinMonoIdMin <= 0 || self.SkinMonoIdMax < self.SkinMonoIdMin)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: 单色皮肤 id 段非法(=[{self.SkinMonoIdMin},{self.SkinMonoIdMax}],须正且下 <= 上)。");
+            return false;
+        }
+        if (self.TempleDecoratedMax < 0L)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: TempleDecoratedMax={self.TempleDecoratedMax} 非法(必须 >= 0)。");
             return false;
         }
 

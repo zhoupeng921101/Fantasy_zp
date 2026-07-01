@@ -116,58 +116,84 @@ namespace Fantasy
 	}
 
 	/// <summary>
-	/// 上传裁决结果码
+	/// 修饰种类(与客户端 AvatarType 对齐:1=头像 / 2=头像框)
 	/// </summary>
-	public enum CloudSaveUploadResultCode
+	public enum CosmeticKind
 	{
 		/// <summary>
-		/// 接受并已覆盖(版本号已推进到本次上传的 version)。响应 ServerVersion = 本次 version。
+		/// 占位(proto3 枚举须含 0;请求填此值视为非法 Kind 拒)
 		/// </summary>
-		Accepted = 0,
+		CosmeticKindNone = 0,
 		/// <summary>
-		/// 上传 version <= 已存 version(他端已写入更新的存档)。响应 ServerVersion / ServerBlob = 服务端当前权威值,
-		/// 客户端应据此合并后以更高 version 重传(不静默丢弃本地改动)。
+		/// 头像
 		/// </summary>
-		Stale = 1,
+		Avatar = 1,
 		/// <summary>
-		/// blob 大小超出服务端上限(防滥用 / 防超 BSON 文档限制)。响应不含 blob 字段。
+		/// 头像框
 		/// </summary>
-		BlobTooLarge = 2,
-		/// <summary>
-		/// 会话未挂账号身份(35 登录失败 / 链路异常)。客户端段下一刀重登。
-		/// </summary>
-		NotLoggedIn = 3,
-		/// <summary>
-		/// 协议参数非法(version <= 0 / blob 为空数组 / playerId 未签发等)。
-		/// </summary>
-		InvalidRequest = 4,
-		/// <summary>
-		/// 服务不可用(MongoDB 不可达 / 写入异常)。变更未生效,稍后重试。
-		/// </summary>
-		ServiceUnavailable = 5
+		Frame = 2
 	}
 
 	/// <summary>
-	/// 下载裁决结果码
+	/// 换装裁决结果码
 	/// </summary>
-	public enum CloudSaveDownloadResultCode
+	public enum EquipCosmeticResultCode
 	{
 		/// <summary>
-		/// 取到存档(ServerVersion / ServerBlob 有效)。
+		/// 成功:当前佩戴 id 已切换;响应回带最新当前头像 id + 当前框 id
 		/// </summary>
 		Success = 0,
 		/// <summary>
-		/// 服务端无该 playerId 的存档(首次同步前的全新账号属此态,非异常)。响应 ServerVersion = 0 / ServerBlob 空。
+		/// 会话未挂账号(35 登录链路异常)→ 客户端重登
 		/// </summary>
-		NoSnapshot = 1,
+		NotLoggedIn = 1,
 		/// <summary>
-		/// 会话未挂账号身份。
+		/// Kind 非法(非 1/2)
 		/// </summary>
-		NotLoggedIn = 2,
+		InvalidKind = 2,
 		/// <summary>
-		/// 服务不可用(MongoDB 不可达 / 读取异常)。
+		/// 目标 id 不在对应已解锁集合内(未解锁,拒换)→ 客户端回退显示
 		/// </summary>
-		ServiceUnavailable = 3
+		NotUnlocked = 3,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
+	/// 解锁上报裁决结果码
+	/// </summary>
+	public enum UnlockCosmeticResultCode
+	{
+		/// <summary>
+		/// 成功:id 已幂等加入对应解锁集合(重复上报同 id 也返 Success)
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号 → 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// Kind 非法(非 1/2)
+		/// </summary>
+		InvalidKind = 2,
+		/// <summary>
+		/// id 落在对应合法段外(sanity 拒)
+		/// </summary>
+		InvalidId = 3,
+		/// <summary>
+		/// 该已解锁集合已达大小上限(防灌爆,拒新增)
+		/// </summary>
+		SetFull = 4,
+		/// <summary>
+		/// 修饰操作频率过密(限界信任·频率闸,拒)
+		/// </summary>
+		RateLimited = 5,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常
+		/// </summary>
+		ServiceUnavailable = 6
 	}
 
 	/// <summary>
@@ -229,7 +255,7 @@ namespace Fantasy
 	}
 
 	/// <summary>
-	/// 属性类型(P2 扩到七类:在原三类基础上新增四种玩法货币,服务端权威化)
+	/// 属性类型(P3 扩到十三类:在七类货币/体力基础上新增六种元层进度计数器,服务端权威化,原云存档 blob 迁出第 1 批)
 	/// </summary>
 	public enum PropertyType
 	{
@@ -260,7 +286,31 @@ namespace Fantasy
 		/// <summary>
 		/// 玩法体力(带离线随时间恢复;服务端按 EnergyLastRecoverMs + EnergyRecoverIntervalMs 懒结算)
 		/// </summary>
-		Energy = 6
+		Energy = 6,
+		/// <summary>
+		/// 女神等级(玩法产出,消行融合经济产出;客户端算增量后上报,单调递增)
+		/// </summary>
+		GoddessLevel = 7,
+		/// <summary>
+		/// 女神评级(玩法产出,单调递增)
+		/// </summary>
+		GoddessRating = 8,
+		/// <summary>
+		/// 章节解锁数(玩法产出,单调递增)
+		/// </summary>
+		UnlockedChapter = 9,
+		/// <summary>
+		/// 盲盒计数(玩法产出;可增可减 —— 攒盒 +、开盒 -)
+		/// </summary>
+		BlindBoxCount = 10,
+		/// <summary>
+		/// 神庙修缮计数(动作产出,修缮动作触发,单调递增)
+		/// </summary>
+		TempleRepaired = 11,
+		/// <summary>
+		/// 神庙修缮游标(动作产出,指向下一个待修缮项,单调递增)
+		/// </summary>
+		NextRepairIndex = 12
 	}
 
 	/// <summary>
@@ -315,6 +365,29 @@ namespace Fantasy
 		/// 服务不可用(MongoDB 不可达 / 查询抛 Mongo 异常)
 		/// </summary>
 		ServiceUnavailable = 2
+	}
+
+	/// <summary>
+	/// 设置玩家档案状态裁决结果码
+	/// </summary>
+	public enum SetProfileStateResultCode
+	{
+		/// <summary>
+		/// 成功:三态已原子 $set;响应回带服务端当前权威三态
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(35 登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// sanity 拒(SkinMono 非 0/1,或 SkinMonoId / TempleDecorated 落合法段外)
+		/// </summary>
+		InvalidRequest = 2,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常
+		/// </summary>
+		ServiceUnavailable = 3
 	}
 
 	/// <summary>
@@ -399,6 +472,33 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 改名裁决结果码
+	/// </summary>
+	public enum RenameResultCode
+	{
+		/// <summary>
+		/// 成功:昵称已写、RenameCount+1、(若扣费)钻石已扣;响应回带最新值供客户端对账
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(35 登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 昵称非法(空串 / 全空白 / 超长;服务端基本 sanity 校验未过)
+		/// </summary>
+		InvalidName = 2,
+		/// <summary>
+		/// 钻石不足(改名费扣减失败),昵称未改
+		/// </summary>
+		NotEnoughDiamond = 3,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常,昵称未改
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
 	/// 错误码枚举
 	/// </summary>
 	public enum ErrorCodeEnum
@@ -437,12 +537,39 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 祈愿裁决结果码
+	/// </summary>
+	public enum WishForEnergyResultCode
+	{
+		/// <summary>
+		/// 成功:灵力已扣、体力已发(夹软上限)、WishUsedToday+1;响应回带最新值供客户端对账
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(35 登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 今日祈愿次数已达上限(懒重置后仍 >= WishDailyLimit),不扣不发
+		/// </summary>
+		DailyLimitReached = 2,
+		/// <summary>
+		/// 灵力不足(扣灵力失败),不发体力
+		/// </summary>
+		NotEnoughSoul = 3,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
 	/// 清档裁决结果码
 	/// </summary>
 	public enum ClearPlayerDataResultCode
 	{
 		/// <summary>
-		/// 清档成功(玩家文档已重置为默认新手态、云存档文档已删除或本就不存在)。幂等:重复清同样返 Success。
+		/// 清档成功(玩家文档已重置为默认新手态、在局对局文档已删除或本就不存在)。幂等:重复清同样返 Success。
 		/// </summary>
 		Success = 0,
 		/// <summary>

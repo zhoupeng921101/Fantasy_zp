@@ -29,9 +29,10 @@ namespace Fantasy;
 public static class AttrLedgerQueryHelper
 {
     /// <summary>
-    /// 协议层 kind 整数(0 = 不过滤,1..7 = 七种 PropertyType + 1 错开一位)→ PropertyType 枚举的映射。
+    /// 协议层 kind 整数(0 = 不过滤,1..13 = 各 PropertyType + 1 错开一位)→ PropertyType 枚举的映射。
     /// 0 留作 sentinel 表「不过滤」(若直接复用 PropertyType 整数则 Coin=0 与 sentinel 冲突,故协议层错开一位)。
-    /// P2 扩到七类:1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy。
+    /// P3 扩到十三类:1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy /
+    /// 8=GoddessLevel / 9=GoddessRating / 10=UnlockedChapter / 11=BlindBoxCount / 12=TempleRepaired / 13=NextRepairIndex。
     /// 入参 kind 非合法整数 → 由 handler 在调用前拦截返 InvalidRequest,本 helper 不重复校验。
     /// </summary>
     public static bool TryMapKindToPropertyType(int kind, out PropertyType type)
@@ -45,6 +46,12 @@ public static class AttrLedgerQueryHelper
             case 5: type = PropertyType.Piety; return true;
             case 6: type = PropertyType.GuardianExp; return true;
             case 7: type = PropertyType.Energy; return true;
+            case 8: type = PropertyType.GoddessLevel; return true;
+            case 9: type = PropertyType.GoddessRating; return true;
+            case 10: type = PropertyType.UnlockedChapter; return true;
+            case 11: type = PropertyType.BlindBoxCount; return true;
+            case 12: type = PropertyType.TempleRepaired; return true;
+            case 13: type = PropertyType.NextRepairIndex; return true;
             default:
                 type = default;
                 return false;
