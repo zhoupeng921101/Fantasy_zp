@@ -72,3 +72,30 @@ message G2C_UnlockCosmeticResponse // IResponse
 	int32 ResultCode = 1;             /// 裁决结果码(UnlockCosmeticResultCode)
 	repeated int32 UnlockedIds = 2;   /// 更新后的对应已解锁集合(成功回带,供客户端对账;失败为当前集合或空)
 }
+
+// 批量解锁(传输层聚合,一次携带多项 (Kind, Id))。客户端一次事件补齐多解锁(升级跨多阈值 / 首登 backfill)时,
+// 把 N 条 C2G_UnlockCosmeticRequest 收敛成 1 条,减少往返。解锁是集合幂等操作(重复上报同 id 无副作用),
+// 故响应回带处理后两个 kind 的最终解锁集,客户端投影直接以最终集覆盖,无需逐项结果码。
+// 频率闸对整批只检一次(一次合法批操作),过闸后逐项 sanity(Kind 合法 + id 合法段 + 集合上限)+ $addToSet;
+// 逐项 sanity 失败跳过不阻断整批;未登录 / 服务不可用 / 被闸挡 → 整批以 ResultCode 表达。
+
+/// 单条批量解锁项
+message UnlockCosmeticItem
+{
+	int32 Kind = 1;                   /// 修饰种类(CosmeticKind:1=头像 / 2=头像框)
+	int32 Id = 2;                     /// 待解锁 id
+}
+
+/// 客户端批量上报解锁(一次携带 N 项,身份从会话取)
+message C2G_UnlockCosmeticBatchRequest // IRequest,G2C_UnlockCosmeticBatchResponse
+{
+	repeated UnlockCosmeticItem Items = 1;   /// 待解锁项列表(空 → no-op,回带当前两集合)
+}
+
+/// 服务端批量解锁裁决响应(回带处理后两个 kind 的最终解锁集)
+message G2C_UnlockCosmeticBatchResponse // IResponse
+{
+	int32 ResultCode = 1;                    /// 整体结果码(UnlockCosmeticResultCode:Success / NotLoggedIn / RateLimited / ServiceUnavailable)
+	repeated int32 UnlockedAvatarIds = 2;    /// 处理后最终头像解锁集(权威)
+	repeated int32 UnlockedFrameIds = 3;     /// 处理后最终头像框解锁集(权威)
+}

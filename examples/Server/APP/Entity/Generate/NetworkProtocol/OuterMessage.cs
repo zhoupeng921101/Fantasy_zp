@@ -1117,6 +1117,170 @@ namespace Fantasy
         public List<int> UnlockedIds { get; set; } = new List<int>();
     }
     /// <summary>
+    /// 单条批量解锁项
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class UnlockCosmeticItem : AMessage, IDisposable
+    {
+        public static UnlockCosmeticItem Create(bool autoReturn = true)
+        {
+            var unlockCosmeticItem = MessageObjectPool<UnlockCosmeticItem>.Rent();
+            unlockCosmeticItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                unlockCosmeticItem.SetIsPool(false);
+            }
+            
+            return unlockCosmeticItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Kind = default;
+            Id = default;
+            MessageObjectPool<UnlockCosmeticItem>.Return(this);
+        }
+        /// <summary>
+        /// 修饰种类(CosmeticKind:1=头像 / 2=头像框)
+        /// </summary>
+        [ProtoMember(1)]
+        public int Kind { get; set; }
+        /// <summary>
+        /// 待解锁 id
+        /// </summary>
+        [ProtoMember(2)]
+        public int Id { get; set; }
+    }
+    /// <summary>
+    /// 客户端批量上报解锁(一次携带 N 项,身份从会话取)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_UnlockCosmeticBatchRequest : AMessage, IRequest
+    {
+        public static C2G_UnlockCosmeticBatchRequest Create(bool autoReturn = true)
+        {
+            var c2G_UnlockCosmeticBatchRequest = MessageObjectPool<C2G_UnlockCosmeticBatchRequest>.Rent();
+            c2G_UnlockCosmeticBatchRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_UnlockCosmeticBatchRequest.SetIsPool(false);
+            }
+            
+            return c2G_UnlockCosmeticBatchRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            foreach (var __t in Items) __t.Dispose();
+            Items.Clear();
+            MessageObjectPool<C2G_UnlockCosmeticBatchRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_UnlockCosmeticBatchRequest; } 
+        [ProtoIgnore]
+        public G2C_UnlockCosmeticBatchResponse ResponseType { get; set; }
+        /// <summary>
+        /// 待解锁项列表(空 → no-op,回带当前两集合)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<UnlockCosmeticItem> Items { get; set; } = new List<UnlockCosmeticItem>();
+    }
+    /// <summary>
+    /// 服务端批量解锁裁决响应(回带处理后两个 kind 的最终解锁集)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_UnlockCosmeticBatchResponse : AMessage, IResponse
+    {
+        public static G2C_UnlockCosmeticBatchResponse Create(bool autoReturn = true)
+        {
+            var g2C_UnlockCosmeticBatchResponse = MessageObjectPool<G2C_UnlockCosmeticBatchResponse>.Rent();
+            g2C_UnlockCosmeticBatchResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_UnlockCosmeticBatchResponse.SetIsPool(false);
+            }
+            
+            return g2C_UnlockCosmeticBatchResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            UnlockedAvatarIds.Clear();
+            UnlockedFrameIds.Clear();
+            MessageObjectPool<G2C_UnlockCosmeticBatchResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_UnlockCosmeticBatchResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 整体结果码(UnlockCosmeticResultCode:Success / NotLoggedIn / RateLimited / ServiceUnavailable)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ResultCode { get; set; }
+        /// <summary>
+        /// 处理后最终头像解锁集(权威)
+        /// </summary>
+        [ProtoMember(2)]
+        public List<int> UnlockedAvatarIds { get; set; } = new List<int>();
+        /// <summary>
+        /// 处理后最终头像框解锁集(权威)
+        /// </summary>
+        [ProtoMember(3)]
+        public List<int> UnlockedFrameIds { get; set; } = new List<int>();
+    }
+    /// <summary>
     /// 客户端进入主游戏(登录后、主游戏可交互前发起;每次进入主游戏阶段调用一次)
     /// </summary>
     [Serializable]
@@ -4705,6 +4869,223 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public string Reason { get; set; }
+    }
+    /// <summary>
+    /// 单条批量变更项(声明相对增量,身份从会话取,不携带账号 / 绝对余额)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class PropertyChangeItem : AMessage, IDisposable
+    {
+        public static PropertyChangeItem Create(bool autoReturn = true)
+        {
+            var propertyChangeItem = MessageObjectPool<PropertyChangeItem>.Rent();
+            propertyChangeItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                propertyChangeItem.SetIsPool(false);
+            }
+            
+            return propertyChangeItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Type = default;
+            Delta = default;
+            MessageObjectPool<PropertyChangeItem>.Return(this);
+        }
+        /// <summary>
+        /// 要变更的属性类型
+        /// </summary>
+        [ProtoMember(1)]
+        public PropertyType Type { get; set; }
+        /// <summary>
+        /// 有符号增量(正 = 增加 / 负 = 减少 / 消费)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Delta { get; set; }
+    }
+    /// <summary>
+    /// 单项裁决结果(结果码 + 变更后余额,口径同单条链路 G2C_PropertyChangeResponse)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class PropertyBatchChangeResultItem : AMessage, IDisposable
+    {
+        public static PropertyBatchChangeResultItem Create(bool autoReturn = true)
+        {
+            var propertyBatchChangeResultItem = MessageObjectPool<PropertyBatchChangeResultItem>.Rent();
+            propertyBatchChangeResultItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                propertyBatchChangeResultItem.SetIsPool(false);
+            }
+            
+            return propertyBatchChangeResultItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Type = default;
+            ResultCode = default;
+            NewAmount = default;
+            MessageObjectPool<PropertyBatchChangeResultItem>.Return(this);
+        }
+        /// <summary>
+        /// 回声该项的属性类型
+        /// </summary>
+        [ProtoMember(1)]
+        public PropertyType Type { get; set; }
+        /// <summary>
+        /// 该项裁决结果码
+        /// </summary>
+        [ProtoMember(2)]
+        public PropertyChangeResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 成功 = 变更后新余额;NotEnough / OverLimit = 当前实际余额;其它失败 = 0
+        /// </summary>
+        [ProtoMember(3)]
+        public long NewAmount { get; set; }
+    }
+    /// <summary>
+    /// 客户端批量属性变更请求(一次携带 N 项,身份从会话取)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_PropertyBatchChangeRequest : AMessage, IRequest
+    {
+        public static C2G_PropertyBatchChangeRequest Create(bool autoReturn = true)
+        {
+            var c2G_PropertyBatchChangeRequest = MessageObjectPool<C2G_PropertyBatchChangeRequest>.Rent();
+            c2G_PropertyBatchChangeRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_PropertyBatchChangeRequest.SetIsPool(false);
+            }
+            
+            return c2G_PropertyBatchChangeRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            foreach (var __t in Items) __t.Dispose();
+            Items.Clear();
+            Reason = default;
+            MessageObjectPool<C2G_PropertyBatchChangeRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_PropertyBatchChangeRequest; } 
+        [ProtoIgnore]
+        public G2C_PropertyBatchChangeResponse ResponseType { get; set; }
+        /// <summary>
+        /// 待变更项列表(空 → no-op,响应 Results 为空)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<PropertyChangeItem> Items { get; set; } = new List<PropertyChangeItem>();
+        /// <summary>
+        /// 批次统一来源标识(逐项落账 reason = "{Reason}_{Type}",与单条链路口径一致)
+        /// </summary>
+        [ProtoMember(2)]
+        public string Reason { get; set; }
+    }
+    /// <summary>
+    /// 服务端批量变更逐项裁决响应(Results 顺序与请求 Items 一一对应;客户端也按 Type 匹配双保险)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_PropertyBatchChangeResponse : AMessage, IResponse
+    {
+        public static G2C_PropertyBatchChangeResponse Create(bool autoReturn = true)
+        {
+            var g2C_PropertyBatchChangeResponse = MessageObjectPool<G2C_PropertyBatchChangeResponse>.Rent();
+            g2C_PropertyBatchChangeResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_PropertyBatchChangeResponse.SetIsPool(false);
+            }
+            
+            return g2C_PropertyBatchChangeResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            foreach (var __t in Results) __t.Dispose();
+            Results.Clear();
+            MessageObjectPool<G2C_PropertyBatchChangeResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_PropertyBatchChangeResponse; } 
+        [ProtoMember(2)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 逐项结果(每项独立裁决,含成功 / 各类失败)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<PropertyBatchChangeResultItem> Results { get; set; } = new List<PropertyBatchChangeResultItem>();
     }
     /// <summary>
     /// 单条 ledger 流水项(白名单 7 字段,不暴露 ObjectId / SchemaVersion / Account)(§3.2)

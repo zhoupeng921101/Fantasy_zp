@@ -111,30 +111,93 @@ public static class CosmeticHelper
             return (UnlockCosmeticResultCode.InvalidKind, new List<int>());
         }
 
+        // 频率闸(限界信任·防脚本刷):同账号修饰操作最小间隔。单条 / 批量共用 IsUnlockRateLimited(批量对整批只检一次)。
+        var nowMs = TimeHelper.Now;
+        if (IsUnlockRateLimited(service, accountId, nowMs))
+        {
+            Log.Warning($"CosmeticHelper.TryUnlock 拒因=RateLimited account={accountId} kind={kind} id={id} min={service.CosmeticMinIntervalMs}ms");
+            var cur = await ReadUnlockedSet(players, accountId, kind);
+            return (UnlockCosmeticResultCode.RateLimited, cur);
+        }
+
+        // id 段 sanity + $addToSet 幂等写(单条 / 批量共用 AddUnlockedId,无频率闸)。
+        return await AddUnlockedId(players, service, accountId, kind, id, nowMs);
+    }
+
+    /// <summary>
+    /// 批量解锁上报:频率闸对整批**只检一次**(一次合法批操作),过闸后逐项 sanity(Kind 合法 + id 段 + 集合上限)
+    /// + $addToSet 幂等;逐项 sanity 失败**跳过不阻断整批**。返回 (整体结果码, 头像集, 框集):
+    ///   - Success:处理完回带两个 kind 的最终解锁集(客户端投影以此覆盖);
+    ///   - RateLimited:被闸挡,回带当前两集合(客户端下次边界重试);
+    ///   - ServiceUnavailable:服务不可用 / 读集合失败。
+    /// 空 items = Success + 当前两集合(no-op)。逐项 $addToSet 各自原子(N 次写,幂等),不合并 $each ——
+    /// 保留单条同款集合上限 filter 判定(逐项精确挡 SetFull),不引入先读后写竞态。
+    /// </summary>
+    public static async FTask<(UnlockCosmeticResultCode resultCode, List<int> avatarIds, List<int> frameIds)> TryUnlockBatch(
+        Scene scene, string accountId, IReadOnlyList<(int kind, int id)> items)
+    {
+        var service = scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (service?.Players is not { } players)
+        {
+            return (UnlockCosmeticResultCode.ServiceUnavailable, new List<int>(), new List<int>());
+        }
+
+        var nowMs = TimeHelper.Now;
+        if (IsUnlockRateLimited(service, accountId, nowMs))
+        {
+            Log.Warning($"CosmeticHelper.TryUnlockBatch 拒因=RateLimited account={accountId} count={items?.Count ?? 0} min={service.CosmeticMinIntervalMs}ms");
+            var (a, f) = await ReadBothSets(players, accountId);
+            return (UnlockCosmeticResultCode.RateLimited, a, f);
+        }
+
+        if (items != null)
+        {
+            foreach (var (kind, id) in items)
+            {
+                if (kind != (int)CosmeticKind.Avatar && kind != (int)CosmeticKind.Frame)
+                {
+                    continue; // 非法 Kind:跳过该项,不阻断整批
+                }
+                // 逐项 sanity(id 段 / 集合上限)+ $addToSet 幂等;逐项结果忽略(最终以两集合为准),失败项不阻断。
+                await AddUnlockedId(players, service, accountId, kind, id, nowMs);
+            }
+        }
+
+        var (avatar, frame) = await ReadBothSets(players, accountId);
+        return (UnlockCosmeticResultCode.Success, avatar, frame);
+    }
+
+    /// <summary>频率闸判定:被闸挡返 true;未挡则置位记录时刻返 false。单条 / 批量共用(批量对整批只调一次)。</summary>
+    private static bool IsUnlockRateLimited(PlayerPropertyServiceComponent service, string accountId, long nowMs)
+    {
+        if (service.CosmeticMinIntervalMs <= 0L) return false;
+        var rateKey = string.Concat(accountId, "|unlock");
+        if (service.LastCosmeticAtMs.TryGetValue(rateKey, out var prevMs) &&
+            nowMs - prevMs < service.CosmeticMinIntervalMs)
+        {
+            return true;
+        }
+        service.LastCosmeticAtMs[rateKey] = nowMs;
+        return false;
+    }
+
+    /// <summary>
+    /// 单 id 的 sanity(id 落合法段)+ $addToSet(幂等 + 集合上限)写,**无频率闸**(调用方管闸)、Kind 已由调用方校验合法。
+    /// 集合大小上限用 filter 的 $expr 在原子命令内判定(避免先读后写竞态);$addToSet 天然去重保证幂等。
+    /// 返回 (resultCode, 该 kind 更新后 / 当前集合):Success / InvalidId / SetFull / ServiceUnavailable。
+    /// </summary>
+    private static async FTask<(UnlockCosmeticResultCode resultCode, List<int> unlockedIds)> AddUnlockedId(
+        IMongoCollection<PlayerDoc> players, PlayerPropertyServiceComponent service, string accountId, int kind, int id, long nowMs)
+    {
         // sanity:id 落在对应合法段内。段边界靠 Kind 选(头像 [MinAvatarId,MaxAvatarId] / 框 [MinFrameId,MaxFrameId])。
         var (minId, maxId) = kind == (int)CosmeticKind.Avatar
             ? (service.MinAvatarId, service.MaxAvatarId)
             : (service.MinFrameId, service.MaxFrameId);
         if (id < minId || id > maxId)
         {
-            Log.Warning($"CosmeticHelper.TryUnlock 拒因=InvalidId account={accountId} kind={kind} id={id} 段=[{minId},{maxId}]");
+            Log.Warning($"CosmeticHelper.AddUnlockedId 拒因=InvalidId account={accountId} kind={kind} id={id} 段=[{minId},{maxId}]");
             var cur = await ReadUnlockedSet(players, accountId, kind);
             return (UnlockCosmeticResultCode.InvalidId, cur);
-        }
-
-        // 频率闸(限界信任·防脚本刷):同账号修饰操作最小间隔。进程内字典,进程重启清零(沿 LastChangeAtMs 同款)。
-        var nowMs = TimeHelper.Now;
-        if (service.CosmeticMinIntervalMs > 0L)
-        {
-            var rateKey = string.Concat(accountId, "|unlock");
-            if (service.LastCosmeticAtMs.TryGetValue(rateKey, out var prevMs) &&
-                nowMs - prevMs < service.CosmeticMinIntervalMs)
-            {
-                Log.Warning($"CosmeticHelper.TryUnlock 拒因=RateLimited account={accountId} kind={kind} id={id} elapsed={nowMs - prevMs}ms min={service.CosmeticMinIntervalMs}ms");
-                var cur = await ReadUnlockedSet(players, accountId, kind);
-                return (UnlockCosmeticResultCode.RateLimited, cur);
-            }
-            service.LastCosmeticAtMs[rateKey] = nowMs;
         }
 
         // 集合大小上限(防灌爆):$addToSet 幂等,重复上报同 id 不增大小,故仅当 id 尚不在集合内且已达上限才拒。
@@ -177,18 +240,34 @@ public static class CosmeticHelper
             var doc = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
             if (doc == null)
             {
-                Log.Warning($"CosmeticHelper.TryUnlock:账号 {accountId} 在 players 集合不存在(未首登?),返 ServiceUnavailable。");
+                Log.Warning($"CosmeticHelper.AddUnlockedId:账号 {accountId} 在 players 集合不存在(未首登?),返 ServiceUnavailable。");
                 return (UnlockCosmeticResultCode.ServiceUnavailable, new List<int>());
             }
             var curSet = kind == (int)CosmeticKind.Avatar ? doc.UnlockedAvatarIds : doc.UnlockedFrameIds;
             // 走到这里 = 集合已满且 id 未含(若 id 已含则 filter 的 AnyEq 分支必命中,不会到此)。
-            Log.Warning($"CosmeticHelper.TryUnlock 拒因=SetFull account={accountId} kind={kind} id={id} setSize={(curSet?.Count ?? 0)} max={service.UnlockedSetMaxSize}");
+            Log.Warning($"CosmeticHelper.AddUnlockedId 拒因=SetFull account={accountId} kind={kind} id={id} setSize={(curSet?.Count ?? 0)} max={service.UnlockedSetMaxSize}");
             return (UnlockCosmeticResultCode.SetFull, curSet ?? new List<int>());
         }
         catch (MongoException e)
         {
-            Log.Warning($"CosmeticHelper.TryUnlock 写集合失败 account={accountId} kind={kind} id={id},err={e.Message}");
+            Log.Warning($"CosmeticHelper.AddUnlockedId 写集合失败 account={accountId} kind={kind} id={id},err={e.Message}");
             return (UnlockCosmeticResultCode.ServiceUnavailable, new List<int>());
+        }
+    }
+
+    /// <summary>读两个 kind 的当前解锁集(失败或无档返两空表)。供批量解锁回带 / 被闸挡回带。</summary>
+    private static async FTask<(List<int> avatarIds, List<int> frameIds)> ReadBothSets(
+        IMongoCollection<PlayerDoc> players, string accountId)
+    {
+        try
+        {
+            var doc = await players.Find(Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId)).FirstOrDefaultAsync();
+            if (doc == null) return (new List<int>(), new List<int>());
+            return (doc.UnlockedAvatarIds ?? new List<int>(), doc.UnlockedFrameIds ?? new List<int>());
+        }
+        catch (MongoException)
+        {
+            return (new List<int>(), new List<int>());
         }
     }
 

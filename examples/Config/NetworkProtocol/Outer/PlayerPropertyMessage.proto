@@ -78,6 +78,42 @@ message G2C_PropertyDeltaPush // IMessage
 }
 
 // =========================================================================
+// 批量属性变更(传输层聚合,逐项独立裁决)。
+// 客户端一次玩法事件同时改多个属性时,把 N 条 C2G_PropertyChangeRequest 收敛成 1 条本 RPC,减少往返。
+// 语义非全或无:服务端对每一项独立调用与单条链路同一套 ChangeProperty(限界信任 + 频率闸 + 夹界 + 推送),
+// 逐项收集结果回包 —— 一项溢出 / 余额不足不回滚也不阻断其它项(奖励互相独立)。
+// 每个 PropertyType 在一个 batch 内最多出现一次,同 account|type 100ms 频率闸在 batch 内自然不误触。
+// =========================================================================
+
+/// 单条批量变更项(声明相对增量,身份从会话取,不携带账号 / 绝对余额)
+message PropertyChangeItem
+{
+	PropertyType Type = 1;     /// 要变更的属性类型
+	int64 Delta = 2;           /// 有符号增量(正 = 增加 / 负 = 减少 / 消费)
+}
+
+/// 单项裁决结果(结果码 + 变更后余额,口径同单条链路 G2C_PropertyChangeResponse)
+message PropertyBatchChangeResultItem
+{
+	PropertyType Type = 1;                     /// 回声该项的属性类型
+	PropertyChangeResultCode ResultCode = 2;   /// 该项裁决结果码
+	int64 NewAmount = 3;                       /// 成功 = 变更后新余额;NotEnough / OverLimit = 当前实际余额;其它失败 = 0
+}
+
+/// 客户端批量属性变更请求(一次携带 N 项,身份从会话取)
+message C2G_PropertyBatchChangeRequest // IRequest,G2C_PropertyBatchChangeResponse
+{
+	repeated PropertyChangeItem Items = 1;   /// 待变更项列表(空 → no-op,响应 Results 为空)
+	string Reason = 2;                       /// 批次统一来源标识(逐项落账 reason = "{Reason}_{Type}",与单条链路口径一致)
+}
+
+/// 服务端批量变更逐项裁决响应(Results 顺序与请求 Items 一一对应;客户端也按 Type 匹配双保险)
+message G2C_PropertyBatchChangeResponse // IResponse
+{
+	repeated PropertyBatchChangeResultItem Results = 1;   /// 逐项结果(每项独立裁决,含成功 / 各类失败)
+}
+
+// =========================================================================
 // 属性变更流水查询(Tier 2 第 3 子单 · server 段 + 客户端协议生成物)。
 // 设计基线:design-docs/45-player-attr-ledger-query.md §三 行为级协议契约。
 // 身份从会话取(不携带账号);服务端只读 player_attr_ledger 集合(44 已建)+ 字段裁剪 7 字段白名单

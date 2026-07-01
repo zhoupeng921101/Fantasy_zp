@@ -803,6 +803,39 @@ public static class PlayerPropertyServiceHelper
     }
 
     /// <summary>
+    /// 同 <see cref="SendDeltaPushTo"/>,但**排除发起会话**(<paramref name="exceptSession"/>)。批量变更 handler 用:
+    /// 发起方已从批量响应拿到全部权威值,不必再收自身的逐项 delta-push(除冗余自推);该账号其它在线会话(若有)仍收到对齐。
+    /// 单会话模型下 <c>account.Session</c> 即发起方 → 不推(发起方唯一会话)。离线 / 会话已断 → 丢弃(下次登录快照对齐)。
+    /// </summary>
+    public static void SendDeltaPushToExcept(Scene scene, string accountId, Session exceptSession,
+        PropertyType type, long newAmount, string reason)
+    {
+        if (!AccountManageHelper.TryGetAccount(scene, accountId, out var account))
+        {
+            return;
+        }
+
+        Session session = account.Session;
+        if (session == null || session.IsDisposed)
+        {
+            return;
+        }
+
+        // 排除发起会话:它已从批量响应拿到权威值,自推冗余(单会话模型下 account.Session 即发起方 → 直接不推)。
+        if (exceptSession != null && session.RuntimeId == exceptSession.RuntimeId)
+        {
+            return;
+        }
+
+        session.Send(new G2C_PropertyDeltaPush
+        {
+            Type = type,
+            NewAmount = newAmount,
+            Reason = reason ?? string.Empty
+        });
+    }
+
+    /// <summary>
     /// 推送玩家信息整份快照到指定会话(登录成功后即时下发)。
     /// 取代原 G2C_PropertyInitSnapshot:一条 G2C_PlayerInfoSnapshot 同时携带基础档案(昵称/等级/经验)与三数值属性余额。
     /// 走指定 session(刚登录的连接),不查 Account 字典——InitOrLoad 已在 Login Handler 取回 doc,调用方拿到 Session 即可直推。
