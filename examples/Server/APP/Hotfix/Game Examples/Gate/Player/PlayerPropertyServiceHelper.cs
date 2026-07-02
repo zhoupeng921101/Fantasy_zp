@@ -109,6 +109,9 @@ public static class PlayerPropertyServiceHelper
             .SetOnInsert(x => x.SkinMono, 0)
             .SetOnInsert(x => x.SkinMonoId, -1)
             .SetOnInsert(x => x.TempleDecorated, 0L)
+            // 道具持有 / 塔罗收集:首登空字典 / 空数组(显式写使字段 present,合成 CAS 的 Gte filter 形态稳定)。
+            .SetOnInsert(x => x.ItemHoldings, new System.Collections.Generic.Dictionary<string, long>())
+            .SetOnInsert(x => x.CollectedTarotIds, new System.Collections.Generic.List<int>())
             .SetOnInsert(x => x.Nickname, string.Empty)
             .SetOnInsert(x => x.Level, 1)
             .SetOnInsert(x => x.Exp, 0L)
@@ -197,9 +200,13 @@ public static class PlayerPropertyServiceHelper
             { "GuardianExp",         new BsonDocument("$ifNull", new BsonArray { "$GuardianExp", service.GuardianExpInitial }) },
             { "Energy",              new BsonDocument("$ifNull", new BsonArray { "$Energy", service.EnergyInitial }) },
             { "EnergyLastRecoverMs", new BsonDocument("$ifNull", new BsonArray { "$EnergyLastRecoverMs", nowMs }) },
-            { "OrderCursor",         new BsonDocument("$ifNull", new BsonArray { "$OrderCursor", 0 }) },
-            { "LastOrderRefreshMs",  new BsonDocument("$ifNull", new BsonArray { "$LastOrderRefreshMs", 0L }) },
-            { "OrderDeliveredMask",  new BsonDocument("$ifNull", new BsonArray { "$OrderDeliveredMask", 0 }) },
+            // 订单进度三字段:v10 起**无条件重置**(非 $ifNull 保留)。订单池由代码 8 条迁 Luban TbMergeOrder 22 条,
+            // 游标派生 pool[(cursor+i) mod 池长] 的取模基数变了,旧档 cursor/mask 指向的订单整体漂移、标记失义;
+            // 重置三字段 = 等价重新发第一批(LastOrderRefreshMs=0 → 下次接触 bootstrap 重锚定),一次性、幂等
+            // (migrateFilter 含 SchemaVersion < 当前版,已迁档不再命中)。
+            { "OrderCursor",         0 },
+            { "LastOrderRefreshMs",  0L },
+            { "OrderDeliveredMask",  0 },
             // P3 六元层进度计数器:旧档(schema < 5)缺字段 → 补 Initial(默认 0),present 则保留既有值。
             { "GoddessLevel",        new BsonDocument("$ifNull", new BsonArray { "$GoddessLevel", service.GoddessLevelInitial }) },
             { "GoddessRating",       new BsonDocument("$ifNull", new BsonArray { "$GoddessRating", service.GoddessRatingInitial }) },
@@ -227,6 +234,10 @@ public static class PlayerPropertyServiceHelper
             { "SkinMono",            new BsonDocument("$ifNull", new BsonArray { "$SkinMono", 0 }) },
             { "SkinMonoId",          new BsonDocument("$ifNull", new BsonArray { "$SkinMonoId", -1 }) },
             { "TempleDecorated",     new BsonDocument("$ifNull", new BsonArray { "$TempleDecorated", 0L }) },
+            // 道具持有 / 塔罗收集:旧档(schema < 10)缺字段 → 补空字典 / 空数组
+            //   (absent 字段对合成 CAS 的 Gte filter 永不命中,补齐后形态稳定),present 则保留既有值。
+            { "ItemHoldings",        new BsonDocument("$ifNull", new BsonArray { "$ItemHoldings", new BsonDocument() }) },
+            { "CollectedTarotIds",   new BsonDocument("$ifNull", new BsonArray { "$CollectedTarotIds", new BsonArray() }) },
             { "LastChangeUnixMs",    new BsonDocument("$ifNull", new BsonArray { "$LastChangeUnixMs", nowMs }) },
             { "SchemaVersion",       PlayerPropertyServiceComponent.CurrentSchemaVersion },
         };
@@ -325,6 +336,9 @@ public static class PlayerPropertyServiceHelper
             .Set(x => x.SkinMono, 0)
             .Set(x => x.SkinMonoId, -1)
             .Set(x => x.TempleDecorated, 0L)
+            // 道具持有 / 塔罗收集:清档清空(对齐首登 setOnInsert)。
+            .Set(x => x.ItemHoldings, new System.Collections.Generic.Dictionary<string, long>())
+            .Set(x => x.CollectedTarotIds, new System.Collections.Generic.List<int>())
             .Set(x => x.Nickname, string.Empty)
             .Set(x => x.Level, 1)
             .Set(x => x.Exp, 0L)

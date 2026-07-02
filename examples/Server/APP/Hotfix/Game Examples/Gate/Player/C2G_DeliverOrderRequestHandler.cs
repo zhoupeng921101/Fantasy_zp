@@ -28,15 +28,24 @@ public sealed class C2G_DeliverOrderRequestHandler : MessageRPC<C2G_DeliverOrder
             Log.Warning("收到 DeliverOrderRequest 但会话未登录(无 GateAccountFlagComponent/Account)。");
             response.ResultCode = DeliverOrderResultCode.NotLoggedIn;
             response.Snapshot = MergeOrderSnapshot.Create(); // 占位空 snapshot
+            response.EnergyBalance = -1L; // 哨兵:未裁决,客户端不据此 set
+            response.PietyBalance = -1L;
+            response.FragmentBalance = -1L;
             return;
         }
 
-        var (resultCode, energyReward, pietyReward, snapshot) =
-            await MergeOrderServiceHelper.TryDeliver(session.Scene, account, request.Slot);
+        var (resultCode, energyReward, pietyReward, energyBalance, pietyBalance,
+             fragmentItemId, fragmentReward, fragmentBalance, snapshot) =
+            await MergeOrderServiceHelper.TryDeliver(session, account, request.Slot);
 
         response.ResultCode = resultCode;
         response.EnergyReward = energyReward;
         response.PietyReward = pietyReward;
+        response.EnergyBalance = energyBalance;
+        response.PietyBalance = pietyBalance;
+        response.FragmentItemId = fragmentItemId;
+        response.FragmentReward = fragmentReward;
+        response.FragmentBalance = fragmentBalance;
         response.Snapshot = snapshot;
     }
 

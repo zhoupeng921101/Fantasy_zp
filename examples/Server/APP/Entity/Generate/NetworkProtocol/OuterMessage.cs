@@ -1324,7 +1324,7 @@ namespace Fantasy
         public G2C_EnterMainGameResponse ResponseType { get; set; }
     }
     /// <summary>
-    /// 服务端对进入主游戏请求的响应:订单快照
+    /// 服务端对进入主游戏请求的响应:订单快照 + 道具持有 + 塔罗收集
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -1366,10 +1366,14 @@ namespace Fantasy
                 OrderSnapshot.Dispose();
                 OrderSnapshot = null;
             }
+            foreach (var __t in ItemHoldings) __t.Dispose();
+            ItemHoldings.Clear();
+            CollectedTarotIds.Clear();
+            ItemDataLoaded = default;
             MessageObjectPool<G2C_EnterMainGameResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_EnterMainGameResponse; } 
-        [ProtoMember(2)]
+        [ProtoMember(5)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 订单系统当前激活快照(派生自 PlayerDoc 的 OrderCursor / DeliveredMask;
@@ -1377,6 +1381,23 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(1)]
         public MergeOrderSnapshot OrderSnapshot { get; set; }
+        /// <summary>
+        /// 道具持有整份快照(PlayerDoc.ItemHoldings 投影,当前业务方 = 塔罗碎片;仅 ItemDataLoaded=true 时可信)
+        /// </summary>
+        [ProtoMember(2)]
+        public List<ItemHolding> ItemHoldings { get; set; } = new List<ItemHolding>();
+        /// <summary>
+        /// 已合成塔罗牌 id 全集(PlayerDoc.CollectedTarotIds 投影;仅 ItemDataLoaded=true 时可信)
+        /// </summary>
+        [ProtoMember(3)]
+        public List<int> CollectedTarotIds { get; set; } = new List<int>();
+        /// <summary>
+        /// 道具持有 + 塔罗收集两段是否真取到玩家数据:true = 上两字段为权威值(空 = 权威空集,客户端整份覆盖);
+        /// false = 服务端降级(未登录 / 服务不可用 / 读库失败),客户端保留既有投影不清空。
+        /// proto3 repeated 无法区分「空集」与「缺失」,靠本标志承载该区分。
+        /// </summary>
+        [ProtoMember(4)]
+        public bool ItemDataLoaded { get; set; }
     }
     /// <summary>
     /// 客户端登陆到Gate服务器
@@ -1825,6 +1846,7 @@ namespace Fantasy
     }
     /// <summary>
     /// 单条订单项(= 客户端 GameLogic.BlockBlast.Order;Type 用 int32 与客户端 MergeElement 枚举 1..4 对齐,0=None=空槽)
+    /// 奖励字段是服务端按 TbMergeOrder 表派生的展示投影:客户端只显示、不参与发奖计算(交付实发以响应/推送为准)。
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -1863,6 +1885,10 @@ namespace Fantasy
             Type = default;
             Level = default;
             Count = default;
+            EnergyReward = default;
+            PietyReward = default;
+            FragmentItemId = default;
+            FragmentCount = default;
             MessageObjectPool<OrderItem>.Return(this);
         }
         /// <summary>
@@ -1880,6 +1906,26 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public int Count { get; set; }
+        /// <summary>
+        /// 交付奖励体力(展示用;空槽为 0)
+        /// </summary>
+        [ProtoMember(4)]
+        public int EnergyReward { get; set; }
+        /// <summary>
+        /// 交付奖励虔诚币(展示用;空槽为 0)
+        /// </summary>
+        [ProtoMember(5)]
+        public long PietyReward { get; set; }
+        /// <summary>
+        /// 交付掉落塔罗碎片道具 id(= TbItemDef 行;展示用;空槽/无碎片为 0)
+        /// </summary>
+        [ProtoMember(6)]
+        public int FragmentItemId { get; set; }
+        /// <summary>
+        /// 交付掉落碎片数量(展示用;空槽为 0)
+        /// </summary>
+        [ProtoMember(7)]
+        public int FragmentCount { get; set; }
     }
     /// <summary>
     /// 订单系统当前状态快照(服务端权威,客户端只持投影)。
@@ -1924,7 +1970,6 @@ namespace Fantasy
             OrderCursor = default;
             LastOrderRefreshMs = default;
             OrderRefreshIntervalSec = default;
-            OrderRewardEnergy = default;
             MessageObjectPool<MergeOrderSnapshot>.Return(this);
         }
         /// <summary>
@@ -1947,11 +1992,6 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(4)]
         public int OrderRefreshIntervalSec { get; set; }
-        /// <summary>
-        /// 单次交付奖励体力(客户端 toast 预读;服务端发奖时按此值落账,客户端无需自报)
-        /// </summary>
-        [ProtoMember(5)]
-        public int OrderRewardEnergy { get; set; }
     }
     /// <summary>
     /// 客户端请求交付某槽位的订单(身份从会话取,不带账号 / 不带订单类型 / 不带奖励金额——服务端按 OrderCursor + DeliveredMask 自己定)
@@ -2049,10 +2089,15 @@ namespace Fantasy
                 Snapshot.Dispose();
                 Snapshot = null;
             }
+            EnergyBalance = default;
+            PietyBalance = default;
+            FragmentItemId = default;
+            FragmentReward = default;
+            FragmentBalance = default;
             MessageObjectPool<G2C_DeliverOrderResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_DeliverOrderResponse; } 
-        [ProtoMember(6)]
+        [ProtoMember(11)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 裁决结果码
@@ -2065,12 +2110,12 @@ namespace Fantasy
         [ProtoMember(2)]
         public int Slot { get; set; }
         /// <summary>
-        /// 成功时:本次发奖体力实际净增量(可能因服务端上界钳止小于 OrderRewardEnergy);失败时 = 0
+        /// 成功时:本次发奖体力实际净增量(= TbMergeOrder 该行配值;撞服务端硬顶被整笔拒时 = 0);失败时 = 0
         /// </summary>
         [ProtoMember(3)]
         public long EnergyReward { get; set; }
         /// <summary>
-        /// 成功时:本次发奖虔诚币(= 订单难度 × PietyPerDifficulty);失败时 = 0
+        /// 成功时:本次发奖虔诚币(= TbMergeOrder 该行配值);失败时 = 0
         /// </summary>
         [ProtoMember(4)]
         public long PietyReward { get; set; }
@@ -2079,6 +2124,31 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(5)]
         public MergeOrderSnapshot Snapshot { get; set; }
+        /// <summary>
+        /// 交付后 Energy 权威绝对余额:客户端据此对账 set 本地体力(免依赖 delta-push);-1 = 哨兵(本次未取到权威值,客户端不 set)
+        /// </summary>
+        [ProtoMember(6)]
+        public long EnergyBalance { get; set; }
+        /// <summary>
+        /// 交付后 Piety 权威绝对余额(同 EnergyBalance 口径)
+        /// </summary>
+        [ProtoMember(7)]
+        public long PietyBalance { get; set; }
+        /// <summary>
+        /// 本次掉落的塔罗碎片道具 id(= TbMergeOrder 该订单行配置;0 = 本次无碎片落账)
+        /// </summary>
+        [ProtoMember(8)]
+        public int FragmentItemId { get; set; }
+        /// <summary>
+        /// 本次实发碎片数量(服务端按表自算;失败/未发 = 0)
+        /// </summary>
+        [ProtoMember(9)]
+        public long FragmentReward { get; set; }
+        /// <summary>
+        /// 落账后该碎片权威持有量(客户端据此对账 set 本地背包计数;-1 = 哨兵,本次未取到权威值,客户端不 set)
+        /// </summary>
+        [ProtoMember(10)]
+        public long FragmentBalance { get; set; }
     }
     [Serializable]
     [ProtoContract]
@@ -5984,6 +6054,187 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(4)]
         public long Diamond { get; set; }
+    }
+    /// <summary>
+    /// 单条道具持有(itemId → 数量;通用道具持有投影,当前业务方 = 塔罗碎片)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class ItemHolding : AMessage, IDisposable
+    {
+        public static ItemHolding Create(bool autoReturn = true)
+        {
+            var itemHolding = MessageObjectPool<ItemHolding>.Rent();
+            itemHolding.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                itemHolding.SetIsPool(false);
+            }
+            
+            return itemHolding;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ItemId = default;
+            Count = default;
+            MessageObjectPool<ItemHolding>.Return(this);
+        }
+        /// <summary>
+        /// 道具 id(= TbItemDef 行)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 持有数量(权威绝对值)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Count { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求合成塔罗牌(身份从会话取;碎片消耗量由服务端按 TbTarotCard 表自算,客户端不上报)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_TarotSynthesizeRequest : AMessage, IRequest
+    {
+        public static C2G_TarotSynthesizeRequest Create(bool autoReturn = true)
+        {
+            var c2G_TarotSynthesizeRequest = MessageObjectPool<C2G_TarotSynthesizeRequest>.Rent();
+            c2G_TarotSynthesizeRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_TarotSynthesizeRequest.SetIsPool(false);
+            }
+            
+            return c2G_TarotSynthesizeRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            CardId = default;
+            MessageObjectPool<C2G_TarotSynthesizeRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_TarotSynthesizeRequest; } 
+        [ProtoIgnore]
+        public G2C_TarotSynthesizeResponse ResponseType { get; set; }
+        /// <summary>
+        /// 目标塔罗牌 id(= TbTarotCard 行)
+        /// </summary>
+        [ProtoMember(1)]
+        public int CardId { get; set; }
+    }
+    /// <summary>
+    /// 服务端合成裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_TarotSynthesizeResponse : AMessage, IResponse
+    {
+        public static G2C_TarotSynthesizeResponse Create(bool autoReturn = true)
+        {
+            var g2C_TarotSynthesizeResponse = MessageObjectPool<G2C_TarotSynthesizeResponse>.Rent();
+            g2C_TarotSynthesizeResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_TarotSynthesizeResponse.SetIsPool(false);
+            }
+            
+            return g2C_TarotSynthesizeResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            CardId = default;
+            FragmentItemId = default;
+            FragmentBalance = default;
+            CollectedTarotIds.Clear();
+            CollectedValid = default;
+            MessageObjectPool<G2C_TarotSynthesizeResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_TarotSynthesizeResponse; } 
+        [ProtoMember(7)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public TarotSynthesizeResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 回声牌 id
+        /// </summary>
+        [ProtoMember(2)]
+        public int CardId { get; set; }
+        /// <summary>
+        /// 该牌对应碎片道具 id(客户端据此定位本地投影;失败时可能为 0)
+        /// </summary>
+        [ProtoMember(3)]
+        public int FragmentItemId { get; set; }
+        /// <summary>
+        /// 扣减后该碎片权威持有量(-1 = 哨兵,本次未取到权威值,客户端不 set)
+        /// </summary>
+        [ProtoMember(4)]
+        public long FragmentBalance { get; set; }
+        /// <summary>
+        /// 已合成塔罗牌 id 全集(仅 CollectedValid=true 时可信,客户端整份覆盖)
+        /// </summary>
+        [ProtoMember(5)]
+        public List<int> CollectedTarotIds { get; set; } = new List<int>();
+        /// <summary>
+        /// CollectedTarotIds 是否真取自玩家文档:false = 降级路径的空占位
+        /// </summary>
+        [ProtoMember(6)]
+        public bool CollectedValid { get; set; }
     }
     /// <summary>
     /// 测试使用ErrorCode枚举的消息

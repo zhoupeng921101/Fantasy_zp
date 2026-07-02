@@ -136,8 +136,9 @@ public sealed class C2G_ClearToolRequestHandler : MessageRPC<C2G_ClearToolReques
             return;
         }
 
-        // 扣费成功:推送体力增量(与 DeliverOrder 同范式,让在线会话体力 HUD 对齐)。
-        PlayerPropertyServiceHelper.SendDeltaPushTo(session.Scene, accountId, PropertyType.Energy, energyAfter, reason);
+        // 扣费成功:推送体力增量,排除发起会话:发起方已从响应 NewEnergy 拿到权威体力,自推冗余;只推该账号其它在线会话对齐
+        // (单会话模型下发起方即唯一会话 → 不推)。同 Place / DeliverOrder / 批量属性变更范式。
+        PlayerPropertyServiceHelper.SendDeltaPushToExcept(session.Scene, accountId, session, PropertyType.Energy, energyAfter, reason);
 
         // 清目标行列(权威棋盘)+ 推进 Step(不消耗候选、不推进发牌、不续发)。
         int clearedCells = GameSessionHelper.ClearTool(game, request.PosX, request.PosY);

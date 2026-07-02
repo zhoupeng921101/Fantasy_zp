@@ -103,10 +103,12 @@ namespace Fantasy
         public const uint G2C_RedeemCodeResponse = 402663216;
         public const uint C2G_RenameRequest = 268445489;
         public const uint G2C_RenameResponse = 402663217;
+        public const uint C2G_TarotSynthesizeRequest = 268445490;
+        public const uint G2C_TarotSynthesizeResponse = 402663218;
         public const uint C2G_TestEnumMessage = 134227739;
-        public const uint C2G_WishForEnergyRequest = 268445490;
-        public const uint G2C_WishForEnergyResponse = 402663218;
-        public const uint C2G_ClearPlayerDataRequest = 268445491;
-        public const uint G2C_ClearPlayerDataResponse = 402663219;
+        public const uint C2G_WishForEnergyRequest = 268445491;
+        public const uint G2C_WishForEnergyResponse = 402663219;
+        public const uint C2G_ClearPlayerDataRequest = 268445492;
+        public const uint G2C_ClearPlayerDataResponse = 402663220;
     }
 }

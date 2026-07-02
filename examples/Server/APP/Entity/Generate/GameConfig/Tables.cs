@@ -53,6 +53,14 @@ public partial class Tables
     /// 全局零散参数配置表(键值型,value按需解析)
     /// </summary>
     public global.TbGlobal TbGlobal {get; }
+    /// <summary>
+    /// 订单池表(池序=id升序;奖励直配值;碎片=塔罗收集掉落源)
+    /// </summary>
+    public block.TbMergeOrder TbMergeOrder {get; }
+    /// <summary>
+    /// 塔罗牌收集表(22张大阿卡纳;碎片凑齐手动合成)
+    /// </summary>
+    public block.TbTarotCard TbTarotCard {get; }
 
     public Tables(System.Func<string, ByteBuf> loader)
     {
@@ -66,6 +74,8 @@ public partial class Tables
         TbMailGlobal = new mail.TbMailGlobal(loader("mail_tbmailglobal"));
         TbRank = new rank.TbRank(loader("rank_tbrank"));
         TbGlobal = new global.TbGlobal(loader("global_tbglobal"));
+        TbMergeOrder = new block.TbMergeOrder(loader("block_tbmergeorder"));
+        TbTarotCard = new block.TbTarotCard(loader("block_tbtarotcard"));
         ResolveRef();
     }
     
@@ -81,6 +91,8 @@ public partial class Tables
         TbMailGlobal.ResolveRef(this);
         TbRank.ResolveRef(this);
         TbGlobal.ResolveRef(this);
+        TbMergeOrder.ResolveRef(this);
+        TbTarotCard.ResolveRef(this);
     }
 }
 

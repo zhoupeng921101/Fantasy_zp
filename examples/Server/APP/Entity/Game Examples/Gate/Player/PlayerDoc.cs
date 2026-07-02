@@ -183,6 +183,20 @@ public sealed class PlayerDoc
     /// <summary>已装饰厅数标量(前缀语义,= 已修厅数;首登 setOnInsert 默认 0,旧档缺字段补 0)。</summary>
     public long TempleDecorated { get; set; }
 
+    // ---- 道具持有 / 塔罗牌收集(服务端权威)----
+    // 通用道具持有字典(非碎片专用):key = 道具 id 十进制字符串(BSON 文档键必须是字符串),value = 持有数量。
+    // 当前业务方 = 塔罗碎片(订单交付发放、合成扣减);原子变更走 "ItemHoldings.<itemId>" 点路径 $inc,
+    // 单条 FindOneAndUpdate 保证并发安全。已合成塔罗牌集合 $addToSet 幂等,与碎片扣减同一条原子命令(合成 CAS)。
+    // 缺省:首登 setOnInsert 空字典 / 空数组;旧档缺字段由 MigrateSchemaIfNeeded 补(absent 字段对 Gte filter 永不命中)。
+
+    /// <summary>道具持有(itemId 字符串 → 数量;首登 setOnInsert 空字典,旧档缺字段补空字典)。</summary>
+    public System.Collections.Generic.Dictionary<string, long> ItemHoldings { get; set; }
+        = new System.Collections.Generic.Dictionary<string, long>();
+
+    /// <summary>已合成塔罗牌 id 集合(= TbTarotCard 行 id;首登 setOnInsert 空,旧档缺字段补空列表)。</summary>
+    public System.Collections.Generic.List<int> CollectedTarotIds { get; set; }
+        = new System.Collections.Generic.List<int>();
+
     /// <summary>schema 版本(加字段时升 + 缺字段保底)。</summary>
     public int SchemaVersion { get; set; }
 }

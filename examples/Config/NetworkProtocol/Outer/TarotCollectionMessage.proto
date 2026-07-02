@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+// TarotCollectionMessage.proto
+// 塔罗牌收集系统协议(交付订单掉碎片 → 碎片凑齐手动合成塔罗牌,纯收集图鉴)。
+//
+// 服务端权威:碎片持有(PlayerDoc.ItemHoldings)与已合成牌集合(PlayerDoc.CollectedTarotIds)
+// 均服务端持久化;合成裁决 = 单条原子 CAS(碎片足额过滤 + $inc 扣碎片 + $addToSet 置牌),
+// 客户端只持投影(登录经 EnterMainGame 响应回带整份持有 + 收集,交付/合成响应回带增量对账)。
+//
+// 配置基线:Luban block.TbTarotCard(牌 → 碎片道具 id + 合成所需碎片数)+ item.TbItemDef(碎片道具行)。
+// 与既有 TarotBlindBox(神秘塔罗盲盒,客户端局内掷奖)是两个系统,仅主题同名。
+
+/// 单条道具持有(itemId → 数量;通用道具持有投影,当前业务方 = 塔罗碎片)
+message ItemHolding
+{
+	int32 ItemId = 1;    /// 道具 id(= TbItemDef 行)
+	int64 Count = 2;     /// 持有数量(权威绝对值)
+}
+
+/// 塔罗牌合成裁决结果码
+enum TarotSynthesizeResultCode
+{
+	Success = 0,             /// 成功:已扣碎片、置已合成,回带权威碎片余额 + 收集全集
+	NotLoggedIn = 1,         /// 会话未挂账号 → 客户端重登
+	UnknownCard = 2,         /// 牌 id 不在 TbTarotCard 表
+	AlreadyCollected = 3,    /// 该牌已合成(幂等拒绝,不扣碎片)
+	NotEnoughFragments = 4,  /// 碎片不足(CAS 过滤未命中且重读确认不足)
+	ServiceUnavailable = 5,  /// MongoDB 不可达 / 服务未就绪 / 配置缺失
+}
+
+/// 客户端请求合成塔罗牌(身份从会话取;碎片消耗量由服务端按 TbTarotCard 表自算,客户端不上报)
+message C2G_TarotSynthesizeRequest // IRequest,G2C_TarotSynthesizeResponse
+{
+	int32 CardId = 1;    /// 目标塔罗牌 id(= TbTarotCard 行)
+}
+
+/// 服务端合成裁决响应
+message G2C_TarotSynthesizeResponse // IResponse
+{
+	TarotSynthesizeResultCode ResultCode = 1;    /// 裁决结果码
+	int32 CardId = 2;                            /// 回声牌 id
+	int32 FragmentItemId = 3;                    /// 该牌对应碎片道具 id(客户端据此定位本地投影;失败时可能为 0)
+	int64 FragmentBalance = 4;                   /// 扣减后该碎片权威持有量(-1 = 哨兵,本次未取到权威值,客户端不 set)
+	repeated int32 CollectedTarotIds = 5;        /// 已合成塔罗牌 id 全集(仅 CollectedValid=true 时可信,客户端整份覆盖)
+	bool CollectedValid = 6;                     /// CollectedTarotIds 是否真取自玩家文档:false = 降级路径的空占位
+	                                             /// (未登录/未知牌/读库失败),客户端保留既有投影不清空。
+}

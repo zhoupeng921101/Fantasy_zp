@@ -42,7 +42,7 @@ public static class GameConfigSystem
                 byte[] bytes = File.ReadAllBytes(path);
                 return new ByteBuf(bytes);
             });
-            Console.WriteLine($"[GameConfigSystem] 加载完成:root={root},表数=10(含 TbGlobal)。");
+            Console.WriteLine($"[GameConfigSystem] 加载完成:root={root},表数=12(含 TbGlobal / TbMergeOrder / TbTarotCard)。");
         }
         catch (Exception e)
         {

@@ -436,6 +436,35 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         }
         self.AttrLedger = ledger;
 
+        // player_item_ledger 集合句柄 + 建索引(道具持有变更流水,沿 player_attr_ledger 同规约:
+        // insert-only、失败 Warning 不阻断、查询索引同形)。
+        var itemLedger = mongoDatabase.GetCollection<PlayerItemLedgerDoc>("player_item_ledger");
+        try
+        {
+            var itemByAccount = new CreateIndexModel<PlayerItemLedgerDoc>(
+                Builders<PlayerItemLedgerDoc>.IndexKeys
+                    .Ascending(x => x.Account)
+                    .Descending(x => x.Timestamp),
+                new CreateIndexOptions { Name = "ix_account_ts_desc" });
+            var itemByTs = new CreateIndexModel<PlayerItemLedgerDoc>(
+                Builders<PlayerItemLedgerDoc>.IndexKeys.Descending(x => x.Timestamp),
+                new CreateIndexOptions { Name = "ix_ts_desc" });
+            await itemLedger.Indexes.CreateManyAsync(new[] { itemByAccount, itemByTs });
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"PlayerPropertyServiceComponent: player_item_ledger 索引创建警告(可能重复存在),err={e.Message}");
+        }
+        self.ItemLedger = itemLedger;
+
+        // 订单池可用性哨兵:池来自 Luban TbMergeOrder(静态缓存,进程生命周期内不重读)。空池 = 导表遗漏 /
+        // GameConfigBytes 漏拷的部署级故障(快照全空槽、交付全 ServiceUnavailable),静态初始化期只有 Console 告警
+        // 不进 NLog 管道,此处补一条框架日志供运维发现。
+        if (MergeOrderConfigServer.OrderPool.Length == 0)
+        {
+            Log.Error("PlayerPropertyServiceComponent: 订单池为空(TbMergeOrder 缺失/空表)——订单快照将全空槽、交付一律 ServiceUnavailable。请检查导表与 GameConfigBytes 部署,修复后需重启进程。");
+        }
+
         // Luban A 类配置回显(用户验收 Stage 1 配置读表是否生效):
         //   EnergyRecoverSoftCap ← global.xlsx id=4 EnergyRecoverCap
         //   EnergyRecoverIntervalMs / PerTick ← global.xlsx id=3 EnergyRecoverSeconds("amount#interval" 复合)
@@ -454,5 +483,6 @@ public sealed class PlayerPropertyServiceComponentDestroySystem : DestroySystem<
     {
         self.Players = null;
         self.AttrLedger = null;
+        self.ItemLedger = null;
     }
 }

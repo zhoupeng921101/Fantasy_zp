@@ -22,6 +22,13 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// </summary>
     public IMongoCollection<PlayerAttrLedgerDoc>? AttrLedger;
 
+    /// <summary>
+    /// 玩家道具持有变更审计流水集合(player_item_ledger)。Init 前 / MongoDB 不可达时为 null。
+    /// 每笔成功道具增减(订单发碎片 / 塔罗合成扣碎片)追加一行,永不 update / delete(沿 AttrLedger 同规约);
+    /// Null 时持有写库照常成功 + ledger 旁路静默跳过。
+    /// </summary>
+    public IMongoCollection<PlayerItemLedgerDoc>? ItemLedger;
+
     /// <summary>金币首登初始值(运营配置,默认 0;§3.1 + plan D6 不读 PlayerPrefs 老值)。</summary>
     public long CoinInitial;
 
@@ -185,6 +192,6 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// <summary>已装饰厅数标量上界(sanity:客户端上报超此值拒。0 到上界闭区间合法;= 神庙厅数宽松天花板)。</summary>
     public long TempleDecoratedMax;
 
-    /// <summary>玩家数据 schema 版本(常量 9;皮肤态 / 神庙装饰加 SkinMono / SkinMonoId / TempleDecorated 3 字段后由 8 升至 9)。</summary>
-    public const int CurrentSchemaVersion = 9;
+    /// <summary>玩家数据 schema 版本(常量 10)。加持久字段时升版,旧档由登录链路 MigrateSchemaIfNeeded 按此版补齐。</summary>
+    public const int CurrentSchemaVersion = 10;
 }

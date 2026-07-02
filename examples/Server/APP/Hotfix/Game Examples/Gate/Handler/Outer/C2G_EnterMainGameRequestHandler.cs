@@ -63,12 +63,33 @@ public sealed class C2G_EnterMainGameRequestHandler
                 await MergeOrderServiceHelper.ApplyOrderRefreshIfDue(
                     propService, accountName, playerDoc, Fantasy.Helper.TimeHelper.Now);
                 response.OrderSnapshot = MergeOrderServiceHelper.BuildSnapshot(playerDoc);
+
+                // ── 道具持有 + 塔罗收集整份快照(客户端整份覆盖本地投影)──────────
+                // ItemDataLoaded 仅在真读到玩家文档时置 true:proto3 repeated 无法区分「权威空集」与
+                // 「降级未取到」,读库失败若不置此标志,客户端会把空列表当权威空集误清背包/收集投影。
+                response.ItemDataLoaded = true;
+                if (playerDoc.ItemHoldings != null)
+                {
+                    foreach (var kv in playerDoc.ItemHoldings)
+                    {
+                        if (!int.TryParse(kv.Key, out var itemId) || itemId <= 0 || kv.Value <= 0) continue;
+                        var holding = ItemHolding.Create();
+                        holding.ItemId = itemId;
+                        holding.Count = kv.Value;
+                        response.ItemHoldings.Add(holding);
+                    }
+                }
+                if (playerDoc.CollectedTarotIds != null)
+                {
+                    response.CollectedTarotIds.AddRange(playerDoc.CollectedTarotIds);
+                }
             }
-            // playerDoc == null:沿用上面默认空 snapshot。
+            // playerDoc == null:沿用上面默认空 snapshot / 空持有列表。
         }
-        // propService == null / Players == null:同样沿用空 snapshot。
+        // propService == null / Players == null:同样沿用空 snapshot / 空持有列表。
 
         Log.Debug($"EnterMainGame playerId={playerId} account={accountName} " +
-                  $"orderActiveCount={response.OrderSnapshot.ActiveOrders.Count}");
+                  $"orderActiveCount={response.OrderSnapshot.ActiveOrders.Count} " +
+                  $"itemHoldings={response.ItemHoldings.Count} collectedTarot={response.CollectedTarotIds.Count}");
     }
 }

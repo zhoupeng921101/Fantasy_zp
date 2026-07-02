@@ -197,8 +197,9 @@ public sealed class C2G_PlaceRequestHandler : MessageRPC<C2G_PlaceRequest, G2C_P
         if (energyResult == PropertyChangeResultCode.Success)
         {
             response.NewEnergy = energyAfter;
-            // 推送体力增量(与 ClearTool / DeliverOrder 同范式,让在线会话 HUD 对齐)。
-            PlayerPropertyServiceHelper.SendDeltaPushTo(session.Scene, accountId, PropertyType.Energy, energyAfter, reason);
+            // 推送体力增量,排除发起会话:发起方已从响应 NewEnergy 拿到权威体力,自推冗余;只推该账号其它在线会话对齐
+            // (单会话模型下发起方即唯一会话 → 不推)。同 ClearTool / DeliverOrder / 批量属性变更范式。
+            PlayerPropertyServiceHelper.SendDeltaPushToExcept(session.Scene, accountId, session, PropertyType.Energy, energyAfter, reason);
             Log.Debug($"[BlockBlast] Place 派生体力 account={accountId} gameId={game.GameId} step={game.Step} " +
                       $"lines={eliminatedLines} E={energyBefore} target={target} netDelta={netDelta} newEnergy={energyAfter}");
             return;

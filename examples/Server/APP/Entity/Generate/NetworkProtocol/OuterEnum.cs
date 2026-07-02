@@ -233,7 +233,7 @@ namespace Fantasy
 	public enum DeliverOrderResultCode
 	{
 		/// <summary>
-		/// 成功:服务端已发奖、推 delta、回带最新快照
+		/// 成功:服务端已发奖、回带最新快照 + 权威绝对余额(发起方据此对账),对其它会话推 delta(排除发起方)
 		/// </summary>
 		Success = 0,
 		/// <summary>
@@ -496,6 +496,37 @@ namespace Fantasy
 		/// MongoDB 不可达 / 服务未就绪 / 写库异常,昵称未改
 		/// </summary>
 		ServiceUnavailable = 4
+	}
+
+	/// <summary>
+	/// 塔罗牌合成裁决结果码
+	/// </summary>
+	public enum TarotSynthesizeResultCode
+	{
+		/// <summary>
+		/// 成功:已扣碎片、置已合成,回带权威碎片余额 + 收集全集
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号 → 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 牌 id 不在 TbTarotCard 表
+		/// </summary>
+		UnknownCard = 2,
+		/// <summary>
+		/// 该牌已合成(幂等拒绝,不扣碎片)
+		/// </summary>
+		AlreadyCollected = 3,
+		/// <summary>
+		/// 碎片不足(CAS 过滤未命中且重读确认不足)
+		/// </summary>
+		NotEnoughFragments = 4,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 配置缺失
+		/// </summary>
+		ServiceUnavailable = 5
 	}
 
 	/// <summary>
