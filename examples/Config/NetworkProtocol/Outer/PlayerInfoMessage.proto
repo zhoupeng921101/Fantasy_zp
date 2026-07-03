@@ -24,6 +24,12 @@ message PlayerInfo
 	int32 SkinMono = 14;                       /// 皮肤态服务端权威(3b):是否单色皮肤模式(0=彩色 / 1=单色;缺省 0=彩色)
 	int32 SkinMonoId = 15;                     /// 皮肤态服务端权威(3b):当前单色皮肤 id(彩色态 -1;缺省 -1)
 	int64 TempleDecorated = 16;                /// 神庙装饰服务端权威(3b):已装饰厅数标量(前缀语义,= 已修厅数;缺省 0)
+	// 背包服务端权威:两轨全量并入登录快照,一次性下发(不另起查询 RPC)。类型见 InventoryMessage.proto。
+	repeated InventoryHolding Holdings = 17;   /// 堆叠轨全量(itemId → 数量)
+	repeated InventoryLot Lots = 18;           /// 批次轨全量(有有效期道具,已剔除过期批次)
+	int64 ServerNowMs = 19;                    /// 服务端权威当前时刻(Unix 毫秒 UTC);客户端锚定倒计时基准,批次剩余 = ExpireMs - (ServerNowMs + 本地流逝)
+	bool InventoryLoaded = 20;                 /// 背包权威整份标志(true=Holdings/Lots 为权威全量;false=服务端读库降级,客户端保留本地投影不清空)
+	int64 LastUseReqSeq = 21;                  /// 使用事务幂等锚当前值(服务端持久);客户端登录 seed 本地 reqSeq 底,保重登后首个使用序号 > 服务端已处理值(防时钟回拨误判 Duplicate)
 }
 
 /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)

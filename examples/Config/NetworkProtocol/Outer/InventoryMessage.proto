@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+// InventoryMessage.proto
+// 背包系统服务端权威协议:使用道具(专用事务 + reqSeq 幂等)+ 背包增量推送。
+// 归属:道具是玩家资产,服务端 players 文档唯一权威,客户端只持投影(见 data-authority 规约)。
+// 两轨:堆叠轨(InventoryHolding,itemId → 数量,无独立状态)+ 批次轨(InventoryLot,每次获得一条,带过期时刻)。
+// 背包全量随登录快照下发(见 PlayerInfoMessage.proto 的 PlayerInfo);本文件承载使用与保鲜推送。
+
+/// 堆叠轨单项(无独立状态的可堆叠道具:itemId → 持有数量)。快照 / 推送共用。
+message InventoryHolding
+{
+	int32 ItemId = 1;      /// 道具 id(= Luban item.TbItemDef 行 id)
+	int64 Count = 2;       /// 持有数量(服务端权威)
+}
+
+/// 批次轨单条(有有效期道具:每次获得一条批次,各自过期时刻)。快照 / 推送共用。
+message InventoryLot
+{
+	string LotId = 1;      /// 批次唯一 id(服务端签发,寻址 / 客户端投影对齐)
+	int32 ItemId = 2;      /// 道具 id
+	int64 Count = 3;       /// 该批持有数量
+	int64 AcquireMs = 4;   /// 获得时刻(服务端权威 Unix 毫秒 UTC)
+	int64 ExpireMs = 5;    /// 过期绝对时刻(服务端权威 Unix 毫秒 UTC;客户端倒计时以此减去服务端时间基准 ServerNowMs)
+}
+
+/// 使用道具裁决结果码
+enum UseItemResultCode
+{
+	Success = 0,             /// 成功:已扣道具 + 产出,响应带消耗量 + 产出清单
+	NotLoggedIn = 1,         /// 会话未挂账号身份(登录失败 / 链路异常)
+	UnknownItem = 2,         /// 道具 id 无配置行
+	NotEnough = 3,           /// 持有 / 未过期批次不足以扣 Count
+	Expired = 4,             /// 目标为限时道具且可用批次均已过期(无未过期批次可扣)
+	NotUsable = 5,           /// 道具配置为不可用 / 使用效果本轮不支持(如效果非货币类,或货币指向无对应服务端资源)
+	Duplicate = 6,           /// 请求序号重复(reqSeq <= 已处理值),幂等丢弃,未二次扣;客户端以推送 / 快照对齐权威背包
+	ServiceUnavailable = 7,  /// 服务不可用(MongoDB 不可达 / 写入异常 / 乐观并发重试耗尽)
+	InvalidRequest = 8,      /// 参数非法(itemId / count / reqSeq <= 0)
+}
+
+/// 客户端发起使用道具请求(身份从会话取,不携带账号)。
+/// reqSeq:客户端本地单调递增序号,同一次使用重发用同一 reqSeq,服务端据此幂等去重(防弱网重发双扣)。
+/// 契约(客户端必守):reqSeq 全账号单一单调计数器(跨道具共用,非每道具独立);且串行发号——
+///   一次使用等其响应回来再发下一个,不并发/乱序投递。服务端幂等锚 LastUseReqSeq 是单标量,
+///   一个较小 reqSeq 晚于较大者到达会被判 Duplicate(该次使用不生效);Duplicate 分支回推权威背包兜底对账。
+message C2G_UseItem // IRequest,G2C_UseItemResponse
+{
+	int32 ItemId = 1;      /// 要使用的道具 id
+	int64 Count = 2;       /// 使用数量(> 0)
+	int64 ReqSeq = 3;      /// 使用请求单调序号(幂等锚;<= 0 非法;全账号单调 + 串行,见 message 注)
+}
+
+/// 服务端使用道具裁决响应。
+message G2C_UseItemResponse // IResponse
+{
+	UseItemResultCode ResultCode = 1;      /// 裁决结果码
+	int32 ItemId = 2;                      /// 回声道具 id
+	int64 ConsumedCount = 3;               /// 实际消耗数量(成功 = Count;失败 = 0)
+	repeated PropertyAmount Produced = 4;  /// 产出清单(本轮效果为货币:复用 PropertyAmount 承载「产出的属性类型 + 数量」;失败为空)
+}
+
+/// 服务端背包变更主动推送(获得 / 使用 / 过期后起,推送目标 = 该 UUID 在线全部会话)。
+/// 语义:整份当前背包(两轨全量),客户端直接覆盖本地投影。Loaded=true 恒成立(推送仅在写库成功、持有权威文档时起),
+/// 客户端据 Loaded 区分「权威整份」与降级空占位(proto3 repeated 无法区分空集与缺失,防误清)。
+/// 丢失 = 下次登录拉快照对齐(不重试);离线 = 丢弃。
+message G2C_InventoryDeltaPush // IMessage
+{
+	repeated InventoryHolding Holdings = 1;  /// 堆叠轨全量(变更后)
+	repeated InventoryLot Lots = 2;          /// 批次轨全量(变更后,已剔除过期批次)
+	int64 ServerNowMs = 3;                   /// 服务端权威当前时刻(Unix 毫秒 UTC;客户端据此校正倒计时基准)
+	bool Loaded = 4;                         /// 权威整份标志(恒 true;客户端 false=保留投影不清空)
+}

@@ -64,6 +64,7 @@ public static class GlobalCfg
     public const int EnergyRecoverSeconds = 3;
     public const int EnergyRecoverCap = 4;
     public const int ClearToolEnergyCost = 5;
+    public const int GoddessMaxCount = 7;
 
     public static string GetString(int id, string defaultValue = "")
     {

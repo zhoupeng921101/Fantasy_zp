@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+// GoddessMessage.proto
+// 女神系统领取奖励协议(服务端权威)。
+//
+// 女神本质 = 积攒清屏(全清)次数:计数器 GoddessRating 走 PlayerProperty 骨架(全清 +1,封顶 = global id=7
+// GoddessMaxCount 满档清屏次数);满档后客户端发本 RPC 领取一次奖励(可循环)。
+// 服务端裁决(C2G_GoddessClaimRequestHandler):原子 CAS 校验 GoddessRating >= max → 清零 → 按当前未交付订单
+// 所需元素类型 + Luban block.TbGoddessReward 表(等级,数量)组装奖励 payload 回带。
+// 奖励元素实际入客户端合成区(局内 blob,服务端不持有)由客户端 AddDirect 执行;服务端只裁定「能否领 + 发什么」。
+// 防重复领 / 未满领:CAS filter 含 GoddessRating >= max,并发只一路命中。
+//
+// 设计基线:.claude/rules/data-authority.md(玩家进度服务端权威) + Luban block.TbGoddessReward + global id=7。
+
+/// 女神领取裁决结果码
+enum GoddessClaimResultCode
+{
+	/// 成功:已清零计数 + 回带奖励 payload
+	Success = 0,
+	/// 会话未挂账号(35 登录链路异常)→ 客户端重登
+	NotLoggedIn = 1,
+	/// 未满档(GoddessRating < 满档值)/ 并发已被领 → CAS 未命中,计数不变
+	NotFull = 2,
+	/// MongoDB 不可达 / 服务未就绪 / 奖励表缺失
+	ServiceUnavailable = 3,
+}
+
+/// 单档奖励项(= block.TbGoddessReward 一行:元素等级 + 发放数量;元素类型由响应 ElementType 统一给出)
+message GoddessRewardItem
+{
+	int32 Level = 1;   /// 元素等级(1..5,MergeOrderConfig.MaxLevel)
+	int32 Count = 2;   /// 发放数量
+}
+
+/// 客户端请求领取女神满档奖励(身份从会话取,不带账号 / 不带奖励内容——服务端按订单态 + 表自定)
+message C2G_GoddessClaimRequest // IRequest,G2C_GoddessClaimResponse
+{
+	int32 Reserved = 1;   /// 占位(领取内容全由服务端裁定,当前无入参;proto3 空消息占位,客户端恒填 0)
+}
+
+/// 服务端女神领取裁决响应
+message G2C_GoddessClaimResponse // IResponse
+{
+	GoddessClaimResultCode ResultCode = 1;    /// 裁决结果码
+	int32 ElementType = 2;                    /// 发放元素类型(= 客户端 MergeElement:1蝶2杯3卷4星):取当前未交付订单所需类型;无未交付订单回退当前批槽0池行类型;失败 = 0
+	repeated GoddessRewardItem Rewards = 3;   /// 奖励列表(= TbGoddessReward 各行 等级+数量,客户端逐项 AddDirect(ElementType, Level, Count) 入合成区);失败为空
+}

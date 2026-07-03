@@ -112,6 +112,10 @@ public static class PlayerPropertyServiceHelper
             // 道具持有 / 塔罗收集:首登空字典 / 空数组(显式写使字段 present,合成 CAS 的 Gte filter 形态稳定)。
             .SetOnInsert(x => x.ItemHoldings, new System.Collections.Generic.Dictionary<string, long>())
             .SetOnInsert(x => x.CollectedTarotIds, new System.Collections.Generic.List<int>())
+            // 背包批次轨 / 使用幂等锚 / 批次数组乐观版本:首登空数组 / 0 / 0(显式写使字段 present)。
+            .SetOnInsert(x => x.ItemLots, new System.Collections.Generic.List<ItemLot>())
+            .SetOnInsert(x => x.LastUseReqSeq, 0L)
+            .SetOnInsert(x => x.InventoryVersion, 0L)
             .SetOnInsert(x => x.Nickname, string.Empty)
             .SetOnInsert(x => x.Level, 1)
             .SetOnInsert(x => x.Exp, 0L)
@@ -149,6 +153,10 @@ public static class PlayerPropertyServiceHelper
             // 祈愿每日重置(3a):登录拉快照前跑一次懒重置,保证客户端登录看到的 WishUsedToday 是「重置后」的当日值。
             // 经上面补字段后 WishLastResetUnixMs 必 present(旧档补为 nowMs),跨天判据口径稳定。
             await WishHelper.ResetWishIfDue(service, accountId, doc, nowMs);
+
+            // 背包惰性过期结算:登录拉快照前剔除已过期批次(无补偿删库 + 记流水,有补偿留库待结算),
+            // 就地更新 doc.ItemLots,使随后快照下发的批次轨不含已过期批次。
+            await InventoryServiceHelper.SettleExpiredLotsAtLogin(service, accountId, doc, nowMs);
 
             return (0u, string.Empty, doc);
         }
@@ -238,6 +246,10 @@ public static class PlayerPropertyServiceHelper
             //   (absent 字段对合成 CAS 的 Gte filter 永不命中,补齐后形态稳定),present 则保留既有值。
             { "ItemHoldings",        new BsonDocument("$ifNull", new BsonArray { "$ItemHoldings", new BsonDocument() }) },
             { "CollectedTarotIds",   new BsonDocument("$ifNull", new BsonArray { "$CollectedTarotIds", new BsonArray() }) },
+            // 背包批次轨 / 使用幂等锚 / 批次数组乐观版本:旧档(schema < 11)缺字段 → 补空数组 / 0 / 0,present 则保留既有值。
+            { "ItemLots",            new BsonDocument("$ifNull", new BsonArray { "$ItemLots", new BsonArray() }) },
+            { "LastUseReqSeq",       new BsonDocument("$ifNull", new BsonArray { "$LastUseReqSeq", 0L }) },
+            { "InventoryVersion",    new BsonDocument("$ifNull", new BsonArray { "$InventoryVersion", 0L }) },
             { "LastChangeUnixMs",    new BsonDocument("$ifNull", new BsonArray { "$LastChangeUnixMs", nowMs }) },
             { "SchemaVersion",       PlayerPropertyServiceComponent.CurrentSchemaVersion },
         };
@@ -339,6 +351,10 @@ public static class PlayerPropertyServiceHelper
             // 道具持有 / 塔罗收集:清档清空(对齐首登 setOnInsert)。
             .Set(x => x.ItemHoldings, new System.Collections.Generic.Dictionary<string, long>())
             .Set(x => x.CollectedTarotIds, new System.Collections.Generic.List<int>())
+            // 背包批次轨 / 使用幂等锚 / 批次版本:清档清空批次、幂等锚与版本归 0(对齐首登 setOnInsert)。
+            .Set(x => x.ItemLots, new System.Collections.Generic.List<ItemLot>())
+            .Set(x => x.LastUseReqSeq, 0L)
+            .Set(x => x.InventoryVersion, 0L)
             .Set(x => x.Nickname, string.Empty)
             .Set(x => x.Level, 1)
             .Set(x => x.Exp, 0L)
@@ -897,6 +913,17 @@ public static class PlayerPropertyServiceHelper
         AddProperty(info, PropertyType.TempleRepaired, doc.TempleRepaired);
         AddProperty(info, PropertyType.NextRepairIndex, doc.NextRepairIndex);
 
+        // 背包服务端权威:两轨全量并入登录快照(批次轨按 ServerNowMs 剔除过期)。
+        // ServerNowMs = 服务端权威当前时刻,客户端据此锚定批次倒计时基准(不信客户端本地时钟)。
+        // InventoryLoaded=true:doc 非空即权威整份(SendPlayerInfoTo 入口已 doc==null 早退),客户端可整份覆盖投影。
+        var nowMs = TimeHelper.Now;
+        foreach (var h in InventoryServiceHelper.BuildHoldingMessages(doc)) info.Holdings.Add(h);
+        foreach (var lot in InventoryServiceHelper.BuildLotMessages(doc, nowMs)) info.Lots.Add(lot);
+        info.ServerNowMs = nowMs;
+        info.InventoryLoaded = true;
+        // 使用幂等锚当前值:客户端登录据此 seed 本地 reqSeq 底,保重登后首个使用序号严格大于服务端已处理值,不受客户端时钟回拨影响。
+        info.LastUseReqSeq = doc.LastUseReqSeq;
+
         session.Send(new G2C_PlayerInfoSnapshot { Info = info });
     }
 
@@ -908,6 +935,20 @@ public static class PlayerPropertyServiceHelper
         item.Amount = amount;
         info.Properties.Add(item);
     }
+
+    /// <summary>
+    /// 取某属性的 BSON 字段名 + 类型上界(背包使用事务把货币产出 $inc 折叠进「扣道具」原子命令时,
+    /// 需要与 ChangeProperty 同源的字段名 + 上界做 filter 夹界)。未知类型返 false。
+    /// 复用 TryGetTypeMeta,不重复实现字段映射。
+    /// </summary>
+    public static bool TryGetPropertyFieldMeta(PlayerPropertyServiceComponent service, PropertyType type,
+        out string fieldName, out long upperBound)
+    {
+        return TryGetTypeMeta(service, type, out fieldName, out upperBound, out _);
+    }
+
+    /// <summary>读某属性在文档中的当前余额(背包使用产出货币后取新余额供推送 / 响应)。复用 GetFieldValue。</summary>
+    public static long ReadPropertyValue(PlayerDoc doc, PropertyType type) => GetFieldValue(doc, type);
 
     /// <summary>
     /// 取出某类型对应的 PlayerDoc BSON 字段名 + 配置上界 + 单次 delta 上限(P2 限界信任新增)。

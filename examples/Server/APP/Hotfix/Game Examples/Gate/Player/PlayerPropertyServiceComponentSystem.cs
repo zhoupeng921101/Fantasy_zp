@@ -120,10 +120,14 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     private const long DefaultGoddessLevelUpperBound = 10_000L;
     private const long DefaultGoddessLevelSingleDeltaLimit = 100L;
 
-    /// <summary>女神评级:初始 0 / 上界 10_000 / 单次上限 100。</summary>
+    /// <summary>
+    /// 女神评级(= 清屏累计好评计数):初始 0。上界 + 单次上限运行时读 Luban global.xlsx id=7 GoddessMaxCount(满档清屏次数),
+    /// 见 Awake。上界 = 满档值使全清 +1 到满即被原子写 OverLimit 拒(满档停住等领取,无需额外状态位);
+    /// 单次上限 = 同值(一次全清合法 delta=1,恒 ≤ 满档值,校验 singleDeltaLimit ∈ (0, upperBound] 成立)。
+    /// </summary>
     private const long DefaultGoddessRatingInitial = 0L;
-    private const long DefaultGoddessRatingUpperBound = 10_000L;
-    private const long DefaultGoddessRatingSingleDeltaLimit = 100L;
+    /// <summary>女神满档清屏次数缺表回退默认(= global.xlsx id=7 缺失时;与客户端默认一致)。</summary>
+    private const int DefaultGoddessMaxCount = 10;
 
     /// <summary>章节解锁数:初始 0 / 上界 10_000 / 单次上限 100。</summary>
     private const long DefaultUnlockedChapterInitial = 0L;
@@ -224,8 +228,13 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         self.GoddessLevelUpperBound = DefaultGoddessLevelUpperBound;
         self.GoddessLevelSingleDeltaLimit = DefaultGoddessLevelSingleDeltaLimit;
         self.GoddessRatingInitial = DefaultGoddessRatingInitial;
-        self.GoddessRatingUpperBound = DefaultGoddessRatingUpperBound;
-        self.GoddessRatingSingleDeltaLimit = DefaultGoddessRatingSingleDeltaLimit;
+        // 女神评级上界 + 单次上限读 global.xlsx id=7 GoddessMaxCount(满档清屏次数,缺表回退 10):
+        //   上界 = 满档值 → 全清 +1 到满即被原子写 OverLimit 拒(满档停住,客户端发 claim RPC 领取后服务端清零 → 再循环);
+        //   单次上限 = 同值 → 一次全清合法 delta=1 恒 ≤ 满档值不误拒,且满足校验 singleDeltaLimit ∈ (0, 上界]。
+        // 改 global id=7 即改满档门槛,不改代码。
+        long goddessMaxCount = GlobalCfg.GetInt(GlobalCfg.GoddessMaxCount, DefaultGoddessMaxCount);
+        self.GoddessRatingUpperBound = goddessMaxCount;
+        self.GoddessRatingSingleDeltaLimit = goddessMaxCount;
         self.UnlockedChapterInitial = DefaultUnlockedChapterInitial;
         self.UnlockedChapterUpperBound = DefaultUnlockedChapterUpperBound;
         self.UnlockedChapterSingleDeltaLimit = DefaultUnlockedChapterSingleDeltaLimit;

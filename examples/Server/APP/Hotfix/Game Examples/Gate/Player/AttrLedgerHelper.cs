@@ -98,6 +98,10 @@ public static class AttrLedgerHelper
         {
             return AttrChangeSource.Refund;
         }
+        if (reason.StartsWith("item_use", System.StringComparison.Ordinal))
+        {
+            return AttrChangeSource.ItemUse;
+        }
 
         return AttrChangeSource.Unknown;
     }

@@ -1505,6 +1505,496 @@ namespace Fantasy
         public string ErrorMessage { get; set; }
     }
     /// <summary>
+    /// 单档奖励项(= block.TbGoddessReward 一行:元素等级 + 发放数量;元素类型由响应 ElementType 统一给出)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class GoddessRewardItem : AMessage, IDisposable
+    {
+        public static GoddessRewardItem Create(bool autoReturn = true)
+        {
+            var goddessRewardItem = MessageObjectPool<GoddessRewardItem>.Rent();
+            goddessRewardItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                goddessRewardItem.SetIsPool(false);
+            }
+            
+            return goddessRewardItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Level = default;
+            Count = default;
+            MessageObjectPool<GoddessRewardItem>.Return(this);
+        }
+        /// <summary>
+        /// 元素等级(1..5,MergeOrderConfig.MaxLevel)
+        /// </summary>
+        [ProtoMember(1)]
+        public int Level { get; set; }
+        /// <summary>
+        /// 发放数量
+        /// </summary>
+        [ProtoMember(2)]
+        public int Count { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求领取女神满档奖励(身份从会话取,不带账号 / 不带奖励内容——服务端按订单态 + 表自定)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_GoddessClaimRequest : AMessage, IRequest
+    {
+        public static C2G_GoddessClaimRequest Create(bool autoReturn = true)
+        {
+            var c2G_GoddessClaimRequest = MessageObjectPool<C2G_GoddessClaimRequest>.Rent();
+            c2G_GoddessClaimRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_GoddessClaimRequest.SetIsPool(false);
+            }
+            
+            return c2G_GoddessClaimRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            Reserved = default;
+            MessageObjectPool<C2G_GoddessClaimRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_GoddessClaimRequest; } 
+        [ProtoIgnore]
+        public G2C_GoddessClaimResponse ResponseType { get; set; }
+        /// <summary>
+        /// 占位(领取内容全由服务端裁定,当前无入参;proto3 空消息占位,客户端恒填 0)
+        /// </summary>
+        [ProtoMember(1)]
+        public int Reserved { get; set; }
+    }
+    /// <summary>
+    /// 服务端女神领取裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_GoddessClaimResponse : AMessage, IResponse
+    {
+        public static G2C_GoddessClaimResponse Create(bool autoReturn = true)
+        {
+            var g2C_GoddessClaimResponse = MessageObjectPool<G2C_GoddessClaimResponse>.Rent();
+            g2C_GoddessClaimResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_GoddessClaimResponse.SetIsPool(false);
+            }
+            
+            return g2C_GoddessClaimResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            ElementType = default;
+            foreach (var __t in Rewards) __t.Dispose();
+            Rewards.Clear();
+            MessageObjectPool<G2C_GoddessClaimResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_GoddessClaimResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public GoddessClaimResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 发放元素类型(= 客户端 MergeElement:1蝶2杯3卷4星):取当前未交付订单所需类型;无未交付订单回退当前批槽0池行类型;失败 = 0
+        /// </summary>
+        [ProtoMember(2)]
+        public int ElementType { get; set; }
+        /// <summary>
+        /// 奖励列表(= TbGoddessReward 各行 等级+数量,客户端逐项 AddDirect(ElementType, Level, Count) 入合成区);失败为空
+        /// </summary>
+        [ProtoMember(3)]
+        public List<GoddessRewardItem> Rewards { get; set; } = new List<GoddessRewardItem>();
+    }
+    /// <summary>
+    /// 堆叠轨单项(无独立状态的可堆叠道具:itemId → 持有数量)。快照 / 推送共用。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class InventoryHolding : AMessage, IDisposable
+    {
+        public static InventoryHolding Create(bool autoReturn = true)
+        {
+            var inventoryHolding = MessageObjectPool<InventoryHolding>.Rent();
+            inventoryHolding.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                inventoryHolding.SetIsPool(false);
+            }
+            
+            return inventoryHolding;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ItemId = default;
+            Count = default;
+            MessageObjectPool<InventoryHolding>.Return(this);
+        }
+        /// <summary>
+        /// 道具 id(= Luban item.TbItemDef 行 id)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 持有数量(服务端权威)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Count { get; set; }
+    }
+    /// <summary>
+    /// 批次轨单条(有有效期道具:每次获得一条批次,各自过期时刻)。快照 / 推送共用。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class InventoryLot : AMessage, IDisposable
+    {
+        public static InventoryLot Create(bool autoReturn = true)
+        {
+            var inventoryLot = MessageObjectPool<InventoryLot>.Rent();
+            inventoryLot.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                inventoryLot.SetIsPool(false);
+            }
+            
+            return inventoryLot;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            LotId = default;
+            ItemId = default;
+            Count = default;
+            AcquireMs = default;
+            ExpireMs = default;
+            MessageObjectPool<InventoryLot>.Return(this);
+        }
+        /// <summary>
+        /// 批次唯一 id(服务端签发,寻址 / 客户端投影对齐)
+        /// </summary>
+        [ProtoMember(1)]
+        public string LotId { get; set; }
+        /// <summary>
+        /// 道具 id
+        /// </summary>
+        [ProtoMember(2)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 该批持有数量
+        /// </summary>
+        [ProtoMember(3)]
+        public long Count { get; set; }
+        /// <summary>
+        /// 获得时刻(服务端权威 Unix 毫秒 UTC)
+        /// </summary>
+        [ProtoMember(4)]
+        public long AcquireMs { get; set; }
+        /// <summary>
+        /// 过期绝对时刻(服务端权威 Unix 毫秒 UTC;客户端倒计时以此减去服务端时间基准 ServerNowMs)
+        /// </summary>
+        [ProtoMember(5)]
+        public long ExpireMs { get; set; }
+    }
+    /// <summary>
+    /// 客户端发起使用道具请求(身份从会话取,不携带账号)。
+    /// reqSeq:客户端本地单调递增序号,同一次使用重发用同一 reqSeq,服务端据此幂等去重(防弱网重发双扣)。
+    /// 契约(客户端必守):reqSeq 全账号单一单调计数器(跨道具共用,非每道具独立);且串行发号——
+    /// 一次使用等其响应回来再发下一个,不并发/乱序投递。服务端幂等锚 LastUseReqSeq 是单标量,
+    /// 一个较小 reqSeq 晚于较大者到达会被判 Duplicate(该次使用不生效);Duplicate 分支回推权威背包兜底对账。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_UseItem : AMessage, IRequest
+    {
+        public static C2G_UseItem Create(bool autoReturn = true)
+        {
+            var c2G_UseItem = MessageObjectPool<C2G_UseItem>.Rent();
+            c2G_UseItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_UseItem.SetIsPool(false);
+            }
+            
+            return c2G_UseItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ItemId = default;
+            Count = default;
+            ReqSeq = default;
+            MessageObjectPool<C2G_UseItem>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_UseItem; } 
+        [ProtoIgnore]
+        public G2C_UseItemResponse ResponseType { get; set; }
+        /// <summary>
+        /// 要使用的道具 id
+        /// </summary>
+        [ProtoMember(1)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 使用数量(> 0)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Count { get; set; }
+        /// <summary>
+        /// 使用请求单调序号(幂等锚;<= 0 非法;全账号单调 + 串行,见 message 注)
+        /// </summary>
+        [ProtoMember(3)]
+        public long ReqSeq { get; set; }
+    }
+    /// <summary>
+    /// 服务端使用道具裁决响应。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_UseItemResponse : AMessage, IResponse
+    {
+        public static G2C_UseItemResponse Create(bool autoReturn = true)
+        {
+            var g2C_UseItemResponse = MessageObjectPool<G2C_UseItemResponse>.Rent();
+            g2C_UseItemResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_UseItemResponse.SetIsPool(false);
+            }
+            
+            return g2C_UseItemResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            ItemId = default;
+            ConsumedCount = default;
+            foreach (var __t in Produced) __t.Dispose();
+            Produced.Clear();
+            MessageObjectPool<G2C_UseItemResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_UseItemResponse; } 
+        [ProtoMember(5)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public UseItemResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 回声道具 id
+        /// </summary>
+        [ProtoMember(2)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 实际消耗数量(成功 = Count;失败 = 0)
+        /// </summary>
+        [ProtoMember(3)]
+        public long ConsumedCount { get; set; }
+        /// <summary>
+        /// 产出清单(本轮效果为货币:复用 PropertyAmount 承载「产出的属性类型 + 数量」;失败为空)
+        /// </summary>
+        [ProtoMember(4)]
+        public List<PropertyAmount> Produced { get; set; } = new List<PropertyAmount>();
+    }
+    /// <summary>
+    /// 服务端背包变更主动推送(获得 / 使用 / 过期后起,推送目标 = 该 UUID 在线全部会话)。
+    /// 语义:整份当前背包(两轨全量),客户端直接覆盖本地投影。Loaded=true 恒成立(推送仅在写库成功、持有权威文档时起),
+    /// 客户端据 Loaded 区分「权威整份」与降级空占位(proto3 repeated 无法区分空集与缺失,防误清)。
+    /// 丢失 = 下次登录拉快照对齐(不重试);离线 = 丢弃。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_InventoryDeltaPush : AMessage, IMessage
+    {
+        public static G2C_InventoryDeltaPush Create(bool autoReturn = true)
+        {
+            var g2C_InventoryDeltaPush = MessageObjectPool<G2C_InventoryDeltaPush>.Rent();
+            g2C_InventoryDeltaPush.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_InventoryDeltaPush.SetIsPool(false);
+            }
+            
+            return g2C_InventoryDeltaPush;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            foreach (var __t in Holdings) __t.Dispose();
+            Holdings.Clear();
+            foreach (var __t in Lots) __t.Dispose();
+            Lots.Clear();
+            ServerNowMs = default;
+            Loaded = default;
+            MessageObjectPool<G2C_InventoryDeltaPush>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_InventoryDeltaPush; } 
+        /// <summary>
+        /// 堆叠轨全量(变更后)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<InventoryHolding> Holdings { get; set; } = new List<InventoryHolding>();
+        /// <summary>
+        /// 批次轨全量(变更后,已剔除过期批次)
+        /// </summary>
+        [ProtoMember(2)]
+        public List<InventoryLot> Lots { get; set; } = new List<InventoryLot>();
+        /// <summary>
+        /// 服务端权威当前时刻(Unix 毫秒 UTC;客户端据此校正倒计时基准)
+        /// </summary>
+        [ProtoMember(3)]
+        public long ServerNowMs { get; set; }
+        /// <summary>
+        /// 权威整份标志(恒 true;客户端 false=保留投影不清空)
+        /// </summary>
+        [ProtoMember(4)]
+        public bool Loaded { get; set; }
+    }
+    /// <summary>
     /// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
     /// </summary>
     [Serializable]
@@ -4571,6 +5061,13 @@ namespace Fantasy
             SkinMono = default;
             SkinMonoId = default;
             TempleDecorated = default;
+            foreach (var __t in Holdings) __t.Dispose();
+            Holdings.Clear();
+            foreach (var __t in Lots) __t.Dispose();
+            Lots.Clear();
+            ServerNowMs = default;
+            InventoryLoaded = default;
+            LastUseReqSeq = default;
             MessageObjectPool<PlayerInfo>.Return(this);
         }
         /// <summary>
@@ -4653,6 +5150,31 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(16)]
         public long TempleDecorated { get; set; }
+        /// <summary>
+        /// 堆叠轨全量(itemId → 数量)
+        /// </summary>
+        [ProtoMember(17)]
+        public List<InventoryHolding> Holdings { get; set; } = new List<InventoryHolding>();
+        /// <summary>
+        /// 批次轨全量(有有效期道具,已剔除过期批次)
+        /// </summary>
+        [ProtoMember(18)]
+        public List<InventoryLot> Lots { get; set; } = new List<InventoryLot>();
+        /// <summary>
+        /// 服务端权威当前时刻(Unix 毫秒 UTC);客户端锚定倒计时基准,批次剩余 = ExpireMs - (ServerNowMs + 本地流逝)
+        /// </summary>
+        [ProtoMember(19)]
+        public long ServerNowMs { get; set; }
+        /// <summary>
+        /// 背包权威整份标志(true=Holdings/Lots 为权威全量;false=服务端读库降级,客户端保留本地投影不清空)
+        /// </summary>
+        [ProtoMember(20)]
+        public bool InventoryLoaded { get; set; }
+        /// <summary>
+        /// 使用事务幂等锚当前值(服务端持久);客户端登录 seed 本地 reqSeq 底,保重登后首个使用序号 > 服务端已处理值(防时钟回拨误判 Duplicate)
+        /// </summary>
+        [ProtoMember(21)]
+        public long LastUseReqSeq { get; set; }
     }
     /// <summary>
     /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)

@@ -197,6 +197,72 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 女神领取裁决结果码
+	/// </summary>
+	public enum GoddessClaimResultCode
+	{
+		/// <summary>
+		/// 成功:已清零计数 + 回带奖励 payload
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(35 登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 未满档(GoddessRating < 满档值)/ 并发已被领 → CAS 未命中,计数不变
+		/// </summary>
+		NotFull = 2,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 奖励表缺失
+		/// </summary>
+		ServiceUnavailable = 3
+	}
+
+	/// <summary>
+	/// 使用道具裁决结果码
+	/// </summary>
+	public enum UseItemResultCode
+	{
+		/// <summary>
+		/// 成功:已扣道具 + 产出,响应带消耗量 + 产出清单
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号身份(登录失败 / 链路异常)
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 道具 id 无配置行
+		/// </summary>
+		UnknownItem = 2,
+		/// <summary>
+		/// 持有 / 未过期批次不足以扣 Count
+		/// </summary>
+		NotEnough = 3,
+		/// <summary>
+		/// 目标为限时道具且可用批次均已过期(无未过期批次可扣)
+		/// </summary>
+		Expired = 4,
+		/// <summary>
+		/// 道具配置为不可用 / 使用效果本轮不支持(如效果非货币类,或货币指向无对应服务端资源)
+		/// </summary>
+		NotUsable = 5,
+		/// <summary>
+		/// 请求序号重复(reqSeq <= 已处理值),幂等丢弃,未二次扣;客户端以推送 / 快照对齐权威背包
+		/// </summary>
+		Duplicate = 6,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 写入异常 / 乐观并发重试耗尽)
+		/// </summary>
+		ServiceUnavailable = 7,
+		/// <summary>
+		/// 参数非法(itemId / count / reqSeq <= 0)
+		/// </summary>
+		InvalidRequest = 8
+	}
+
+	/// <summary>
 	/// 领取奖励裁决结果码（§3.4）
 	/// </summary>
 	public enum MailClaimResultCode

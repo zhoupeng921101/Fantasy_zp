@@ -42,4 +42,7 @@ public enum AttrChangeSource
 
     /// <summary>退款 / 回滚(Tier 2+ 退款刀,reason 前缀 = "refund_")。</summary>
     Refund = 9,
+
+    /// <summary>使用道具产出货币(背包使用事务 → 折叠 $inc 落货币,reason 前缀 = "item_use")。</summary>
+    ItemUse = 10,
 }

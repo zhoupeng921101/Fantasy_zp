@@ -197,6 +197,25 @@ public sealed class PlayerDoc
     public System.Collections.Generic.List<int> CollectedTarotIds { get; set; }
         = new System.Collections.Generic.List<int>();
 
+    // ---- 背包批次轨 / 使用事务幂等(服务端权威)----
+    // 批次轨 ItemLots 承载「有有效期」道具(每次获得一条批次,各自过期时刻),与堆叠轨 ItemHoldings 并列。
+    // 使用道具是复合事务(扣道具 + 产出),LastUseReqSeq 做请求级幂等(防弱网重发双扣):
+    //   客户端每次使用带单调递增 reqSeq,原子变更 filter 含 LastUseReqSeq < reqSeq、update $set = reqSeq,
+    //   重复请求(reqSeq <= 已处理值)CAS 不命中 → 判重复,不二次扣。
+    // InventoryVersion 是批次数组读改写的乐观并发版本:批次 FIFO 扣减需先读后算,写回时 filter 版本一致才落,
+    //   防两个不同 reqSeq 的并发使用各自基于旧数组覆盖(丢失更新)。堆叠轨扣减走 $inc 条件过滤,不依赖本版本。
+    // 缺省:首登 setOnInsert 空数组 / 0 / 0;旧档缺字段由 MigrateSchemaIfNeeded 补(schema < 11)。
+
+    /// <summary>背包批次轨(有有效期道具,每次获得一条;首登 setOnInsert 空数组,旧档缺字段补空数组)。</summary>
+    public System.Collections.Generic.List<ItemLot> ItemLots { get; set; }
+        = new System.Collections.Generic.List<ItemLot>();
+
+    /// <summary>末次已处理的使用请求序号(使用事务幂等锚;单调递增,首登 0,旧档缺字段补 0)。</summary>
+    public long LastUseReqSeq { get; set; }
+
+    /// <summary>背包批次数组乐观并发版本(每次批次数组变更 +1;首登 0,旧档缺字段补 0)。</summary>
+    public long InventoryVersion { get; set; }
+
     /// <summary>schema 版本(加字段时升 + 缺字段保底)。</summary>
     public int SchemaVersion { get; set; }
 }

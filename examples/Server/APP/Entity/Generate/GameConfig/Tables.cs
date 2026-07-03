@@ -61,6 +61,14 @@ public partial class Tables
     /// 塔罗牌收集表(22张大阿卡纳;碎片凑齐手动合成)
     /// </summary>
     public block.TbTarotCard TbTarotCard {get; }
+    /// <summary>
+    /// 音频资源配置表(数据驱动播放)
+    /// </summary>
+    public audio.TbAudio TbAudio {get; }
+    /// <summary>
+    /// 女神满档领取奖励表(行=等级+数量;元素类型运行时取当前未交付订单所需类型)
+    /// </summary>
+    public block.TbGoddessReward TbGoddessReward {get; }
 
     public Tables(System.Func<string, ByteBuf> loader)
     {
@@ -76,6 +84,8 @@ public partial class Tables
         TbGlobal = new global.TbGlobal(loader("global_tbglobal"));
         TbMergeOrder = new block.TbMergeOrder(loader("block_tbmergeorder"));
         TbTarotCard = new block.TbTarotCard(loader("block_tbtarotcard"));
+        TbAudio = new audio.TbAudio(loader("audio_tbaudio"));
+        TbGoddessReward = new block.TbGoddessReward(loader("block_tbgoddessreward"));
         ResolveRef();
     }
     
@@ -93,6 +103,8 @@ public partial class Tables
         TbGlobal.ResolveRef(this);
         TbMergeOrder.ResolveRef(this);
         TbTarotCard.ResolveRef(this);
+        TbAudio.ResolveRef(this);
+        TbGoddessReward.ResolveRef(this);
     }
 }
 
