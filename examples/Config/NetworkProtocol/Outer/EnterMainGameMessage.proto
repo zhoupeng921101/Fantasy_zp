@@ -15,17 +15,18 @@ message C2G_EnterMainGameRequest // IRequest,G2C_EnterMainGameResponse
 {
 }
 
-/// 服务端对进入主游戏请求的响应:订单快照 + 道具持有 + 塔罗收集
+/// 服务端对进入主游戏请求的响应:订单快照 + 道具持有 + 塔罗进度
 message G2C_EnterMainGameResponse // IResponse
 {
 	/// 订单系统当前激活快照(派生自 PlayerDoc 的 OrderCursor / DeliveredMask;
 	/// 若服务不可用 / 玩家文档读不到 → 空 ActiveOrders 占位,客户端按"无订单可交付"降级显示)
 	MergeOrderSnapshot OrderSnapshot = 1;
-	/// 道具持有整份快照(PlayerDoc.ItemHoldings 投影,当前业务方 = 塔罗碎片;仅 ItemDataLoaded=true 时可信)
+	/// 道具持有整份快照(PlayerDoc.ItemHoldings 投影,当前业务方 = 背包堆叠道具;仅 ItemDataLoaded=true 时可信)
 	repeated ItemHolding ItemHoldings = 2;
-	/// 已合成塔罗牌 id 全集(PlayerDoc.CollectedTarotIds 投影;仅 ItemDataLoaded=true 时可信)
-	repeated int32 CollectedTarotIds = 3;
-	/// 道具持有 + 塔罗收集两段是否真取到玩家数据:true = 上两字段为权威值(空 = 权威空集,客户端整份覆盖);
+	/// 塔罗牌进度全集(PlayerDoc.TarotProgress 投影,cardId → 已购步数;仅 ItemDataLoaded=true 时可信。
+	/// 未列出的牌视为 0 步;步数 == 该牌 UnlockCosts.Length 即已激活)
+	repeated TarotProgressEntry TarotProgress = 3;
+	/// 道具持有 + 塔罗进度两段是否真取到玩家数据:true = 上两字段为权威值(空 = 权威空集,客户端整份覆盖);
 	/// false = 服务端降级(未登录 / 服务不可用 / 读库失败),客户端保留既有投影不清空。
 	/// proto3 repeated 无法区分「空集」与「缺失」,靠本标志承载该区分。
 	bool ItemDataLoaded = 4;

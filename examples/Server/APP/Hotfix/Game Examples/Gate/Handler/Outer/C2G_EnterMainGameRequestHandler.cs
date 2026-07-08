@@ -64,9 +64,9 @@ public sealed class C2G_EnterMainGameRequestHandler
                     propService, accountName, playerDoc, Fantasy.Helper.TimeHelper.Now);
                 response.OrderSnapshot = MergeOrderServiceHelper.BuildSnapshot(playerDoc);
 
-                // ── 道具持有 + 塔罗收集整份快照(客户端整份覆盖本地投影)──────────
+                // ── 道具持有 + 塔罗进度整份快照(客户端整份覆盖本地投影)──────────
                 // ItemDataLoaded 仅在真读到玩家文档时置 true:proto3 repeated 无法区分「权威空集」与
-                // 「降级未取到」,读库失败若不置此标志,客户端会把空列表当权威空集误清背包/收集投影。
+                // 「降级未取到」,读库失败若不置此标志,客户端会把空列表当权威空集误清背包/进度投影。
                 response.ItemDataLoaded = true;
                 if (playerDoc.ItemHoldings != null)
                 {
@@ -79,9 +79,16 @@ public sealed class C2G_EnterMainGameRequestHandler
                         response.ItemHoldings.Add(holding);
                     }
                 }
-                if (playerDoc.CollectedTarotIds != null)
+                if (playerDoc.TarotProgress != null)
                 {
-                    response.CollectedTarotIds.AddRange(playerDoc.CollectedTarotIds);
+                    foreach (var kv in playerDoc.TarotProgress)
+                    {
+                        if (!int.TryParse(kv.Key, out var tarotId) || tarotId <= 0 || kv.Value <= 0) continue;
+                        var entry = TarotProgressEntry.Create();
+                        entry.CardId = tarotId;
+                        entry.Steps = kv.Value;
+                        response.TarotProgress.Add(entry);
+                    }
                 }
             }
             // playerDoc == null:沿用上面默认空 snapshot / 空持有列表。
@@ -90,6 +97,6 @@ public sealed class C2G_EnterMainGameRequestHandler
 
         Log.Debug($"EnterMainGame playerId={playerId} account={accountName} " +
                   $"orderActiveCount={response.OrderSnapshot.ActiveOrders.Count} " +
-                  $"itemHoldings={response.ItemHoldings.Count} collectedTarot={response.CollectedTarotIds.Count}");
+                  $"itemHoldings={response.ItemHoldings.Count} tarotProgress={response.TarotProgress.Count}");
     }
 }

@@ -183,19 +183,23 @@ public sealed class PlayerDoc
     /// <summary>已装饰厅数标量(前缀语义,= 已修厅数;首登 setOnInsert 默认 0,旧档缺字段补 0)。</summary>
     public long TempleDecorated { get; set; }
 
-    // ---- 道具持有 / 塔罗牌收集(服务端权威)----
+    // ---- 道具持有 / 塔罗牌进度(服务端权威)----
     // 通用道具持有字典(非碎片专用):key = 道具 id 十进制字符串(BSON 文档键必须是字符串),value = 持有数量。
-    // 当前业务方 = 塔罗碎片(订单交付发放、合成扣减);原子变更走 "ItemHoldings.<itemId>" 点路径 $inc,
-    // 单条 FindOneAndUpdate 保证并发安全。已合成塔罗牌集合 $addToSet 幂等,与碎片扣减同一条原子命令(合成 CAS)。
-    // 缺省:首登 setOnInsert 空字典 / 空数组;旧档缺字段由 MigrateSchemaIfNeeded 补(absent 字段对 Gte filter 永不命中)。
+    // 当前业务方 = 背包堆叠道具(订单交付发放、使用扣减);原子变更走 "ItemHoldings.<itemId>" 点路径 $inc,
+    // 单条 FindOneAndUpdate 保证并发安全。
+    //
+    // 塔罗牌进度:key = 牌 id 十进制字符串(= TbTarotCard 行),value = 已购进度步数(0..UnlockCosts.Length)。
+    // 购买一步 = 单条原子 CAS(Piety 足额 + 该牌步数匹配 → $inc Piety 负扣 + $inc "TarotProgress.<cardId>" +1),
+    // 每步成本服务端按 TbTarotCard.UnlockCosts[当前步] 自算;步数 == 数组长度即该牌已激活(收集态由进度派生,不另存)。
+    // 缺省:首登 setOnInsert 空字典;旧档缺字段由 MigrateSchemaIfNeeded 补空字典(absent 字段对 CAS filter 永不命中)。
 
     /// <summary>道具持有(itemId 字符串 → 数量;首登 setOnInsert 空字典,旧档缺字段补空字典)。</summary>
     public System.Collections.Generic.Dictionary<string, long> ItemHoldings { get; set; }
         = new System.Collections.Generic.Dictionary<string, long>();
 
-    /// <summary>已合成塔罗牌 id 集合(= TbTarotCard 行 id;首登 setOnInsert 空,旧档缺字段补空列表)。</summary>
-    public System.Collections.Generic.List<int> CollectedTarotIds { get; set; }
-        = new System.Collections.Generic.List<int>();
+    /// <summary>塔罗牌进度(cardId 字符串 → 已购步数;首登 setOnInsert 空字典,旧档缺字段补空字典。步数 == UnlockCosts.Length 即已激活)。</summary>
+    public System.Collections.Generic.Dictionary<string, int> TarotProgress { get; set; }
+        = new System.Collections.Generic.Dictionary<string, int>();
 
     // ---- 背包批次轨 / 使用事务幂等(服务端权威)----
     // 批次轨 ItemLots 承载「有有效期」道具(每次获得一条批次,各自过期时刻),与堆叠轨 ItemHoldings 并列。

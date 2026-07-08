@@ -109,9 +109,9 @@ public static class PlayerPropertyServiceHelper
             .SetOnInsert(x => x.SkinMono, 0)
             .SetOnInsert(x => x.SkinMonoId, -1)
             .SetOnInsert(x => x.TempleDecorated, 0L)
-            // 道具持有 / 塔罗收集:首登空字典 / 空数组(显式写使字段 present,合成 CAS 的 Gte filter 形态稳定)。
+            // 道具持有 / 塔罗进度:首登空字典(显式写使字段 present,购买 CAS 的 filter 形态稳定)。
             .SetOnInsert(x => x.ItemHoldings, new System.Collections.Generic.Dictionary<string, long>())
-            .SetOnInsert(x => x.CollectedTarotIds, new System.Collections.Generic.List<int>())
+            .SetOnInsert(x => x.TarotProgress, new System.Collections.Generic.Dictionary<string, int>())
             // 背包批次轨 / 使用幂等锚 / 批次数组乐观版本:首登空数组 / 0 / 0(显式写使字段 present)。
             .SetOnInsert(x => x.ItemLots, new System.Collections.Generic.List<ItemLot>())
             .SetOnInsert(x => x.LastUseReqSeq, 0L)
@@ -242,10 +242,12 @@ public static class PlayerPropertyServiceHelper
             { "SkinMono",            new BsonDocument("$ifNull", new BsonArray { "$SkinMono", 0 }) },
             { "SkinMonoId",          new BsonDocument("$ifNull", new BsonArray { "$SkinMonoId", -1 }) },
             { "TempleDecorated",     new BsonDocument("$ifNull", new BsonArray { "$TempleDecorated", 0L }) },
-            // 道具持有 / 塔罗收集:旧档(schema < 10)缺字段 → 补空字典 / 空数组
-            //   (absent 字段对合成 CAS 的 Gte filter 永不命中,补齐后形态稳定),present 则保留既有值。
+            // 道具持有:旧档缺字段 → 补空字典(absent 字段对 CAS filter 永不命中,补齐后形态稳定),present 则保留既有值。
             { "ItemHoldings",        new BsonDocument("$ifNull", new BsonArray { "$ItemHoldings", new BsonDocument() }) },
-            { "CollectedTarotIds",   new BsonDocument("$ifNull", new BsonArray { "$CollectedTarotIds", new BsonArray() }) },
+            // 塔罗进度(schema 12 起):旧档缺字段 → 补空字典,present 则保留既有值。塔罗玩法由碎片合成改为虔诚币购买进度,
+            //   旧 CollectedTarotIds 字段随之退役(不再映射到 PlayerDoc,由 IgnoreExtraElements 约定忽略残留)。
+            //   该收集功能改版前无 UI 消费、无正式玩家数据,故进度从空重建而非从旧收集集播种。
+            { "TarotProgress",       new BsonDocument("$ifNull", new BsonArray { "$TarotProgress", new BsonDocument() }) },
             // 背包批次轨 / 使用幂等锚 / 批次数组乐观版本:旧档(schema < 11)缺字段 → 补空数组 / 0 / 0,present 则保留既有值。
             { "ItemLots",            new BsonDocument("$ifNull", new BsonArray { "$ItemLots", new BsonArray() }) },
             { "LastUseReqSeq",       new BsonDocument("$ifNull", new BsonArray { "$LastUseReqSeq", 0L }) },
@@ -348,9 +350,9 @@ public static class PlayerPropertyServiceHelper
             .Set(x => x.SkinMono, 0)
             .Set(x => x.SkinMonoId, -1)
             .Set(x => x.TempleDecorated, 0L)
-            // 道具持有 / 塔罗收集:清档清空(对齐首登 setOnInsert)。
+            // 道具持有 / 塔罗进度:清档清空(对齐首登 setOnInsert)。
             .Set(x => x.ItemHoldings, new System.Collections.Generic.Dictionary<string, long>())
-            .Set(x => x.CollectedTarotIds, new System.Collections.Generic.List<int>())
+            .Set(x => x.TarotProgress, new System.Collections.Generic.Dictionary<string, int>())
             // 背包批次轨 / 使用幂等锚 / 批次版本:清档清空批次、幂等锚与版本归 0(对齐首登 setOnInsert)。
             .Set(x => x.ItemLots, new System.Collections.Generic.List<ItemLot>())
             .Set(x => x.LastUseReqSeq, 0L)

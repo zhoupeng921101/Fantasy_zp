@@ -8,14 +8,14 @@ namespace Fantasy;
 /// 玩家道具持有裁决核心(服务端唯一权威,持久于 PlayerDoc.ItemHoldings 字典)。
 ///
 /// 写路径:单条原子 FindOneAndUpdate 走 "ItemHoldings.&lt;itemId&gt;" 点路径 $inc(MongoDB 自动创建缺失的嵌套路径),
-/// 并发同账号多路发放各自原子累加、无丢失更新。发放只有服务端权威来源(订单交付掉碎片等),
-/// **不**存在客户端直接请求加道具的 RPC 路径 —— 反作弊面在业务入口(交付 CAS / 合成 CAS)收口,本 helper 不设频率闸。
+/// 并发同账号多路发放各自原子累加、无丢失更新。发放只有服务端权威来源(订单交付掉道具等),
+/// **不**存在客户端直接请求加道具的 RPC 路径 —— 反作弊面在业务入口(交付 CAS / 使用事务)收口,本 helper 不设频率闸。
 ///
 /// 流水:写库成功后旁路追加 player_item_ledger 一行(insert-only);ledger 失败 Warning 不回滚持有
 /// (沿 player_attr_ledger「ledger 失败不回滚」基线)。
 ///
-/// 消耗路径不在本 helper:塔罗合成的「碎片足额校验 + 扣减 + 置牌」必须与判定同一条原子命令,
-/// 见 TarotCollectionServiceHelper.TrySynthesize(扣减成功后同样走 AppendItemLedger 记流水)。
+/// 消耗路径不在本 helper:道具使用的「持有足额校验 + 扣减 + 产出」必须与判定同一条原子命令,
+/// 见背包使用事务(InventoryServiceHelper);扣减成功后同样走 AppendItemLedger 记流水。
 /// </summary>
 public static class ItemHoldingsServiceHelper
 {

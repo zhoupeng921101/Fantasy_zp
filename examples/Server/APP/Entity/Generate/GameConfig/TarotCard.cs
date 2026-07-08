@@ -19,8 +19,7 @@ public sealed partial class TarotCard : Luban.BeanBase
         Id = _buf.ReadInt();
         Name = _buf.ReadString();
         Icon = _buf.ReadString();
-        FragmentItemId = _buf.ReadInt();
-        FragmentsNeeded = _buf.ReadInt();
+        {int n0 = System.Math.Min(_buf.ReadSize(), _buf.Size);UnlockCosts = new System.Collections.Generic.List<int>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { int _e0;  _e0 = _buf.ReadInt(); UnlockCosts.Add(_e0);}}
     }
 
     public static TarotCard DeserializeTarotCard(ByteBuf _buf)
@@ -41,20 +40,15 @@ public sealed partial class TarotCard : Luban.BeanBase
     /// </summary>
     public readonly string Icon;
     /// <summary>
-    /// 对应碎片道具id(=TbItemDef行)
+    /// 每进度所需虔诚币成本(索引0=第1进度;长度=总进度数;购满即激活该牌)
     /// </summary>
-    public readonly int FragmentItemId;
-    /// <summary>
-    /// 合成所需碎片数
-    /// </summary>
-    public readonly int FragmentsNeeded;
+    public readonly System.Collections.Generic.List<int> UnlockCosts;
    
     public const int __ID__ = 1429819994;
     public override int GetTypeId() => __ID__;
 
     public  void ResolveRef(Tables tables)
     {
-        
         
         
         
@@ -67,8 +61,7 @@ public sealed partial class TarotCard : Luban.BeanBase
         + "id:" + Id + ","
         + "name:" + Name + ","
         + "icon:" + Icon + ","
-        + "fragmentItemId:" + FragmentItemId + ","
-        + "fragmentsNeeded:" + FragmentsNeeded + ","
+        + "unlockCosts:" + Luban.StringUtil.CollectionToString(UnlockCosts) + ","
         + "}";
     }
 }

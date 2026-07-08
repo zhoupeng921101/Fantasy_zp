@@ -565,12 +565,12 @@ namespace Fantasy
 	}
 
 	/// <summary>
-	/// 塔罗牌合成裁决结果码
+	/// 塔罗牌购买进度裁决结果码
 	/// </summary>
-	public enum TarotSynthesizeResultCode
+	public enum TarotPurchaseResultCode
 	{
 		/// <summary>
-		/// 成功:已扣碎片、置已合成,回带权威碎片余额 + 收集全集
+		/// 成功:已扣虔诚币、进度 +1,回带权威虔诚币余额 + 该牌新进度 + 进度全集
 		/// </summary>
 		Success = 0,
 		/// <summary>
@@ -578,17 +578,17 @@ namespace Fantasy
 		/// </summary>
 		NotLoggedIn = 1,
 		/// <summary>
-		/// 牌 id 不在 TbTarotCard 表
+		/// 牌 id 不在 TbTarotCard 表(或该牌 UnlockCosts 未配置)
 		/// </summary>
 		UnknownCard = 2,
 		/// <summary>
-		/// 该牌已合成(幂等拒绝,不扣碎片)
+		/// 该牌进度已满(已激活,幂等拒绝,不扣币)
 		/// </summary>
-		AlreadyCollected = 3,
+		AlreadyMaxed = 3,
 		/// <summary>
-		/// 碎片不足(CAS 过滤未命中且重读确认不足)
+		/// 虔诚币不足(CAS 过滤未命中且重读确认不足)
 		/// </summary>
-		NotEnoughFragments = 4,
+		NotEnoughPiety = 4,
 		/// <summary>
 		/// MongoDB 不可达 / 服务未就绪 / 配置缺失
 		/// </summary>

@@ -108,8 +108,8 @@ namespace Fantasy
         public const uint G2C_RedeemCodeResponse = 402663218;
         public const uint C2G_RenameRequest = 268445491;
         public const uint G2C_RenameResponse = 402663219;
-        public const uint C2G_TarotSynthesizeRequest = 268445492;
-        public const uint G2C_TarotSynthesizeResponse = 402663220;
+        public const uint C2G_TarotPurchaseRequest = 268445492;
+        public const uint G2C_TarotPurchaseResponse = 402663220;
         public const uint C2G_TestEnumMessage = 134227740;
         public const uint C2G_WishForEnergyRequest = 268445493;
         public const uint G2C_WishForEnergyResponse = 402663221;

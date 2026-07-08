@@ -1324,7 +1324,7 @@ namespace Fantasy
         public G2C_EnterMainGameResponse ResponseType { get; set; }
     }
     /// <summary>
-    /// 服务端对进入主游戏请求的响应:订单快照 + 道具持有 + 塔罗收集
+    /// 服务端对进入主游戏请求的响应:订单快照 + 道具持有 + 塔罗进度
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -1368,7 +1368,8 @@ namespace Fantasy
             }
             foreach (var __t in ItemHoldings) __t.Dispose();
             ItemHoldings.Clear();
-            CollectedTarotIds.Clear();
+            foreach (var __t in TarotProgress) __t.Dispose();
+            TarotProgress.Clear();
             ItemDataLoaded = default;
             MessageObjectPool<G2C_EnterMainGameResponse>.Return(this);
         }
@@ -1382,17 +1383,18 @@ namespace Fantasy
         [ProtoMember(1)]
         public MergeOrderSnapshot OrderSnapshot { get; set; }
         /// <summary>
-        /// 道具持有整份快照(PlayerDoc.ItemHoldings 投影,当前业务方 = 塔罗碎片;仅 ItemDataLoaded=true 时可信)
+        /// 道具持有整份快照(PlayerDoc.ItemHoldings 投影,当前业务方 = 背包堆叠道具;仅 ItemDataLoaded=true 时可信)
         /// </summary>
         [ProtoMember(2)]
         public List<ItemHolding> ItemHoldings { get; set; } = new List<ItemHolding>();
         /// <summary>
-        /// 已合成塔罗牌 id 全集(PlayerDoc.CollectedTarotIds 投影;仅 ItemDataLoaded=true 时可信)
+        /// 塔罗牌进度全集(PlayerDoc.TarotProgress 投影,cardId → 已购步数;仅 ItemDataLoaded=true 时可信。
+        /// 未列出的牌视为 0 步;步数 == 该牌 UnlockCosts.Length 即已激活)
         /// </summary>
         [ProtoMember(3)]
-        public List<int> CollectedTarotIds { get; set; } = new List<int>();
+        public List<TarotProgressEntry> TarotProgress { get; set; } = new List<TarotProgressEntry>();
         /// <summary>
-        /// 道具持有 + 塔罗收集两段是否真取到玩家数据:true = 上两字段为权威值(空 = 权威空集,客户端整份覆盖);
+        /// 道具持有 + 塔罗进度两段是否真取到玩家数据:true = 上两字段为权威值(空 = 权威空集,客户端整份覆盖);
         /// false = 服务端降级(未登录 / 服务不可用 / 读库失败),客户端保留既有投影不清空。
         /// proto3 repeated 无法区分「空集」与「缺失」,靠本标志承载该区分。
         /// </summary>
@@ -6578,7 +6580,7 @@ namespace Fantasy
         public long Diamond { get; set; }
     }
     /// <summary>
-    /// 单条道具持有(itemId → 数量;通用道具持有投影,当前业务方 = 塔罗碎片)
+    /// 单条道具持有(itemId → 数量;通用道具持有投影,当前业务方 = 背包堆叠道具)
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -6630,23 +6632,23 @@ namespace Fantasy
         public long Count { get; set; }
     }
     /// <summary>
-    /// 客户端请求合成塔罗牌(身份从会话取;碎片消耗量由服务端按 TbTarotCard 表自算,客户端不上报)
+    /// 单张牌进度(cardId → 已购步数;塔罗进度投影载体,快照与购买响应共用)
     /// </summary>
     [Serializable]
     [ProtoContract]
-    public partial class C2G_TarotSynthesizeRequest : AMessage, IRequest
+    public partial class TarotProgressEntry : AMessage, IDisposable
     {
-        public static C2G_TarotSynthesizeRequest Create(bool autoReturn = true)
+        public static TarotProgressEntry Create(bool autoReturn = true)
         {
-            var c2G_TarotSynthesizeRequest = MessageObjectPool<C2G_TarotSynthesizeRequest>.Rent();
-            c2G_TarotSynthesizeRequest.AutoReturn = autoReturn;
+            var tarotProgressEntry = MessageObjectPool<TarotProgressEntry>.Rent();
+            tarotProgressEntry.AutoReturn = autoReturn;
             
             if (!autoReturn)
             {
-                c2G_TarotSynthesizeRequest.SetIsPool(false);
+                tarotProgressEntry.SetIsPool(false);
             }
             
-            return c2G_TarotSynthesizeRequest;
+            return tarotProgressEntry;
         }
         
         public void Return()
@@ -6667,11 +6669,63 @@ namespace Fantasy
         {
             if (!IsPool()) return; 
             CardId = default;
-            MessageObjectPool<C2G_TarotSynthesizeRequest>.Return(this);
+            Steps = default;
+            MessageObjectPool<TarotProgressEntry>.Return(this);
         }
-        public uint OpCode() { return OuterOpcode.C2G_TarotSynthesizeRequest; } 
+        /// <summary>
+        /// 牌 id(= TbTarotCard 行)
+        /// </summary>
+        [ProtoMember(1)]
+        public int CardId { get; set; }
+        /// <summary>
+        /// 已购进度步数(0..UnlockCosts.Length;== 数组长度即该牌已激活)
+        /// </summary>
+        [ProtoMember(2)]
+        public int Steps { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求购买一步塔罗牌进度(身份从会话取;本步成本由服务端按 TbTarotCard.UnlockCosts[当前步] 自算,客户端不上报)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_TarotPurchaseRequest : AMessage, IRequest
+    {
+        public static C2G_TarotPurchaseRequest Create(bool autoReturn = true)
+        {
+            var c2G_TarotPurchaseRequest = MessageObjectPool<C2G_TarotPurchaseRequest>.Rent();
+            c2G_TarotPurchaseRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_TarotPurchaseRequest.SetIsPool(false);
+            }
+            
+            return c2G_TarotPurchaseRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            CardId = default;
+            MessageObjectPool<C2G_TarotPurchaseRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_TarotPurchaseRequest; } 
         [ProtoIgnore]
-        public G2C_TarotSynthesizeResponse ResponseType { get; set; }
+        public G2C_TarotPurchaseResponse ResponseType { get; set; }
         /// <summary>
         /// 目标塔罗牌 id(= TbTarotCard 行)
         /// </summary>
@@ -6679,23 +6733,23 @@ namespace Fantasy
         public int CardId { get; set; }
     }
     /// <summary>
-    /// 服务端合成裁决响应
+    /// 服务端购买裁决响应
     /// </summary>
     [Serializable]
     [ProtoContract]
-    public partial class G2C_TarotSynthesizeResponse : AMessage, IResponse
+    public partial class G2C_TarotPurchaseResponse : AMessage, IResponse
     {
-        public static G2C_TarotSynthesizeResponse Create(bool autoReturn = true)
+        public static G2C_TarotPurchaseResponse Create(bool autoReturn = true)
         {
-            var g2C_TarotSynthesizeResponse = MessageObjectPool<G2C_TarotSynthesizeResponse>.Rent();
-            g2C_TarotSynthesizeResponse.AutoReturn = autoReturn;
+            var g2C_TarotPurchaseResponse = MessageObjectPool<G2C_TarotPurchaseResponse>.Rent();
+            g2C_TarotPurchaseResponse.AutoReturn = autoReturn;
             
             if (!autoReturn)
             {
-                g2C_TarotSynthesizeResponse.SetIsPool(false);
+                g2C_TarotPurchaseResponse.SetIsPool(false);
             }
             
-            return g2C_TarotSynthesizeResponse;
+            return g2C_TarotPurchaseResponse;
         }
         
         public void Return()
@@ -6718,45 +6772,46 @@ namespace Fantasy
             ErrorCode = 0;
             ResultCode = default;
             CardId = default;
-            FragmentItemId = default;
-            FragmentBalance = default;
-            CollectedTarotIds.Clear();
-            CollectedValid = default;
-            MessageObjectPool<G2C_TarotSynthesizeResponse>.Return(this);
+            Steps = default;
+            PietyBalance = default;
+            foreach (var __t in ProgressAll) __t.Dispose();
+            ProgressAll.Clear();
+            ProgressValid = default;
+            MessageObjectPool<G2C_TarotPurchaseResponse>.Return(this);
         }
-        public uint OpCode() { return OuterOpcode.G2C_TarotSynthesizeResponse; } 
+        public uint OpCode() { return OuterOpcode.G2C_TarotPurchaseResponse; } 
         [ProtoMember(7)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 裁决结果码
         /// </summary>
         [ProtoMember(1)]
-        public TarotSynthesizeResultCode ResultCode { get; set; }
+        public TarotPurchaseResultCode ResultCode { get; set; }
         /// <summary>
         /// 回声牌 id
         /// </summary>
         [ProtoMember(2)]
         public int CardId { get; set; }
         /// <summary>
-        /// 该牌对应碎片道具 id(客户端据此定位本地投影;失败时可能为 0)
+        /// 该牌裁决后已购进度步数(-1 = 哨兵,未取到权威值,客户端不据此 set)
         /// </summary>
         [ProtoMember(3)]
-        public int FragmentItemId { get; set; }
+        public int Steps { get; set; }
         /// <summary>
-        /// 扣减后该碎片权威持有量(-1 = 哨兵,本次未取到权威值,客户端不 set)
+        /// 扣减后虔诚币权威余额(-1 = 哨兵,本次未取到权威值,客户端不据此 set)
         /// </summary>
         [ProtoMember(4)]
-        public long FragmentBalance { get; set; }
+        public long PietyBalance { get; set; }
         /// <summary>
-        /// 已合成塔罗牌 id 全集(仅 CollectedValid=true 时可信,客户端整份覆盖)
+        /// 全牌进度全集(仅 ProgressValid=true 时可信,客户端整份覆盖)
         /// </summary>
         [ProtoMember(5)]
-        public List<int> CollectedTarotIds { get; set; } = new List<int>();
+        public List<TarotProgressEntry> ProgressAll { get; set; } = new List<TarotProgressEntry>();
         /// <summary>
-        /// CollectedTarotIds 是否真取自玩家文档:false = 降级路径的空占位
+        /// ProgressAll 是否真取自玩家文档:false = 降级路径空占位
         /// </summary>
         [ProtoMember(6)]
-        public bool CollectedValid { get; set; }
+        public bool ProgressValid { get; set; }
     }
     /// <summary>
     /// 测试使用ErrorCode枚举的消息

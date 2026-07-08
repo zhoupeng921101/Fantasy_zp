@@ -36,7 +36,7 @@ public sealed class PlayerItemLedgerDoc
     /// <summary>变更后该道具权威持有量(= FindOneAndUpdate 返回的新值)。</summary>
     public long BalanceAfter { get; set; }
 
-    /// <summary>调用方原始 reason 字符串(如 "merge_order_deliver:slot0:..." / "tarot_synthesize:card3")。</summary>
+    /// <summary>调用方原始 reason 字符串(如 "merge_order_deliver:slot0:..." / "inventory_use:item31001")。</summary>
     public string ReasonRaw { get; set; } = string.Empty;
 
     /// <summary>schema 版本(初始 1;加字段时升 + 缺字段保底)。</summary>

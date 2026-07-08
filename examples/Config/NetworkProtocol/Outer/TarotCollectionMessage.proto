@@ -1,47 +1,56 @@
 syntax = "proto3";
 
 // TarotCollectionMessage.proto
-// 塔罗牌收集系统协议(交付订单掉碎片 → 碎片凑齐手动合成塔罗牌,纯收集图鉴)。
+// 塔罗牌收集系统协议(用虔诚币逐级购买塔罗牌进度,买满即激活;纯收集图鉴)。
 //
-// 服务端权威:碎片持有(PlayerDoc.ItemHoldings)与已合成牌集合(PlayerDoc.CollectedTarotIds)
-// 均服务端持久化;合成裁决 = 单条原子 CAS(碎片足额过滤 + $inc 扣碎片 + $addToSet 置牌),
-// 客户端只持投影(登录经 EnterMainGame 响应回带整份持有 + 收集,交付/合成响应回带增量对账)。
+// 服务端权威:每张牌已购进度步数(PlayerDoc.TarotProgress)服务端持久化;
+// 购买裁决 = 单条原子 CAS(虔诚币足额 + 进度步数匹配 → $inc 扣虔诚币 + $inc 进度 +1),
+// 每步成本由服务端按 TbTarotCard.UnlockCosts[当前步] 自算(反作弊红线:客户端不上报成本)。
+// 客户端只持投影(登录经 EnterMainGame 响应回带整份进度,购买响应回带增量对账)。
 //
-// 配置基线:Luban block.TbTarotCard(牌 → 碎片道具 id + 合成所需碎片数)+ item.TbItemDef(碎片道具行)。
+// 配置基线:Luban block.TbTarotCard(牌 → 每进度虔诚币成本数组 UnlockCosts;数组长度 = 总进度步数;购满即激活)。
+// 虔诚币是既有服务端权威货币(PropertyType.Piety),扣减经属性账本原子写。
 // 与既有 TarotBlindBox(神秘塔罗盲盒,客户端局内掷奖)是两个系统,仅主题同名。
 
-/// 单条道具持有(itemId → 数量;通用道具持有投影,当前业务方 = 塔罗碎片)
+/// 单条道具持有(itemId → 数量;通用道具持有投影,当前业务方 = 背包堆叠道具)
 message ItemHolding
 {
 	int32 ItemId = 1;    /// 道具 id(= TbItemDef 行)
 	int64 Count = 2;     /// 持有数量(权威绝对值)
 }
 
-/// 塔罗牌合成裁决结果码
-enum TarotSynthesizeResultCode
+/// 单张牌进度(cardId → 已购步数;塔罗进度投影载体,快照与购买响应共用)
+message TarotProgressEntry
 {
-	Success = 0,             /// 成功:已扣碎片、置已合成,回带权威碎片余额 + 收集全集
+	int32 CardId = 1;    /// 牌 id(= TbTarotCard 行)
+	int32 Steps = 2;     /// 已购进度步数(0..UnlockCosts.Length;== 数组长度即该牌已激活)
+}
+
+/// 塔罗牌购买进度裁决结果码
+enum TarotPurchaseResultCode
+{
+	Success = 0,             /// 成功:已扣虔诚币、进度 +1,回带权威虔诚币余额 + 该牌新进度 + 进度全集
 	NotLoggedIn = 1,         /// 会话未挂账号 → 客户端重登
-	UnknownCard = 2,         /// 牌 id 不在 TbTarotCard 表
-	AlreadyCollected = 3,    /// 该牌已合成(幂等拒绝,不扣碎片)
-	NotEnoughFragments = 4,  /// 碎片不足(CAS 过滤未命中且重读确认不足)
+	UnknownCard = 2,         /// 牌 id 不在 TbTarotCard 表(或该牌 UnlockCosts 未配置)
+	AlreadyMaxed = 3,        /// 该牌进度已满(已激活,幂等拒绝,不扣币)
+	NotEnoughPiety = 4,      /// 虔诚币不足(CAS 过滤未命中且重读确认不足)
 	ServiceUnavailable = 5,  /// MongoDB 不可达 / 服务未就绪 / 配置缺失
 }
 
-/// 客户端请求合成塔罗牌(身份从会话取;碎片消耗量由服务端按 TbTarotCard 表自算,客户端不上报)
-message C2G_TarotSynthesizeRequest // IRequest,G2C_TarotSynthesizeResponse
+/// 客户端请求购买一步塔罗牌进度(身份从会话取;本步成本由服务端按 TbTarotCard.UnlockCosts[当前步] 自算,客户端不上报)
+message C2G_TarotPurchaseRequest // IRequest,G2C_TarotPurchaseResponse
 {
 	int32 CardId = 1;    /// 目标塔罗牌 id(= TbTarotCard 行)
 }
 
-/// 服务端合成裁决响应
-message G2C_TarotSynthesizeResponse // IResponse
+/// 服务端购买裁决响应
+message G2C_TarotPurchaseResponse // IResponse
 {
-	TarotSynthesizeResultCode ResultCode = 1;    /// 裁决结果码
+	TarotPurchaseResultCode ResultCode = 1;      /// 裁决结果码
 	int32 CardId = 2;                            /// 回声牌 id
-	int32 FragmentItemId = 3;                    /// 该牌对应碎片道具 id(客户端据此定位本地投影;失败时可能为 0)
-	int64 FragmentBalance = 4;                   /// 扣减后该碎片权威持有量(-1 = 哨兵,本次未取到权威值,客户端不 set)
-	repeated int32 CollectedTarotIds = 5;        /// 已合成塔罗牌 id 全集(仅 CollectedValid=true 时可信,客户端整份覆盖)
-	bool CollectedValid = 6;                     /// CollectedTarotIds 是否真取自玩家文档:false = 降级路径的空占位
+	int32 Steps = 3;                             /// 该牌裁决后已购进度步数(-1 = 哨兵,未取到权威值,客户端不据此 set)
+	int64 PietyBalance = 4;                      /// 扣减后虔诚币权威余额(-1 = 哨兵,本次未取到权威值,客户端不据此 set)
+	repeated TarotProgressEntry ProgressAll = 5; /// 全牌进度全集(仅 ProgressValid=true 时可信,客户端整份覆盖)
+	bool ProgressValid = 6;                      /// ProgressAll 是否真取自玩家文档:false = 降级路径空占位
 	                                             /// (未登录/未知牌/读库失败),客户端保留既有投影不清空。
 }
