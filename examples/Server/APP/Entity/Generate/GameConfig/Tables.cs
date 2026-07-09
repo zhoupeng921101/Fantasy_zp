@@ -69,6 +69,14 @@ public partial class Tables
     /// 女神满档领取奖励表(行=等级+数量;元素类型运行时取当前未交付订单所需类型)
     /// </summary>
     public block.TbGoddessReward TbGoddessReward {get; }
+    /// <summary>
+    /// 星图章节表(22张塔罗牌按主线拆4章;整章全部集齐发大奖)
+    /// </summary>
+    public block.TbTarotChapter TbTarotChapter {get; }
+    /// <summary>
+    /// 奖励盒子表(一行一盒/box_id取整盒奖励)
+    /// </summary>
+    public reward.TbRewardBox TbRewardBox {get; }
 
     public Tables(System.Func<string, ByteBuf> loader)
     {
@@ -86,6 +94,8 @@ public partial class Tables
         TbTarotCard = new block.TbTarotCard(loader("block_tbtarotcard"));
         TbAudio = new audio.TbAudio(loader("audio_tbaudio"));
         TbGoddessReward = new block.TbGoddessReward(loader("block_tbgoddessreward"));
+        TbTarotChapter = new block.TbTarotChapter(loader("block_tbtarotchapter"));
+        TbRewardBox = new reward.TbRewardBox(loader("reward_tbrewardbox"));
         ResolveRef();
     }
     
@@ -105,6 +115,8 @@ public partial class Tables
         TbTarotCard.ResolveRef(this);
         TbAudio.ResolveRef(this);
         TbGoddessReward.ResolveRef(this);
+        TbTarotChapter.ResolveRef(this);
+        TbRewardBox.ResolveRef(this);
     }
 }
 

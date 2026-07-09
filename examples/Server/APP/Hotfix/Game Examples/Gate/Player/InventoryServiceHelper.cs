@@ -526,6 +526,50 @@ public static class InventoryServiceHelper
         session.Send(push);
     }
 
+    // ==================== GM 清背包 ====================
+
+    /// <summary>
+    /// GM 清背包(调试用):把背包两轨清空(堆叠轨 ItemHoldings + 批次轨 ItemLots)、使用幂等锚 LastUseReqSeq 归 0,
+    /// InventoryVersion 乐观版本 +1(单调推进,使任何在途乐观写失配、下次重读;不 Set 0 以免与并发写 ABA)。
+    /// 单条原子 FindOneAndUpdate($set 两轨 + 幂等锚、$inc 版本),整份清一次落库,不动货币 / 进度 / 其它字段。
+    /// 幂等:重复清同样刷成空(版本仍 +1)。返回 (ok, doc):ok=true 且 doc 非空 → 清后文档供推快照;
+    /// doc==null(账号未首登,无文档可清)视为已空的幂等成功;ok=false → 服务 / 库不可用。
+    /// </summary>
+    public static async FTask<(bool ok, PlayerDoc? doc)> ClearInventory(Scene scene, string accountId)
+    {
+        var service = scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (service?.Players is not { } players)
+        {
+            return (false, null);
+        }
+
+        var filter = Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId);
+        var update = Builders<PlayerDoc>.Update
+            .Set(x => x.ItemHoldings, new Dictionary<string, long>())
+            .Set(x => x.ItemLots, new List<ItemLot>())
+            .Set(x => x.LastUseReqSeq, 0L)
+            .Inc(x => x.InventoryVersion, 1L);
+
+        try
+        {
+            var doc = await players.FindOneAndUpdateAsync(filter, update,
+                new FindOneAndUpdateOptions<PlayerDoc> { IsUpsert = false, ReturnDocument = ReturnDocument.After });
+            if (doc == null)
+            {
+                // 账号未首登(理论上清背包前必已登录,防御性):无文档可清,等价已空,幂等成功但无 doc 可推。
+                Log.Debug($"InventoryServiceHelper.ClearInventory: 玩家文档不存在,视为已空,account={accountId}。");
+                return (true, null);
+            }
+            Log.Info($"InventoryServiceHelper.ClearInventory 清背包成功 account={accountId} version={doc.InventoryVersion}");
+            return (true, doc);
+        }
+        catch (MongoException e)
+        {
+            Log.Warning($"InventoryServiceHelper.ClearInventory 失败 account={accountId},err={e.Message}");
+            return (false, null);
+        }
+    }
+
     // ==================== 内部工具 ====================
 
     /// <summary>批次是否已过期(ExpireMs > 0 且 now >= ExpireMs;ExpireMs<=0 视为永不过期,批次轨一般不出现)。</summary>
@@ -591,8 +635,9 @@ public static class InventoryServiceHelper
     /// <summary>
     /// 解析货币使用效果(本轮唯一支持的效果):UseEffect==1 num → TbNum 映射 PropertyType,产出量 = UseNum(每个道具)。
     /// 不是货币效果 / num 无配置 / num 类型无对应服务端 PropertyType(如 EXP)/ UseNum<=0 → 返 false(NotUsable)。
+    /// public:供发奖路径(如塔罗奖励 TarotRewardServiceHelper)对 automatic 货币道具「发放即转货币」复用同一 num→PropertyType 映射,不另写一份。
     /// </summary>
-    private static bool TryResolveCurrencyProduce(ItemDef def, out PropertyType type, out long perItem)
+    public static bool TryResolveCurrencyProduce(ItemDef def, out PropertyType type, out long perItem)
     {
         type = default;
         perItem = 0;

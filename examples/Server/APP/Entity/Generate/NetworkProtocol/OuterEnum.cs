@@ -679,5 +679,43 @@ namespace Fantasy
 		ServiceUnavailable = 2
 	}
 
+	/// <summary>
+	/// GM 清盘裁决结果码
+	/// </summary>
+	public enum ClearBoardResultCode
+	{
+		/// <summary>
+		/// 清盘成功(盘面已清空,Step 已推进)
+		/// </summary>
+		Cleared = 0,
+		/// <summary>
+		/// 对局不存在(gameId 在会话上查无此局)
+		/// </summary>
+		GameNotFound = 1,
+		/// <summary>
+		/// 会话未登录(无法确定身份)
+		/// </summary>
+		NotLoggedIn = 2
+	}
+
+	/// <summary>
+	/// GM 清背包裁决结果码
+	/// </summary>
+	public enum ClearInventoryResultCode
+	{
+		/// <summary>
+		/// 清背包成功(两轨已清空;幂等:重复清同样返 Success)
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号身份(未登录 / 链路异常)
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 写入异常)
+		/// </summary>
+		ServiceUnavailable = 2
+	}
+
 
 }

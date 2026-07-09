@@ -59,5 +59,15 @@ public sealed class C2G_TarotPurchaseRequestHandler : MessageRPC<C2G_TarotPurcha
             PlayerPropertyServiceHelper.SendDeltaPushTo(
                 session.Scene, accountName, PropertyType.Piety, pietyBalance, $"tarot_purchase:card{request.CardId}");
         }
+
+        // 成功推进一步 → 发放解锁奖励(每碎片体力 + 刚集齐则发奖励道具包)。
+        // steps = 购买后新步数;total = 该牌总步数(= UnlockCosts.Count,集齐阈值)。
+        // 奖励与购买 CAS 非同一事务,发放器内 best-effort(失败记 Error 不回滚进度)。
+        if (resultCode == TarotPurchaseResultCode.Success)
+        {
+            var card = GameConfigSystem.Tables?.TbTarotCard?.GetOrDefault(request.CardId);
+            int total = card?.UnlockCosts?.Count ?? 0;
+            await TarotRewardServiceHelper.GrantStepRewardsAsync(session.Scene, accountName, request.CardId, steps, total);
+        }
     }
 }

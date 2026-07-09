@@ -21,4 +21,9 @@ public sealed record OpcodeInfo
     /// OpCode 协议类型
     /// </summary>
     public uint ProtocolType { get; set; }
+
+    /// <summary>
+    /// 消息文档注释(源自 proto message 的 /// 注释,多行以空格拼接),用于在 Opcode 常量后生成行尾注释
+    /// </summary>
+    public string Comment { get; set; } = string.Empty;
 }

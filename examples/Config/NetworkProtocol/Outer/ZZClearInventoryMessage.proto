@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+// ZZClearInventoryMessage.proto
+// GM 清背包(调试用):把玩家背包两轨清空(堆叠轨 ItemHoldings + 批次轨 ItemLots)、使用幂等锚 LastUseReqSeq 归 0、
+// InventoryVersion 乐观版本 +1(使在途乐观写失配、下次重读),不动货币 / 进度 / 其它字段。身份从会话取,请求无字段。
+// 清后服务端推整份(空)背包快照(G2C_InventoryDeltaPush),客户端整份覆盖投影为空。
+//
+// 文件名 ZZ 前缀刻意排到所有现存 .proto(含 ZClearPlayerData)之后:导出工具按文件名字母序遍历分配
+// opcode(单调计数器),新消息只消费末尾新计数,不挪动任何既有 opcode。
+
+/// GM 清背包裁决结果码
+enum ClearInventoryResultCode
+{
+	/// 清背包成功(两轨已清空;幂等:重复清同样返 Success)
+	Success = 0,
+	/// 会话未挂账号身份(未登录 / 链路异常)
+	NotLoggedIn = 1,
+	/// 服务不可用(MongoDB 不可达 / 写入异常)
+	ServiceUnavailable = 2
+}
+
+/// 客户端 GM 清背包请求(身份从会话取,不携带账号)
+message C2G_ClearInventoryRequest // IRequest,G2C_ClearInventoryResponse
+{
+}
+/// 服务端清背包裁决响应
+message G2C_ClearInventoryResponse // IResponse
+{
+	ClearInventoryResultCode ResultCode = 1; /// 裁决结果码
+}

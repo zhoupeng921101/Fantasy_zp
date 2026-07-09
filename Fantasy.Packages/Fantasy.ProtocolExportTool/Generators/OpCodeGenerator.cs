@@ -19,7 +19,8 @@ public sealed class OpCodeGenerator(bool isOuter)
         var opcodeInfo = new OpcodeInfo
         {
             Name = message.Name,
-            ProtocolType = message.Protocol.OpCodeType
+            ProtocolType = message.Protocol.OpCodeType,
+            Comment = string.Join(" ", message.DocumentationComments)
         };
 
         var (protocolType, counter) = GetProtocolTypeAndCounter(message.InterfaceType);

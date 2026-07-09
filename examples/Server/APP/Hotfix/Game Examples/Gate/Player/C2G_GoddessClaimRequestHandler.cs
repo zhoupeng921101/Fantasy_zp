@@ -28,9 +28,10 @@ public sealed class C2G_GoddessClaimRequestHandler : MessageRPC<C2G_GoddessClaim
             return;
         }
 
-        var (code, elementType, rewards) = await GoddessClaimServiceHelper.TryClaim(session.Scene, account);
+        var (code, elementType, rewards, newRating) = await GoddessClaimServiceHelper.TryClaim(session.Scene, account);
         response.ResultCode = code;
         response.ElementType = elementType;
+        response.NewRating = newRating;
 
         if (code == GoddessClaimResultCode.Success)
         {

@@ -1649,10 +1649,11 @@ namespace Fantasy
             ElementType = default;
             foreach (var __t in Rewards) __t.Dispose();
             Rewards.Clear();
+            NewRating = default;
             MessageObjectPool<G2C_GoddessClaimResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_GoddessClaimResponse; } 
-        [ProtoMember(4)]
+        [ProtoMember(5)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 裁决结果码
@@ -1669,6 +1670,11 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public List<GoddessRewardItem> Rewards { get; set; } = new List<GoddessRewardItem>();
+        /// <summary>
+        /// 领取后 GoddessRating 权威值(CAS 清零故恒 0),客户端据此对账清零本地计数;失败 = 0
+        /// </summary>
+        [ProtoMember(4)]
+        public long NewRating { get; set; }
     }
     /// <summary>
     /// 堆叠轨单项(无独立状态的可堆叠道具:itemId → 持有数量)。快照 / 推送共用。
@@ -6784,108 +6790,6 @@ namespace Fantasy
         public bool ProgressValid { get; set; }
     }
     /// <summary>
-    /// (未登录/未知牌/读库失败),客户端保留既有投影不清空。
-    /// 客户端每次打开主界面触发一次免费推进当前牌一步(身份从会话取,无字段;免费不扣虔诚币,
-    /// 服务端按 TbTarotCard.DataList 顺位定当前牌 + 步数,原子推进,客户端不上报)
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class C2G_TarotAutoAdvanceRequest : AMessage, IRequest
-    {
-        public static C2G_TarotAutoAdvanceRequest Create(bool autoReturn = true)
-        {
-            var c2G_TarotAutoAdvanceRequest = MessageObjectPool<C2G_TarotAutoAdvanceRequest>.Rent();
-            c2G_TarotAutoAdvanceRequest.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                c2G_TarotAutoAdvanceRequest.SetIsPool(false);
-            }
-            
-            return c2G_TarotAutoAdvanceRequest;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            MessageObjectPool<C2G_TarotAutoAdvanceRequest>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.C2G_TarotAutoAdvanceRequest; } 
-        [ProtoIgnore]
-        public G2C_TarotAutoAdvanceResponse ResponseType { get; set; }
-    }
-    /// <summary>
-    /// 服务端免费推进裁决响应(推进后回带权威进度全集)
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class G2C_TarotAutoAdvanceResponse : AMessage, IResponse
-    {
-        public static G2C_TarotAutoAdvanceResponse Create(bool autoReturn = true)
-        {
-            var g2C_TarotAutoAdvanceResponse = MessageObjectPool<G2C_TarotAutoAdvanceResponse>.Rent();
-            g2C_TarotAutoAdvanceResponse.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                g2C_TarotAutoAdvanceResponse.SetIsPool(false);
-            }
-            
-            return g2C_TarotAutoAdvanceResponse;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            ErrorCode = 0;
-            foreach (var __t in ProgressAll) __t.Dispose();
-            ProgressAll.Clear();
-            ProgressValid = default;
-            MessageObjectPool<G2C_TarotAutoAdvanceResponse>.Return(this);
-        }
-        public uint OpCode() { return OuterOpcode.G2C_TarotAutoAdvanceResponse; } 
-        [ProtoMember(3)]
-        public uint ErrorCode { get; set; }
-        /// <summary>
-        /// 全牌进度全集(仅 ProgressValid=true 时可信,客户端整份覆盖)
-        /// </summary>
-        [ProtoMember(1)]
-        public List<TarotProgressEntry> ProgressAll { get; set; } = new List<TarotProgressEntry>();
-        /// <summary>
-        /// ProgressAll 是否真取自玩家文档:false = 降级路径空占位
-        /// </summary>
-        [ProtoMember(2)]
-        public bool ProgressValid { get; set; }
-    }
-    /// <summary>
     /// 测试使用ErrorCode枚举的消息
     /// </summary>
     [Serializable]
@@ -7153,5 +7057,237 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(1)]
         public ClearPlayerDataResultCode ResultCode { get; set; }
+    }
+    /// <summary>
+    /// 客户端 GM 清盘请求(身份从会话取,不携带账号)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_ClearBoardRequest : AMessage, IRequest
+    {
+        public static C2G_ClearBoardRequest Create(bool autoReturn = true)
+        {
+            var c2G_ClearBoardRequest = MessageObjectPool<C2G_ClearBoardRequest>.Rent();
+            c2G_ClearBoardRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_ClearBoardRequest.SetIsPool(false);
+            }
+            
+            return c2G_ClearBoardRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            GameId = default;
+            SliceJson = default;
+            MessageObjectPool<C2G_ClearBoardRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_ClearBoardRequest; } 
+        [ProtoIgnore]
+        public G2C_ClearBoardResponse ResponseType { get; set; }
+        /// <summary>
+        /// 目标对局 id
+        /// </summary>
+        [ProtoMember(1)]
+        public long GameId { get; set; }
+        /// <summary>
+        /// 客户端清后局内叠加层不透明切片,搭车存盘。服务端只搬运不解析
+        /// </summary>
+        [ProtoMember(2)]
+        public string SliceJson { get; set; }
+    }
+    /// <summary>
+    /// 服务端清盘裁决 + 最新权威态
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_ClearBoardResponse : AMessage, IResponse
+    {
+        public static G2C_ClearBoardResponse Create(bool autoReturn = true)
+        {
+            var g2C_ClearBoardResponse = MessageObjectPool<G2C_ClearBoardResponse>.Rent();
+            g2C_ClearBoardResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_ClearBoardResponse.SetIsPool(false);
+            }
+            
+            return g2C_ClearBoardResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Step = default;
+            Score = default;
+            ClearedCells = default;
+            Board.Clear();
+            if (GeneratorState != null)
+            {
+                GeneratorState.Dispose();
+                GeneratorState = null;
+            }
+            MessageObjectPool<G2C_ClearBoardResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_ClearBoardResponse; } 
+        [ProtoMember(7)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public ClearBoardResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 清盘后(或当前)权威步号
+        /// </summary>
+        [ProtoMember(2)]
+        public int Step { get; set; }
+        /// <summary>
+        /// 当前权威分数(清盘不计分,回带当前值供对账)
+        /// </summary>
+        [ProtoMember(3)]
+        public int Score { get; set; }
+        /// <summary>
+        /// 本次清掉的格数(Cleared 时有效)
+        /// </summary>
+        [ProtoMember(4)]
+        public int ClearedCells { get; set; }
+        /// <summary>
+        /// 最新权威棋盘(8 行位掩码,清盘后全 0)
+        /// </summary>
+        [ProtoMember(5)]
+        public List<int> Board { get; set; } = new List<int>();
+        /// <summary>
+        /// 最新完整生成器状态向量(清盘不推进发牌,回带当前态供对账)
+        /// </summary>
+        [ProtoMember(6)]
+        public BlockGenState GeneratorState { get; set; }
+    }
+    /// <summary>
+    /// 客户端 GM 清背包请求(身份从会话取,不携带账号)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_ClearInventoryRequest : AMessage, IRequest
+    {
+        public static C2G_ClearInventoryRequest Create(bool autoReturn = true)
+        {
+            var c2G_ClearInventoryRequest = MessageObjectPool<C2G_ClearInventoryRequest>.Rent();
+            c2G_ClearInventoryRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_ClearInventoryRequest.SetIsPool(false);
+            }
+            
+            return c2G_ClearInventoryRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_ClearInventoryRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_ClearInventoryRequest; } 
+        [ProtoIgnore]
+        public G2C_ClearInventoryResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端清背包裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_ClearInventoryResponse : AMessage, IResponse
+    {
+        public static G2C_ClearInventoryResponse Create(bool autoReturn = true)
+        {
+            var g2C_ClearInventoryResponse = MessageObjectPool<G2C_ClearInventoryResponse>.Rent();
+            g2C_ClearInventoryResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_ClearInventoryResponse.SetIsPool(false);
+            }
+            
+            return g2C_ClearInventoryResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            MessageObjectPool<G2C_ClearInventoryResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_ClearInventoryResponse; } 
+        [ProtoMember(2)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public ClearInventoryResultCode ResultCode { get; set; }
     }
 }

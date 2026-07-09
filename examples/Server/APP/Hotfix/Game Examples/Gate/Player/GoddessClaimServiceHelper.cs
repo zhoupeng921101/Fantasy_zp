@@ -31,10 +31,11 @@ public static class GoddessClaimServiceHelper
     private const int DefaultRewardElementType = 4;
 
     /// <summary>
-    /// 领取女神满档奖励(原子 CAS 幂等)。返回 (结果码, 发放元素类型, 奖励列表[(等级,数量)])。
-    /// 失败(未登录由 handler 前置拦 / NotFull / ServiceUnavailable)时元素类型 = 0、奖励列表为空。
+    /// 领取女神满档奖励(原子 CAS 幂等)。返回 (结果码, 发放元素类型, 奖励列表[(等级,数量)], 领取后权威计数)。
+    /// 失败(未登录由 handler 前置拦 / NotFull / ServiceUnavailable)时元素类型 = 0、奖励列表为空、计数 = 0。
+    /// 成功时 newRating = CAS 清零后的 GoddessRating(恒 0),供客户端对账本地计数。
     /// </summary>
-    public static async FTask<(GoddessClaimResultCode code, int elementType, List<(int level, int count)> rewards)>
+    public static async FTask<(GoddessClaimResultCode code, int elementType, List<(int level, int count)> rewards, long newRating)>
         TryClaim(Scene scene, string accountId)
     {
         var empty = new List<(int, int)>();
@@ -42,7 +43,7 @@ public static class GoddessClaimServiceHelper
         var service = scene.GetComponent<PlayerPropertyServiceComponent>();
         if (service == null || service.Players == null)
         {
-            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty);
+            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty, 0L);
         }
 
         var players = service.Players;
@@ -57,12 +58,12 @@ public static class GoddessClaimServiceHelper
         catch (MongoException e)
         {
             Log.Warning($"GoddessClaimServiceHelper.TryClaim 读 doc 失败 account={accountId},err={e.Message}");
-            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty);
+            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty, 0L);
         }
         if (doc == null)
         {
             // 未首登(登录链路已保证;实战防御)。
-            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty);
+            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty, 0L);
         }
 
         // 订单懒结算(到点整批刷新),使「未交付订单」视图与客户端一致(同 TryDeliver 先结算再裁决)。
@@ -73,7 +74,7 @@ public static class GoddessClaimServiceHelper
         if (rewards.Count == 0)
         {
             Log.Error($"GoddessClaimServiceHelper.TryClaim 奖励表 TbGoddessReward 缺失/空,领取返 ServiceUnavailable account={accountId}。请检查导表与 GameConfigBytes。");
-            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty);
+            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty, 0L);
         }
 
         var elementType = ResolveRewardElementType(doc);
@@ -81,11 +82,12 @@ public static class GoddessClaimServiceHelper
         // ── CAS 清零:仅当 GoddessRating >= 满档值才置 0(before != null = 本路抢占成功 = 满档且首次领)。
         // 满档值 = service.GoddessRatingUpperBound(= global id=7,与 GoddessRating 封顶同源)。
         long max = service.GoddessRatingUpperBound;
+        const long clearedRating = 0L; // 领取后清零值:CAS 写入 = 回带客户端的权威 newRating,同源不漂移
         var filter = Builders<PlayerDoc>.Filter.And(
             Builders<PlayerDoc>.Filter.Eq(x => x.AccountId, accountId),
             Builders<PlayerDoc>.Filter.Gte(x => x.GoddessRating, max));
         var update = Builders<PlayerDoc>.Update
-            .Set(x => x.GoddessRating, 0L)
+            .Set(x => x.GoddessRating, clearedRating)
             .Set(x => x.LastChangeUnixMs, nowMs);
 
         PlayerDoc before;
@@ -97,13 +99,13 @@ public static class GoddessClaimServiceHelper
         catch (MongoException e)
         {
             Log.Warning($"GoddessClaimServiceHelper.TryClaim 清零 CAS 失败 account={accountId},err={e.Message}");
-            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty);
+            return (GoddessClaimResultCode.ServiceUnavailable, 0, empty, 0L);
         }
 
         if (before == null)
         {
             // 未满档(GoddessRating < max)或并发已被领:计数不变,不发奖。
-            return (GoddessClaimResultCode.NotFull, 0, empty);
+            return (GoddessClaimResultCode.NotFull, 0, empty, 0L);
         }
 
         // 流水:记本次清零(BalanceBefore = 满档值,BalanceAfter = 0,delta = -满档值),口径同 ChangeProperty 旁路 append。
@@ -117,10 +119,10 @@ public static class GoddessClaimServiceHelper
             timestampMs: nowMs);
 
         // delta 推送清零后的 GoddessRating = 0,供该账号其它在线会话对齐(发起会话据领取响应自行清零本地条)。
-        PlayerPropertyServiceHelper.SendDeltaPushTo(scene, accountId, PropertyType.GoddessRating, 0L, "goddess-claim");
+        PlayerPropertyServiceHelper.SendDeltaPushTo(scene, accountId, PropertyType.GoddessRating, clearedRating, "goddess-claim");
 
         Log.Debug($"Goddess 领取成功 account={accountId} oldRating={oldRating} elementType={elementType} rewardRows={rewards.Count}");
-        return (GoddessClaimResultCode.Success, elementType, rewards);
+        return (GoddessClaimResultCode.Success, elementType, rewards, clearedRating);
     }
 
     /// <summary>

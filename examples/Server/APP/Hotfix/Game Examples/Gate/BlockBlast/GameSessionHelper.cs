@@ -220,6 +220,24 @@ public static class GameSessionHelper
         return cleared;
     }
 
+    /// <summary>
+    /// GM 清盘(调试用):清空当前对局盘面全部已占格。作为一次 board-mutating 动作推进 Step
+    /// (与落子 / 消除道具同一步号轴),但不消耗候选、不推进发牌调度、不续发、不触发全清判定 / 不给全清奖;
+    /// 分数与候选 / 发牌器态不变。返回本次清掉的格数。
+    /// 服务端盘面只有占用位掩码(BinaryBoard);局内元素叠加层在客户端 opaque SliceJson,服务端只搬运不解析。
+    /// </summary>
+    public static int ClearBoard(GameSession session)
+    {
+        var board = session.Board;
+        int before = CountOccupied(board);
+        for (int r = 0; r < BinaryBoard.RowCount; r++)
+        {
+            board.RowBinary[r] = 0;
+        }
+        session.Step++;
+        return before; // 全清后已占为 0,清掉格数 = 清前已占格数
+    }
+
     /// <summary>统计棋盘已占格数(消除道具清格数派生用)。</summary>
     private static int CountOccupied(BinaryBoard board)
     {

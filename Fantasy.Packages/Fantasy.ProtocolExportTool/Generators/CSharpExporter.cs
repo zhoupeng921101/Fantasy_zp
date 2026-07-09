@@ -124,7 +124,7 @@ public sealed class CSharpExporter(
                      public static partial class OuterOpcode
                      {
                  {{string.Join(Environment.NewLine, opcodeInfos
-                     .Select(x => $"        public const uint {x.Name} = {x.Code};"))}}
+                     .Select(FormatOpcodeConstant))}}
                      }
                  }
                  """;
@@ -147,10 +147,27 @@ public sealed class CSharpExporter(
                      public static partial class InnerOpcode
                      {
                  {{string.Join(Environment.NewLine, opcodeInfos
-                     .Select(x => $"        public const uint {x.Name} = {x.Code};"))}}
+                     .Select(FormatOpcodeConstant))}}
                      }
                  }
                  """;
+    }
+
+    /// <summary>
+    /// 生成单个 Opcode 常量,携带来源 proto message 的文档注释作为 XML summary(无注释则只输出常量)
+    /// </summary>
+    private static string FormatOpcodeConstant(OpcodeInfo opcodeInfo)
+    {
+        var declaration = $"        public const uint {opcodeInfo.Name} = {opcodeInfo.Code};";
+
+        if (string.IsNullOrWhiteSpace(opcodeInfo.Comment))
+        {
+            return declaration;
+        }
+
+        // 折叠换行,压成单行 summary,避免多行断开 XML 注释
+        var comment = opcodeInfo.Comment.Replace("\r", " ").Replace("\n", " ").Trim();
+        return $"        /// <summary> {comment} </summary>{Environment.NewLine}{declaration}";
     }
 
     protected override string GenerateOuterMessages(IReadOnlySet<string> outerNamespaces, IReadOnlyDictionary<string, MessageDefinition> messageDefinitions)

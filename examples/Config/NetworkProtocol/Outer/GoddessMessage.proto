@@ -44,4 +44,5 @@ message G2C_GoddessClaimResponse // IResponse
 	GoddessClaimResultCode ResultCode = 1;    /// 裁决结果码
 	int32 ElementType = 2;                    /// 发放元素类型(= 客户端 MergeElement:1蝶2杯3卷4星):取当前未交付订单所需类型;无未交付订单回退当前批槽0池行类型;失败 = 0
 	repeated GoddessRewardItem Rewards = 3;   /// 奖励列表(= TbGoddessReward 各行 等级+数量,客户端逐项 AddDirect(ElementType, Level, Count) 入合成区);失败为空
+	int64 NewRating = 4;                      /// 领取后 GoddessRating 权威值(CAS 清零故恒 0),客户端据此对账清零本地计数;失败 = 0
 }
