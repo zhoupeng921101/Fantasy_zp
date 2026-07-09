@@ -131,10 +131,15 @@ namespace Fantasy.PacketParser
 #endif
                 case NetworkTarget.Outer:
                 {
-#if FANTASY_WEBGL
+                    // 判据须与编译进来的 WebSocket 客户端所期望的 parser 类型一致:Unity 端(非 NET/CONSOLE)
+                    // 编译的是 WebSocketClientNetworkWebgl,它按 BufferPacketParser 取用;NET/CONSOLE 端的
+                    // WebSocketClientNetwork 与服务端 channel 按 ReadOnlyMemoryPacketParser 取用。
+                    // 用 FANTASY_WEBGL 作判据比客户端的编译条件窄,在"Unity 端但未定义 FANTASY_WEBGL"(编辑器/
+                    // Standalone/Android/iOS)时会返回 ReadOnly 而客户端强转 Buffer,触发 InvalidCastException。
+#if !FANTASY_NET && !FANTASY_CONSOLE
                     return new OuterWebglBufferPacketParser();
-#else         
-                    return new OuterReadOnlyMemoryPacketParser(); 
+#else
+                    return new OuterReadOnlyMemoryPacketParser();
 #endif
                 }
                 default:
