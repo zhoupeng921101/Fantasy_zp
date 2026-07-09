@@ -89,8 +89,7 @@ public static class PlayerPropertyServiceHelper
             .SetOnInsert(x => x.OrderCursor, 0)
             .SetOnInsert(x => x.LastOrderRefreshMs, 0L)
             .SetOnInsert(x => x.OrderDeliveredMask, 0)
-            // P3 六元层进度计数器首登 setOnInsert(全新玩家进度为 0;显式写使字段 present)。
-            .SetOnInsert(x => x.GoddessLevel, service.GoddessLevelInitial)
+            // P3 五元层进度计数器首登 setOnInsert(全新玩家进度为 0;显式写使字段 present)。
             .SetOnInsert(x => x.GoddessRating, service.GoddessRatingInitial)
             .SetOnInsert(x => x.UnlockedChapter, service.UnlockedChapterInitial)
             .SetOnInsert(x => x.BlindBoxCount, service.BlindBoxCountInitial)
@@ -215,8 +214,8 @@ public static class PlayerPropertyServiceHelper
             { "OrderCursor",         0 },
             { "LastOrderRefreshMs",  0L },
             { "OrderDeliveredMask",  0 },
-            // P3 六元层进度计数器:旧档(schema < 5)缺字段 → 补 Initial(默认 0),present 则保留既有值。
-            { "GoddessLevel",        new BsonDocument("$ifNull", new BsonArray { "$GoddessLevel", service.GoddessLevelInitial }) },
+            // P3 五元层进度计数器:旧档(schema < 5)缺字段 → 补 Initial(默认 0),present 则保留既有值。
+            // (GoddessLevel 已废弃移除:PropertyType 保留占位、不再存 doc 字段,旧档遗留字段作孤儿不读。)
             { "GoddessRating",       new BsonDocument("$ifNull", new BsonArray { "$GoddessRating", service.GoddessRatingInitial }) },
             { "UnlockedChapter",     new BsonDocument("$ifNull", new BsonArray { "$UnlockedChapter", service.UnlockedChapterInitial }) },
             { "BlindBoxCount",       new BsonDocument("$ifNull", new BsonArray { "$BlindBoxCount", service.BlindBoxCountInitial }) },
@@ -331,8 +330,7 @@ public static class PlayerPropertyServiceHelper
             .Set(x => x.OrderCursor, 0)
             .Set(x => x.LastOrderRefreshMs, 0L)
             .Set(x => x.OrderDeliveredMask, 0)
-            // P3 六元层进度计数器:清档重置为默认值(对齐 InitOrLoad setOnInsert)。
-            .Set(x => x.GoddessLevel, service.GoddessLevelInitial)
+            // P3 五元层进度计数器:清档重置为默认值(对齐 InitOrLoad setOnInsert)。
             .Set(x => x.GoddessRating, service.GoddessRatingInitial)
             .Set(x => x.UnlockedChapter, service.UnlockedChapterInitial)
             .Set(x => x.BlindBoxCount, service.BlindBoxCountInitial)
@@ -907,8 +905,7 @@ public static class PlayerPropertyServiceHelper
         AddProperty(info, PropertyType.Piety, doc.Piety);
         AddProperty(info, PropertyType.GuardianExp, doc.GuardianExp);
         AddProperty(info, PropertyType.Energy, doc.Energy);
-        // P3 六元层进度计数器并入登录快照,客户端据此拿权威初值(替代从 blob 读)。
-        AddProperty(info, PropertyType.GoddessLevel, doc.GoddessLevel);
+        // P3 五元层进度计数器并入登录快照,客户端据此拿权威初值(替代从 blob 读)。
         AddProperty(info, PropertyType.GoddessRating, doc.GoddessRating);
         AddProperty(info, PropertyType.UnlockedChapter, doc.UnlockedChapter);
         AddProperty(info, PropertyType.BlindBoxCount, doc.BlindBoxCount);
@@ -997,12 +994,8 @@ public static class PlayerPropertyServiceHelper
                 upperBound = service.EnergyUpperBound;
                 singleDeltaLimit = service.EnergySingleDeltaLimit;
                 return true;
-            // P3 六元层进度计数器:同套原子写 / 限界信任(纯 $inc 计数器,无体力式恢复结算)。
-            case PropertyType.GoddessLevel:
-                fieldName = nameof(PlayerDoc.GoddessLevel);
-                upperBound = service.GoddessLevelUpperBound;
-                singleDeltaLimit = service.GoddessLevelSingleDeltaLimit;
-                return true;
+            // P3 五元层进度计数器:同套原子写 / 限界信任(纯 $inc 计数器,无体力式恢复结算)。
+            // (PropertyType.GoddessLevel 已废弃:枚举保留占位,此处不再解析 → 落 default 返 false,变更请求视作未支持类型。)
             case PropertyType.GoddessRating:
                 fieldName = nameof(PlayerDoc.GoddessRating);
                 upperBound = service.GoddessRatingUpperBound;
@@ -1048,7 +1041,6 @@ public static class PlayerPropertyServiceHelper
             PropertyType.Piety => doc.Piety,
             PropertyType.GuardianExp => doc.GuardianExp,
             PropertyType.Energy => doc.Energy,
-            PropertyType.GoddessLevel => doc.GoddessLevel,
             PropertyType.GoddessRating => doc.GoddessRating,
             PropertyType.UnlockedChapter => doc.UnlockedChapter,
             PropertyType.BlindBoxCount => doc.BlindBoxCount,

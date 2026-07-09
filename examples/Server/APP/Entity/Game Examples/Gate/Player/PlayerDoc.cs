@@ -106,15 +106,12 @@ public sealed class PlayerDoc
     public int OrderDeliveredMask { get; set; }
 
     // ---- P3 元层进度计数器·服务端权威(原云存档 blob 迁出第 1 批,2026-07 全栈迁移)----
-    // 六个纯数值进度计数器,与既有货币/体力彼此独立、不复用。走同一套 PropertyChange($inc + 限界信任 + ledger + 推送)。
+    // 五个纯数值进度计数器,与既有货币/体力彼此独立、不复用。走同一套 PropertyChange($inc + 限界信任 + ledger + 推送)。
     // 用 long(非 int)与既有余额字段同类型:变更走 ChangeProperty 的 long 过滤 / $inc / GetFieldValue 统一路径,
     //   避免 int32 字段与 long delta 在 MongoDB filter(Gte(field, -delta))产生 BSON 数值类型不匹配。
     // 旧文档反序列化缺字段 → BSON 默认 0L 即合理初值(全新玩家这些进度本就为 0);首登 setOnInsert 显式写 0 使字段 present。
-    // 语义单调性:GoddessLevel/GoddessRating/UnlockedChapter/TempleRepaired/NextRepairIndex 单调递增(玩法/动作只增不减);
+    // 语义单调性:GoddessRating/UnlockedChapter/TempleRepaired/NextRepairIndex 单调递增(玩法/动作只增不减);
     //   BlindBoxCount 可增可减(攒盒 + / 开盒 -)。骨架限界信任只防异常大跳,不强制单调(宽松,拿不准从宽,见服务组件阈值注)。
-
-    /// <summary>女神等级(玩法产出,消行融合经济产出;单调递增,缺省 0)。</summary>
-    public long GoddessLevel { get; set; }
 
     /// <summary>女神评级(玩法产出;单调递增,缺省 0)。</summary>
     public long GoddessRating { get; set; }

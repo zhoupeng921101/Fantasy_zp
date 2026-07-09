@@ -109,16 +109,11 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     /// <summary>变更频率最小间隔(占位 100ms):同账号同属性 100ms 内重复变更视为脚本刷,拒。</summary>
     private const long DefaultPropertyChangeMinIntervalMs = 100L;
 
-    // ---- P3 新增:六种元层进度计数器默认值 + 限界信任阈值(原云存档 blob 迁出第 1 批,2026-07)----
+    // ---- P3 新增:五种元层进度计数器默认值 + 限界信任阈值(原云存档 blob 迁出第 1 批,2026-07)----
     // 全部 Initial=0(全新玩家进度为 0)。上界 = 宽松 sanity 天花板(纯挡荒谬值,非玩法硬上限);
     // 单次 delta 上限 = 限界信任主杠杆,取值远大于「玩法一次结算的最大合法跳变」以避免误拒(拿不准从宽)。
     // 这些是**占位值**:女神/章节/修缮的真实产出速率与硬上限来自客户端玩法配置(章节数、修缮项总数、女神满级等),
     // 待第 4/5 批抽奖/合成迁移把玩法产出建模上服务端时再收紧;本批只做「计数器权威落账」,不建模产出逻辑。
-
-    /// <summary>女神等级:初始 0 / 上界 10_000(宽松天花板)/ 单次上限 100(一次结算最多涨几级,留大余量)。</summary>
-    private const long DefaultGoddessLevelInitial = 0L;
-    private const long DefaultGoddessLevelUpperBound = 10_000L;
-    private const long DefaultGoddessLevelSingleDeltaLimit = 100L;
 
     /// <summary>
     /// 女神评级(= 清屏累计好评计数):初始 0。上界 + 单次上限运行时读 Luban global.xlsx id=7 GoddessMaxCount(满档清屏次数),
@@ -223,10 +218,7 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         self.EnergySingleDeltaLimit = DefaultEnergySingleDeltaLimit;
         self.PropertyChangeMinIntervalMs = DefaultPropertyChangeMinIntervalMs;
 
-        // P3 六元层进度计数器。
-        self.GoddessLevelInitial = DefaultGoddessLevelInitial;
-        self.GoddessLevelUpperBound = DefaultGoddessLevelUpperBound;
-        self.GoddessLevelSingleDeltaLimit = DefaultGoddessLevelSingleDeltaLimit;
+        // P3 五元层进度计数器。
         self.GoddessRatingInitial = DefaultGoddessRatingInitial;
         // 女神评级上界 + 单次上限读 global.xlsx id=7 GoddessMaxCount(满档清屏次数,缺表回退 10):
         //   上界 = 满档值 → 全清 +1 到满即被原子写 OverLimit 拒(满档停住,客户端发 claim RPC 领取后服务端清零 → 再循环);
@@ -292,8 +284,7 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
             (self.PietyInitial, self.PietyUpperBound, self.PietySingleDeltaLimit, "Piety"),
             (self.GuardianExpInitial, self.GuardianExpUpperBound, self.GuardianExpSingleDeltaLimit, "GuardianExp"),
             (self.EnergyInitial, self.EnergyUpperBound, self.EnergySingleDeltaLimit, "Energy"),
-            // P3 六元层进度计数器(同套校验:初始 ∈ [0, 上界]、上界 ∈ [0, long.MaxValue/2]、单次上限 ∈ (0, 上界])。
-            (self.GoddessLevelInitial, self.GoddessLevelUpperBound, self.GoddessLevelSingleDeltaLimit, "GoddessLevel"),
+            // P3 五元层进度计数器(同套校验:初始 ∈ [0, 上界]、上界 ∈ [0, long.MaxValue/2]、单次上限 ∈ (0, 上界])。
             (self.GoddessRatingInitial, self.GoddessRatingUpperBound, self.GoddessRatingSingleDeltaLimit, "GoddessRating"),
             (self.UnlockedChapterInitial, self.UnlockedChapterUpperBound, self.UnlockedChapterSingleDeltaLimit, "UnlockedChapter"),
             (self.BlindBoxCountInitial, self.BlindBoxCountUpperBound, self.BlindBoxCountSingleDeltaLimit, "BlindBoxCount"),

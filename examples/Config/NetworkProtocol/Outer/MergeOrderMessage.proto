@@ -12,7 +12,7 @@ syntax = "proto3";
 // 范围外:特殊订单(SpecialOrderTrack)下一轮迁;库存校验 Phase 2;全棋盘服务端模拟暂不做。
 //
 // 设计基线:.claude/rules/data-authority.md(玩家持久数据服务端权威) + Luban block.TbMergeOrder 订单池表
-// (池序=id 升序,奖励直配值:体力/虔诚币/塔罗碎片,服务端按表自算、客户端只做展示投影)。
+// (池序=id 升序,奖励直配值:体力/虔诚币,服务端按表自算、客户端只做展示投影)。
 
 /// 单条订单项(= 客户端 GameLogic.BlockBlast.Order;Type 用 int32 与客户端 MergeElement 枚举 1..4 对齐,0=None=空槽)
 /// 奖励字段是服务端按 TbMergeOrder 表派生的展示投影:客户端只显示、不参与发奖计算(交付实发以响应/推送为准)。
@@ -23,8 +23,6 @@ message OrderItem
 	int32 Count = 3;           /// 数量(订单要求该 (Type,Level) 的件数)
 	int32 EnergyReward = 4;    /// 交付奖励体力(展示用;空槽为 0)
 	int64 PietyReward = 5;     /// 交付奖励虔诚币(展示用;空槽为 0)
-	int32 FragmentItemId = 6;  /// 交付掉落塔罗碎片道具 id(= TbItemDef 行;展示用;空槽/无碎片为 0)
-	int32 FragmentCount = 7;   /// 交付掉落碎片数量(展示用;空槽为 0)
 }
 
 /// 订单系统当前状态快照(服务端权威,客户端只持投影)。
@@ -63,7 +61,4 @@ message G2C_DeliverOrderResponse // IResponse
 	MergeOrderSnapshot Snapshot = 5;          /// 服务端权威更新后的最新订单快照(含已置空的本槽 + 可能触发的整批刷新);失败时为空数组的占位 snapshot
 	int64 EnergyBalance = 6;                  /// 交付后 Energy 权威绝对余额:客户端据此对账 set 本地体力(免依赖 delta-push);-1 = 哨兵(本次未取到权威值,客户端不 set)
 	int64 PietyBalance = 7;                   /// 交付后 Piety 权威绝对余额(同 EnergyBalance 口径)
-	int32 FragmentItemId = 8;                 /// 本次掉落的塔罗碎片道具 id(= TbMergeOrder 该订单行配置;0 = 本次无碎片落账)
-	int64 FragmentReward = 9;                 /// 本次实发碎片数量(服务端按表自算;失败/未发 = 0)
-	int64 FragmentBalance = 10;               /// 落账后该碎片权威持有量(客户端据此对账 set 本地背包计数;-1 = 哨兵,本次未取到权威值,客户端不 set)
 }

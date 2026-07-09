@@ -101,14 +101,10 @@ public sealed class PlayerPropertyServiceComponent : Entity
     public long GuardianExpSingleDeltaLimit;
     public long EnergySingleDeltaLimit;
 
-    // ---- P3 新增:六种元层进度计数器的初始值 / 类型上界 / 单次变更上限(原云存档 blob 迁出第 1 批,2026-07)----
+    // ---- P3 新增:五种元层进度计数器的初始值 / 类型上界 / 单次变更上限(原云存档 blob 迁出第 1 批,2026-07)----
     // 计数器均 Initial=0(全新玩家进度为 0);上界是宽松 sanity 天花板(纯挡荒谬值,非玩法硬上限)。
     // 单次 delta 上限是限界信任主杠杆:必须 ≥ 真实单次最大跳变(玩法一次结算涨几级/几盒),否则正常上报被误拒;
     // 拿不准从宽(设计 data-authority 限界信任「只防异常大跳」)。真实玩法产销速率确定后按 playflow 调参。
-
-    /// <summary>女神等级首登初始值 / 上界。</summary>
-    public long GoddessLevelInitial;
-    public long GoddessLevelUpperBound;
 
     /// <summary>女神评级首登初始值 / 上界。</summary>
     public long GoddessRatingInitial;
@@ -130,7 +126,6 @@ public sealed class PlayerPropertyServiceComponent : Entity
     public long NextRepairIndexInitial;
     public long NextRepairIndexUpperBound;
 
-    public long GoddessLevelSingleDeltaLimit;
     public long GoddessRatingSingleDeltaLimit;
     public long UnlockedChapterSingleDeltaLimit;
     public long BlindBoxCountSingleDeltaLimit;

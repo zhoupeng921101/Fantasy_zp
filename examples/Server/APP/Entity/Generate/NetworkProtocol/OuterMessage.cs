@@ -2379,8 +2379,6 @@ namespace Fantasy
             Count = default;
             EnergyReward = default;
             PietyReward = default;
-            FragmentItemId = default;
-            FragmentCount = default;
             MessageObjectPool<OrderItem>.Return(this);
         }
         /// <summary>
@@ -2408,16 +2406,6 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(5)]
         public long PietyReward { get; set; }
-        /// <summary>
-        /// 交付掉落塔罗碎片道具 id(= TbItemDef 行;展示用;空槽/无碎片为 0)
-        /// </summary>
-        [ProtoMember(6)]
-        public int FragmentItemId { get; set; }
-        /// <summary>
-        /// 交付掉落碎片数量(展示用;空槽为 0)
-        /// </summary>
-        [ProtoMember(7)]
-        public int FragmentCount { get; set; }
     }
     /// <summary>
     /// 订单系统当前状态快照(服务端权威,客户端只持投影)。
@@ -2583,13 +2571,10 @@ namespace Fantasy
             }
             EnergyBalance = default;
             PietyBalance = default;
-            FragmentItemId = default;
-            FragmentReward = default;
-            FragmentBalance = default;
             MessageObjectPool<G2C_DeliverOrderResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_DeliverOrderResponse; } 
-        [ProtoMember(11)]
+        [ProtoMember(8)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 裁决结果码
@@ -2626,21 +2611,6 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(7)]
         public long PietyBalance { get; set; }
-        /// <summary>
-        /// 本次掉落的塔罗碎片道具 id(= TbMergeOrder 该订单行配置;0 = 本次无碎片落账)
-        /// </summary>
-        [ProtoMember(8)]
-        public int FragmentItemId { get; set; }
-        /// <summary>
-        /// 本次实发碎片数量(服务端按表自算;失败/未发 = 0)
-        /// </summary>
-        [ProtoMember(9)]
-        public long FragmentReward { get; set; }
-        /// <summary>
-        /// 落账后该碎片权威持有量(客户端据此对账 set 本地背包计数;-1 = 哨兵,本次未取到权威值,客户端不 set)
-        /// </summary>
-        [ProtoMember(10)]
-        public long FragmentBalance { get; set; }
     }
     [Serializable]
     [ProtoContract]

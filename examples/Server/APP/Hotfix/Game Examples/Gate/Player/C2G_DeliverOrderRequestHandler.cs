@@ -30,12 +30,10 @@ public sealed class C2G_DeliverOrderRequestHandler : MessageRPC<C2G_DeliverOrder
             response.Snapshot = MergeOrderSnapshot.Create(); // 占位空 snapshot
             response.EnergyBalance = -1L; // 哨兵:未裁决,客户端不据此 set
             response.PietyBalance = -1L;
-            response.FragmentBalance = -1L;
             return;
         }
 
-        var (resultCode, energyReward, pietyReward, energyBalance, pietyBalance,
-             fragmentItemId, fragmentReward, fragmentBalance, snapshot) =
+        var (resultCode, energyReward, pietyReward, energyBalance, pietyBalance, snapshot) =
             await MergeOrderServiceHelper.TryDeliver(session, account, request.Slot);
 
         response.ResultCode = resultCode;
@@ -43,9 +41,6 @@ public sealed class C2G_DeliverOrderRequestHandler : MessageRPC<C2G_DeliverOrder
         response.PietyReward = pietyReward;
         response.EnergyBalance = energyBalance;
         response.PietyBalance = pietyBalance;
-        response.FragmentItemId = fragmentItemId;
-        response.FragmentReward = fragmentReward;
-        response.FragmentBalance = fragmentBalance;
         response.Snapshot = snapshot;
     }
 

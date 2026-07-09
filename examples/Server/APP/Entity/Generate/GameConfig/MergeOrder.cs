@@ -22,8 +22,6 @@ public sealed partial class MergeOrder : Luban.BeanBase
         Count = _buf.ReadInt();
         EnergyReward = _buf.ReadInt();
         PietyReward = _buf.ReadInt();
-        FragmentItemId = _buf.ReadInt();
-        FragmentCount = _buf.ReadInt();
     }
 
     public static MergeOrder DeserializeMergeOrder(ByteBuf _buf)
@@ -55,22 +53,12 @@ public sealed partial class MergeOrder : Luban.BeanBase
     /// 交付奖励虔诚币
     /// </summary>
     public readonly int PietyReward;
-    /// <summary>
-    /// 掉落塔罗碎片道具id(=TbItemDef行)
-    /// </summary>
-    public readonly int FragmentItemId;
-    /// <summary>
-    /// 掉落碎片数量
-    /// </summary>
-    public readonly int FragmentCount;
    
     public const int __ID__ = 887534102;
     public override int GetTypeId() => __ID__;
 
     public  void ResolveRef(Tables tables)
     {
-        
-        
         
         
         
@@ -88,8 +76,6 @@ public sealed partial class MergeOrder : Luban.BeanBase
         + "count:" + Count + ","
         + "energyReward:" + EnergyReward + ","
         + "pietyReward:" + PietyReward + ","
-        + "fragmentItemId:" + FragmentItemId + ","
-        + "fragmentCount:" + FragmentCount + ","
         + "}";
     }
 }

@@ -16,11 +16,11 @@ namespace Fantasy;
 ///      已交付槽以 Type=0 空槽占位,客户端整份覆盖本地视图。
 ///   3. TryDeliver — 交付 RPC 内部裁决:刷新结算 → claim-then-act:CAS 抢占 mask 槽位 → 抢占成功才发奖
 ///      (Energy + Piety 经 PlayerPropertyServiceHelper.ChangeProperty serverAuthoritative=true 入口落账
-///      + ledger + delta 推送;塔罗碎片经 ItemHoldingsServiceHelper.GrantItem 落持有字典 + item ledger)
+///      + ledger + delta 推送)
 ///      → 返回最新快照。库存校验本轮不做(farming 已由 mask 一次性抢占堵死)。
 ///
 /// 反作弊红线:
-///   - 交付奖励金额 = 服务端按 OrderCursor + 槽位查 TbMergeOrder 表行自己算定(体力/虔诚币/碎片直配值),
+///   - 交付奖励金额 = 服务端按 OrderCursor + 槽位查 TbMergeOrder 表行自己算定(体力/虔诚币直配值),
 ///     **不**接受客户端上报金额;
 ///   - 幂等顺序 claim-then-act(沿 RankSettleHelper / ActivityEvalHelper 同范式):
 ///     ① 先 CAS 抢占 mask(filter 含 cursor + lastRefreshMs + bit 未置)→ MongoDB 单条原子保证每批每槽仅一次抢成;
@@ -133,7 +133,7 @@ public static class MergeOrderServiceHelper
     /// <summary>
     /// 由 PlayerDoc 当前订单进度构造协议层快照(MergeOrderSnapshot)。
     /// 派生算式:激活订单第 i 槽 = OrderPool[(cursor + i) mod length],已交付的槽(mask bit i 置位)以 Type=0 空槽占位。
-    /// 每槽附带奖励展示投影(体力/虔诚币/碎片,读 TbMergeOrder 表行),客户端只显示、实发以交付响应为准。
+    /// 每槽附带奖励展示投影(体力/虔诚币,读 TbMergeOrder 表行),客户端只显示、实发以交付响应为准。
     /// 订单池表缺失 → 全空槽占位(可见降级)。首登 cursor==0 → 激活订单 = pool[0..ActiveOrders)。
     /// </summary>
     public static MergeOrderSnapshot BuildSnapshot(PlayerDoc doc)
@@ -155,8 +155,6 @@ public static class MergeOrderServiceHelper
                 item.Count = entry.Count;
                 item.EnergyReward = entry.EnergyReward;
                 item.PietyReward = entry.PietyReward;
-                item.FragmentItemId = entry.FragmentItemId;
-                item.FragmentCount = entry.FragmentCount;
             }
             else
             {
@@ -176,34 +174,31 @@ public static class MergeOrderServiceHelper
     /// 抢失败的路重读 doc:bit 已置 → AlreadyDelivered(并发对手已交付);cursor/lastMs 变了 → 期间已刷新一批,
     /// 重读后 mask 通常为 0、bit 也未置 → 此时按未交付返(刷新后的新状态),让客户端整份覆盖快照对齐。
     ///
-    /// 返回 (resultCode, energyReward, pietyReward, energyBalance, pietyBalance,
-    ///        fragmentItemId, fragmentReward, fragmentBalance, snapshot)。
-    /// energyBalance / pietyBalance / fragmentBalance = 交付后权威绝对余额(回带响应供客户端对账,取代对发起会话的自推);
+    /// 返回 (resultCode, energyReward, pietyReward, energyBalance, pietyBalance, snapshot)。
+    /// energyBalance / pietyBalance = 交付后权威绝对余额(回带响应供客户端对账,取代对发起会话的自推);
     /// -1 = 哨兵(本次未取到该项权威值,客户端不据此 set,靠快照/其它会话推送对齐)。
-    /// fragmentItemId 仅在本次真发碎片(fragmentReward > 0)时非 0。
     /// 失败时 snapshot 尽量构造当前状态;ServiceUnavailable 时若 doc 都读不到,snapshot 为零长度 ActiveOrders 占位。
     /// </summary>
-    public static async FTask<(DeliverOrderResultCode resultCode, long energyReward, long pietyReward, long energyBalance, long pietyBalance, int fragmentItemId, long fragmentReward, long fragmentBalance, MergeOrderSnapshot snapshot)>
+    public static async FTask<(DeliverOrderResultCode resultCode, long energyReward, long pietyReward, long energyBalance, long pietyBalance, MergeOrderSnapshot snapshot)>
         TryDeliver(Session session, string accountId, int slot)
     {
         // scene 由发起会话派生;session 供除冗自推(发奖 delta-push 经 SendDeltaPushToExcept 排除发起方,它已从响应绝对余额对账)。
         var scene = session.Scene;
-        // 交付后 Energy / Piety / 碎片权威绝对余额,回带响应。-1 = 哨兵(该项未取到权威值,客户端不据此 set)。
+        // 交付后 Energy / Piety 权威绝对余额,回带响应。-1 = 哨兵(该项未取到权威值,客户端不据此 set)。
         long energyBalance = -1L;
         long pietyBalance = -1L;
-        long fragmentBalance = -1L;
 
         var service = scene.GetComponent<PlayerPropertyServiceComponent>();
         if (service == null || service.Players == null)
         {
-            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, MergeOrderSnapshot.Create());
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, MergeOrderSnapshot.Create());
         }
 
         // 槽位合法性:协议层基础校验。
         if (slot < 0 || slot >= MergeOrderConfigServer.ActiveOrders)
         {
             var snap = await TryBuildSnapshotFromDb(service, accountId);
-            return (DeliverOrderResultCode.InvalidSlot, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, snap);
+            return (DeliverOrderResultCode.InvalidSlot, 0L, 0L, energyBalance, pietyBalance, snap);
         }
 
         var players = service.Players;
@@ -218,12 +213,12 @@ public static class MergeOrderServiceHelper
         catch (MongoException e)
         {
             Log.Warning($"MergeOrderServiceHelper.TryDeliver 读 doc 失败 account={accountId},err={e.Message}");
-            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, MergeOrderSnapshot.Create());
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, MergeOrderSnapshot.Create());
         }
         if (doc == null)
         {
             // 未首登(理论上登录链路已保证;实战防御)。
-            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, MergeOrderSnapshot.Create());
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, MergeOrderSnapshot.Create());
         }
 
         await ApplyOrderRefreshIfDue(service, accountId, doc, nowMs);
@@ -233,7 +228,7 @@ public static class MergeOrderServiceHelper
         if ((doc.OrderDeliveredMask & bit) != 0)
         {
             // 本轮该槽已交付。
-            return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, BuildSnapshot(doc));
+            return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, energyBalance, pietyBalance, BuildSnapshot(doc));
         }
 
         // 首登 cursor=0 + LastOrderRefreshMs 刚 bootstrap 为 nowMs 时,激活订单 = pool[0..ActiveOrders)
@@ -243,7 +238,7 @@ public static class MergeOrderServiceHelper
         {
             // 订单池表缺失 / 空(导表遗漏等部署问题):可见降级,不静默按旧常量发奖。
             Log.Warning($"MergeOrderServiceHelper.TryDeliver 订单池不可用(TbMergeOrder 缺失/空) account={accountId} slot={slot}");
-            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, BuildSnapshot(doc));
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, BuildSnapshot(doc));
         }
 
         // ── claim:先 CAS 抢占 mask 槽位 ──────────────────────────
@@ -267,7 +262,7 @@ public static class MergeOrderServiceHelper
         catch (MongoException e)
         {
             Log.Warning($"DeliverOrder 抢占 mask 失败 account={accountId} slot={slot},err={e.Message}");
-            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, BuildSnapshot(doc));
+            return (DeliverOrderResultCode.ServiceUnavailable, 0L, 0L, energyBalance, pietyBalance, BuildSnapshot(doc));
         }
 
         if (claimedDoc == null)
@@ -286,11 +281,11 @@ public static class MergeOrderServiceHelper
             {
                 // 重读失败:沿用 fast path doc 给客户端最新视图,语义按 AlreadyDelivered 返(不发奖)。
                 Log.Warning($"DeliverOrder 抢占未命中(并发交付该槽 / 刷新已发生),重读 doc 失败 account={accountId} slot={slot}");
-                return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, BuildSnapshot(doc));
+                return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, energyBalance, pietyBalance, BuildSnapshot(doc));
             }
             Log.Debug($"DeliverOrder 抢占未命中(并发对手已交付 / 刷新已发生) account={accountId} slot={slot} freshCursor={freshDoc.OrderCursor} freshMask={freshDoc.OrderDeliveredMask}");
             // 不发奖,以重读后状态构造快照。
-            return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, BuildSnapshot(freshDoc));
+            return (DeliverOrderResultCode.AlreadyDelivered, 0L, 0L, energyBalance, pietyBalance, BuildSnapshot(freshDoc));
         }
 
         // ── 抢占成功:同步 doc 引用为最新状态,准备发奖 ───────────
@@ -335,7 +330,7 @@ public static class MergeOrderServiceHelper
             // 安全方向 = 槽已消耗、少这次 Energy + Piety / 碎片也不再尝试(避免半笔账)。
             // energyBalance 保持 -1 哨兵(未取到权威值):客户端 Success 分支据哨兵不 set 体力,靠快照/其它会话推送对齐。
             Log.Warning($"DeliverOrder Energy 发放失败(mask 已抢占) account={accountId} slot={slot} result={energyResultCode} reason='{reason}'");
-            return (DeliverOrderResultCode.Success, 0L, 0L, energyBalance, pietyBalance, 0, 0L, fragmentBalance, BuildSnapshot(doc));
+            return (DeliverOrderResultCode.Success, 0L, 0L, energyBalance, pietyBalance, BuildSnapshot(doc));
         }
 
         var (pietyResultCode, pietyAfterAmount) = await PlayerPropertyServiceHelper.ChangeProperty(
@@ -363,27 +358,6 @@ public static class MergeOrderServiceHelper
             Log.Warning($"DeliverOrder Piety 发放失败(Energy 已成功 / mask 已抢占) account={accountId} slot={slot} result={pietyResultCode} reason='{reason}'");
         }
 
-        // ── 塔罗碎片(按表配置;失败口径同 Piety:少这笔、不回滚、记 Warning)──────────
-        // 牌已集齐的碎片照发(无特殊分支):溢出碎片留在持有字典,图鉴显示「已集齐」。
-        int fragmentItemId = 0;
-        long fragmentReward = 0L;
-        if (entry.FragmentItemId > 0 && entry.FragmentCount > 0)
-        {
-            var (fragOk, fragAfter) = await ItemHoldingsServiceHelper.GrantItem(
-                service, accountId, entry.FragmentItemId, entry.FragmentCount, reason);
-            if (fragOk)
-            {
-                fragmentItemId = entry.FragmentItemId;
-                fragmentReward = entry.FragmentCount;
-                fragmentBalance = fragAfter;
-            }
-            else
-            {
-                // fragmentBalance 保持 -1 哨兵:客户端不 set 本地计数,靠下次 EnterMainGame 快照对齐。
-                Log.Warning($"DeliverOrder 碎片发放失败(mask 已抢占) account={accountId} slot={slot} fragItem={entry.FragmentItemId} count={entry.FragmentCount} reason='{reason}'");
-            }
-        }
-
         // ── 全交付即刷(触发器 ②):本批 ActiveOrders 槽全部交付 → 立即整批刷新一批、重置倒计时 ──
         // 不变量(时序无双刷):line 199 的时基刷新若已给新批,则本次 claim 落在新批、mask 只置一位不满,
         //   此分支条件 (mask & fullMask) == fullMask 不成立、不触发;故无需对「时基刷新与全交付即刷同帧」额外防护。
@@ -396,8 +370,8 @@ public static class MergeOrderServiceHelper
             await ApplyBatchRefreshWrite(players, accountId, doc, doc.LastOrderRefreshMs, nowMs, "all-delivered");
         }
 
-        Log.Debug($"DeliverOrder 成功 account={accountId} slot={slot} energyReward={energyReward} pietyReward={pietyReward} fragItem={fragmentItemId} fragReward={fragmentReward} energyBalance={energyBalance} pietyBalance={pietyBalance} fragBalance={fragmentBalance} mask={doc.OrderDeliveredMask}");
-        return (DeliverOrderResultCode.Success, energyReward, pietyReward, energyBalance, pietyBalance, fragmentItemId, fragmentReward, fragmentBalance, BuildSnapshot(doc));
+        Log.Debug($"DeliverOrder 成功 account={accountId} slot={slot} energyReward={energyReward} pietyReward={pietyReward} energyBalance={energyBalance} pietyBalance={pietyBalance} mask={doc.OrderDeliveredMask}");
+        return (DeliverOrderResultCode.Success, energyReward, pietyReward, energyBalance, pietyBalance, BuildSnapshot(doc));
     }
 
     /// <summary>从 DB 读最新 doc 并构造快照(失败 / 找不到玩家返回零长度 ActiveOrders 的占位 snapshot)。</summary>
