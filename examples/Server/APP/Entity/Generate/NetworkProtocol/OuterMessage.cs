@@ -6784,6 +6784,108 @@ namespace Fantasy
         public bool ProgressValid { get; set; }
     }
     /// <summary>
+    /// (未登录/未知牌/读库失败),客户端保留既有投影不清空。
+    /// 客户端每次打开主界面触发一次免费推进当前牌一步(身份从会话取,无字段;免费不扣虔诚币,
+    /// 服务端按 TbTarotCard.DataList 顺位定当前牌 + 步数,原子推进,客户端不上报)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_TarotAutoAdvanceRequest : AMessage, IRequest
+    {
+        public static C2G_TarotAutoAdvanceRequest Create(bool autoReturn = true)
+        {
+            var c2G_TarotAutoAdvanceRequest = MessageObjectPool<C2G_TarotAutoAdvanceRequest>.Rent();
+            c2G_TarotAutoAdvanceRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_TarotAutoAdvanceRequest.SetIsPool(false);
+            }
+            
+            return c2G_TarotAutoAdvanceRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_TarotAutoAdvanceRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_TarotAutoAdvanceRequest; } 
+        [ProtoIgnore]
+        public G2C_TarotAutoAdvanceResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端免费推进裁决响应(推进后回带权威进度全集)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_TarotAutoAdvanceResponse : AMessage, IResponse
+    {
+        public static G2C_TarotAutoAdvanceResponse Create(bool autoReturn = true)
+        {
+            var g2C_TarotAutoAdvanceResponse = MessageObjectPool<G2C_TarotAutoAdvanceResponse>.Rent();
+            g2C_TarotAutoAdvanceResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_TarotAutoAdvanceResponse.SetIsPool(false);
+            }
+            
+            return g2C_TarotAutoAdvanceResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            foreach (var __t in ProgressAll) __t.Dispose();
+            ProgressAll.Clear();
+            ProgressValid = default;
+            MessageObjectPool<G2C_TarotAutoAdvanceResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_TarotAutoAdvanceResponse; } 
+        [ProtoMember(3)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 全牌进度全集(仅 ProgressValid=true 时可信,客户端整份覆盖)
+        /// </summary>
+        [ProtoMember(1)]
+        public List<TarotProgressEntry> ProgressAll { get; set; } = new List<TarotProgressEntry>();
+        /// <summary>
+        /// ProgressAll 是否真取自玩家文档:false = 降级路径空占位
+        /// </summary>
+        [ProtoMember(2)]
+        public bool ProgressValid { get; set; }
+    }
+    /// <summary>
     /// 测试使用ErrorCode枚举的消息
     /// </summary>
     [Serializable]

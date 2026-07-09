@@ -54,3 +54,17 @@ message G2C_TarotPurchaseResponse // IResponse
 	bool ProgressValid = 6;                      /// ProgressAll 是否真取自玩家文档:false = 降级路径空占位
 	                                             /// (未登录/未知牌/读库失败),客户端保留既有投影不清空。
 }
+
+/// 客户端每次打开主界面触发一次免费推进当前牌一步(身份从会话取,无字段;免费不扣虔诚币,
+/// 服务端按 TbTarotCard.DataList 顺位定当前牌 + 步数,原子推进,客户端不上报)
+message C2G_TarotAutoAdvanceRequest // IRequest,G2C_TarotAutoAdvanceResponse
+{
+}
+
+/// 服务端免费推进裁决响应(推进后回带权威进度全集)
+message G2C_TarotAutoAdvanceResponse // IResponse
+{
+	repeated TarotProgressEntry ProgressAll = 1; /// 全牌进度全集(仅 ProgressValid=true 时可信,客户端整份覆盖)
+	bool ProgressValid = 2;                      /// ProgressAll 是否真取自玩家文档:false = 降级路径空占位
+	                                             /// (未登录/读写库失败),客户端保留既有投影不清空。
+}
