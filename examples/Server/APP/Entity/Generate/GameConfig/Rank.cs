@@ -18,7 +18,7 @@ public sealed partial class Rank : Luban.BeanBase
     {
         RowId = _buf.ReadInt();
         Id = _buf.ReadInt();
-        Name = _buf.ReadInt();
+        Name = _buf.ReadString();
         RankGroup = _buf.ReadInt();
         RankMethod = _buf.ReadInt();
         RankCondition = _buf.ReadLong();
@@ -49,9 +49,9 @@ public sealed partial class Rank : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// name textId
+    /// 名称
     /// </summary>
-    public readonly int Name;
+    public readonly string Name;
     /// <summary>
     /// rank group
     /// </summary>

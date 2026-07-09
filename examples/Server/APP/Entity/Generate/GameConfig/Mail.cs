@@ -17,8 +17,8 @@ public sealed partial class Mail : Luban.BeanBase
     public Mail(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
-        Title = _buf.ReadInt();
-        Desc = _buf.ReadInt();
+        Title = _buf.ReadString();
+        Desc = _buf.ReadString();
         ExpireDays = _buf.ReadInt();
         RewardId = _buf.ReadInt();
     }
@@ -33,13 +33,13 @@ public sealed partial class Mail : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 标题(多语言textId)
+    /// 标题
     /// </summary>
-    public readonly int Title;
+    public readonly string Title;
     /// <summary>
-    /// 内容(多语言textId)
+    /// 内容
     /// </summary>
-    public readonly int Desc;
+    public readonly string Desc;
     /// <summary>
     /// 有效期(天);0/负用全局retainDays
     /// </summary>

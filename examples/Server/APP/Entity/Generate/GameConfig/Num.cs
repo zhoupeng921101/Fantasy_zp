@@ -17,7 +17,7 @@ public sealed partial class Num : Luban.BeanBase
     public Num(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
-        Desc = _buf.ReadInt();
+        Desc = _buf.ReadString();
         FuncName = _buf.ReadString();
         NumType = (num.ENumType)_buf.ReadInt();
     }
@@ -32,9 +32,9 @@ public sealed partial class Num : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 描述文本id
+    /// 描述
     /// </summary>
-    public readonly int Desc;
+    public readonly string Desc;
     /// <summary>
     /// 功能命名(服务器用)
     /// </summary>

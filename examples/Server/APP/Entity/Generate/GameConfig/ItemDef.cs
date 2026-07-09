@@ -17,8 +17,8 @@ public sealed partial class ItemDef : Luban.BeanBase
     public ItemDef(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
-        Name = _buf.ReadInt();
-        Desc = _buf.ReadInt();
+        Name = _buf.ReadString();
+        Desc = _buf.ReadString();
         Icon = _buf.ReadString();
         Quality = (item.EItemQuality)_buf.ReadInt();
         Light = _buf.ReadString();
@@ -31,7 +31,7 @@ public sealed partial class ItemDef : Luban.BeanBase
         UseLevel = _buf.ReadInt();
         Stacking = _buf.ReadInt();
         Term = _buf.ReadInt();
-        TermPrompt = _buf.ReadInt();
+        TermPrompt = _buf.ReadString();
         TermTime = _buf.ReadString();
         Compensate = _buf.ReadInt();
         CompensateEmail = _buf.ReadInt();
@@ -48,13 +48,13 @@ public sealed partial class ItemDef : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 道具名(多语言文本id)
+    /// 道具名
     /// </summary>
-    public readonly int Name;
+    public readonly string Name;
     /// <summary>
-    /// 道具描述(多语言文本id)
+    /// 道具描述
     /// </summary>
-    public readonly int Desc;
+    public readonly string Desc;
     /// <summary>
     /// 图标资源名
     /// </summary>
@@ -104,9 +104,9 @@ public sealed partial class ItemDef : Luban.BeanBase
     /// </summary>
     public readonly int Term;
     /// <summary>
-    /// 限时提示(文本id)
+    /// 限时提示
     /// </summary>
-    public readonly int TermPrompt;
+    public readonly string TermPrompt;
     /// <summary>
     /// 限时时间(日期串/时长秒)
     /// </summary>
