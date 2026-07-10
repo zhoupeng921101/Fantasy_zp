@@ -2,7 +2,7 @@ using System;
 using Fantasy.Async;
 using Fantasy.Network;
 using Fantasy.Network.Interface;
-using GameLogic.BlockBlast.Core;
+using GameLogic.Core;
 
 namespace Fantasy;
 

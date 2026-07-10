@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using GameLogic.BlockBlast;
-using GameLogic.BlockBlast.Algorithms;
-using GameLogic.BlockBlast.Core;
+using GameLogic;
+using GameLogic.Algorithms;
+using GameLogic.Core;
 
 namespace BlockBlastGenCore
 {

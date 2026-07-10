@@ -1,4 +1,4 @@
-using GameLogic.BlockBlast;
+using GameLogic;
 
 namespace Fantasy;
 

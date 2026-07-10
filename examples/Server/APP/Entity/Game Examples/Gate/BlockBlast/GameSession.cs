@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using Fantasy.Entitas;
 using Fantasy.Network;
-using GameLogic.BlockBlast;
-using GameLogic.BlockBlast.Algorithms;
-using GameLogic.BlockBlast.Core;
+using GameLogic;
+using GameLogic.Algorithms;
+using GameLogic.Core;
 
 namespace Fantasy;
 

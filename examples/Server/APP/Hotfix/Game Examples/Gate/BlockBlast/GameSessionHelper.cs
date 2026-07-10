@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using GameLogic.BlockBlast;
-using GameLogic.BlockBlast.Algorithms;
-using GameLogic.BlockBlast.Core;
+using GameLogic;
+using GameLogic.Algorithms;
+using GameLogic.Core;
 
 namespace Fantasy;
 

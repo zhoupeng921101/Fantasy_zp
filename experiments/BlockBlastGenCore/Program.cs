@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
-using GameLogic.BlockBlast;
+using GameLogic;
 
 namespace BlockBlastGenCore
 {
