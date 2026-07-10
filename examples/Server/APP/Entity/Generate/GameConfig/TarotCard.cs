@@ -51,7 +51,7 @@ public sealed partial class TarotCard : Luban.BeanBase
     /// </summary>
     public readonly int ChapterId;
     /// <summary>
-    /// 集齐单卡奖励:固定奖励id(0=无);集满该牌时按此id从TbRewardCurrency(货币)+TbRewardItem(材料)全发
+    /// 单卡集齐奖励:固定奖励盒box_id(指向TbRewardBox,整组全发);0=无
     /// </summary>
     public readonly int CollectReward;
     /// <summary>

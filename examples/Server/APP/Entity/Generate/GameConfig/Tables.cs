@@ -77,10 +77,6 @@ public partial class Tables
     /// 奖励盒子表(一行一盒/box_id取整盒奖励)
     /// </summary>
     public reward.TbRewardBox TbRewardBox {get; }
-    /// <summary>
-    /// 固定礼包表(塔罗解锁等固定发奖:同reward_id聚合为一份礼包,全发不抽)
-    /// </summary>
-    public item.TbGiftFixed TbGiftFixed {get; }
 
     public Tables(System.Func<string, ByteBuf> loader)
     {
@@ -100,7 +96,6 @@ public partial class Tables
         TbGoddessReward = new block.TbGoddessReward(loader("block_tbgoddessreward"));
         TbTarotChapter = new block.TbTarotChapter(loader("block_tbtarotchapter"));
         TbRewardBox = new reward.TbRewardBox(loader("reward_tbrewardbox"));
-        TbGiftFixed = new item.TbGiftFixed(loader("item_tbgiftfixed"));
         ResolveRef();
     }
     
@@ -122,7 +117,6 @@ public partial class Tables
         TbGoddessReward.ResolveRef(this);
         TbTarotChapter.ResolveRef(this);
         TbRewardBox.ResolveRef(this);
-        TbGiftFixed.ResolveRef(this);
     }
 }
 
