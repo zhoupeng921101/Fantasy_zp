@@ -42,7 +42,62 @@ message C2G_GoddessClaimRequest // IRequest,G2C_GoddessClaimResponse
 message G2C_GoddessClaimResponse // IResponse
 {
 	GoddessClaimResultCode ResultCode = 1;    /// 裁决结果码
-	int32 ElementType = 2;                    /// 发放元素类型(= 客户端 MergeElement:1蝶2杯3卷4星):取当前未交付订单所需类型;无未交付订单回退当前批槽0池行类型;失败 = 0
+	int32 ElementType = 2;                    /// 发放元素类型(= 客户端 MergeElement:1剑2杯3杖4星币):取当前未交付订单所需类型;无未交付订单回退当前批槽0池行类型;失败 = 0
 	repeated GoddessRewardItem Rewards = 3;   /// 奖励列表(= TbGoddessReward 各行 等级+数量,客户端逐项 AddDirect(ElementType, Level, Count) 入合成区);失败为空
 	int64 NewRating = 4;                      /// 领取后 GoddessRating 权威值(CAS 清零故恒 0),客户端据此对账清零本地计数;失败 = 0
+	int64 OverflowNonce = 5;                  /// 溢出预算令牌 id(= 本次领取时刻);客户端把盘面装不下的溢出量经 C2G_GoddessOverflow 带此 nonce 上报;失败 = 0
+}
+
+// ── 女神奖励「飞盘面 / 溢出进背包 / 双击取回」背包操作(全 Lv1,元素道具 = itemdef 32000+花色×100+等级)──
+//
+// 领取(C2G_GoddessClaimRequest)只把奖励元素回带客户端;客户端把元素飞到盘面「有方块无元素」的格子,
+// 装不下的溢出量客户端自算,经 C2G_GoddessOverflow 上报入库(元素道具落权威 ItemBag);
+// 玩法界面双击背包元素道具「用掉一个」经 C2G_RetrieveElement 服务端权威 -1 后,客户端再把元素飞回盘面。
+// 元素道具是玩家资产(data-authority.md 资源类):服务端唯一权威,客户端只投影;溢出量客户端乐观算、服务端限界信任校验后落账。
+
+/// 女神奖励背包操作(溢出入库 / 取回)裁决结果码
+enum GoddessBagResultCode
+{
+	/// 成功(已落账 + 推送背包整份)
+	Success = 0,
+	/// 会话未挂账号(登录链路异常)→ 客户端重登
+	NotLoggedIn = 1,
+	/// 非法道具(itemId 不属元素道具集 / 无配置)或入参非法(count/reqSeq ≤ 0 / 越幅度上界)
+	InvalidItem = 2,
+	/// 持有不足(取回时该道具库存为 0)
+	NotEnough = 3,
+	/// MongoDB 不可达 / 服务未就绪
+	ServiceUnavailable = 4,
+}
+
+/// 客户端上报女神奖励盘面溢出、请求入库(元素道具按数量落 ItemBag;身份从会话取,不带账号——反作弊红线)
+message C2G_GoddessOverflow // IRequest,G2C_GoddessOverflowResponse
+{
+	int32 ItemId = 1;   /// 元素道具 id(= 32000 + 花色×100 + 等级;服务端校验属元素道具集)
+	int32 Count = 2;    /// 溢出数量(客户端算;服务端按令牌剩余预算校验)
+	int64 ReqSeq = 3;   /// 请求序号(单调递增,幂等去重防弱网重发双发)
+	int64 Nonce = 4;    /// 溢出预算令牌(= 领取响应回带的 OverflowNonce);服务端校验 nonce 匹配 + 剩余预算 >= Count 才落账,把溢出绑死到真实领取
+}
+
+/// 溢出入库裁决响应
+message G2C_GoddessOverflowResponse // IResponse
+{
+	GoddessBagResultCode ResultCode = 1;   /// 裁决结果码
+	int32 ItemId = 2;                      /// 回带道具 id(= 请求)
+	int64 NewCount = 3;                    /// 落账后该道具权威持有量;失败 = 0
+}
+
+/// 客户端玩法界面双击背包元素道具、请求取回一个到盘面(服务端权威 -1;身份从会话取)
+message C2G_RetrieveElement // IRequest,G2C_RetrieveElementResponse
+{
+	int32 ItemId = 1;   /// 元素道具 id(服务端校验属元素道具集)
+	int64 ReqSeq = 2;   /// 请求序号(单调递增,幂等去重防弱网重发双扣)
+}
+
+/// 取回裁决响应(成功后客户端再把元素飞回盘面)
+message G2C_RetrieveElementResponse // IResponse
+{
+	GoddessBagResultCode ResultCode = 1;   /// 裁决结果码
+	int32 ItemId = 2;                      /// 回带道具 id(= 请求)
+	int64 NewCount = 3;                    /// 扣减后该道具权威持有量;失败/不足 = 当前持有
 }

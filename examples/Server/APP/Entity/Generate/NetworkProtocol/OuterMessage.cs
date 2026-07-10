@@ -1650,10 +1650,11 @@ namespace Fantasy
             foreach (var __t in Rewards) __t.Dispose();
             Rewards.Clear();
             NewRating = default;
+            OverflowNonce = default;
             MessageObjectPool<G2C_GoddessClaimResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_GoddessClaimResponse; } 
-        [ProtoMember(5)]
+        [ProtoMember(6)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 裁决结果码
@@ -1661,7 +1662,7 @@ namespace Fantasy
         [ProtoMember(1)]
         public GoddessClaimResultCode ResultCode { get; set; }
         /// <summary>
-        /// 发放元素类型(= 客户端 MergeElement:1蝶2杯3卷4星):取当前未交付订单所需类型;无未交付订单回退当前批槽0池行类型;失败 = 0
+        /// 发放元素类型(= 客户端 MergeElement:1剑2杯3杖4星币):取当前未交付订单所需类型;无未交付订单回退当前批槽0池行类型;失败 = 0
         /// </summary>
         [ProtoMember(2)]
         public int ElementType { get; set; }
@@ -1675,6 +1676,257 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(4)]
         public long NewRating { get; set; }
+        /// <summary>
+        /// 溢出预算令牌 id(= 本次领取时刻);客户端把盘面装不下的溢出量经 C2G_GoddessOverflow 带此 nonce 上报;失败 = 0
+        /// </summary>
+        [ProtoMember(5)]
+        public long OverflowNonce { get; set; }
+    }
+    /// <summary>
+    /// 客户端上报女神奖励盘面溢出、请求入库(元素道具按数量落 ItemBag;身份从会话取,不带账号——反作弊红线)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_GoddessOverflow : AMessage, IRequest
+    {
+        public static C2G_GoddessOverflow Create(bool autoReturn = true)
+        {
+            var c2G_GoddessOverflow = MessageObjectPool<C2G_GoddessOverflow>.Rent();
+            c2G_GoddessOverflow.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_GoddessOverflow.SetIsPool(false);
+            }
+            
+            return c2G_GoddessOverflow;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ItemId = default;
+            Count = default;
+            ReqSeq = default;
+            Nonce = default;
+            MessageObjectPool<C2G_GoddessOverflow>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_GoddessOverflow; } 
+        [ProtoIgnore]
+        public G2C_GoddessOverflowResponse ResponseType { get; set; }
+        /// <summary>
+        /// 元素道具 id(= 32000 + 花色×100 + 等级;服务端校验属元素道具集)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 溢出数量(客户端算;服务端按令牌剩余预算校验)
+        /// </summary>
+        [ProtoMember(2)]
+        public int Count { get; set; }
+        /// <summary>
+        /// 请求序号(单调递增,幂等去重防弱网重发双发)
+        /// </summary>
+        [ProtoMember(3)]
+        public long ReqSeq { get; set; }
+        /// <summary>
+        /// 溢出预算令牌(= 领取响应回带的 OverflowNonce);服务端校验 nonce 匹配 + 剩余预算 >= Count 才落账,把溢出绑死到真实领取
+        /// </summary>
+        [ProtoMember(4)]
+        public long Nonce { get; set; }
+    }
+    /// <summary>
+    /// 溢出入库裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_GoddessOverflowResponse : AMessage, IResponse
+    {
+        public static G2C_GoddessOverflowResponse Create(bool autoReturn = true)
+        {
+            var g2C_GoddessOverflowResponse = MessageObjectPool<G2C_GoddessOverflowResponse>.Rent();
+            g2C_GoddessOverflowResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_GoddessOverflowResponse.SetIsPool(false);
+            }
+            
+            return g2C_GoddessOverflowResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            ItemId = default;
+            NewCount = default;
+            MessageObjectPool<G2C_GoddessOverflowResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_GoddessOverflowResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public GoddessBagResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 回带道具 id(= 请求)
+        /// </summary>
+        [ProtoMember(2)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 落账后该道具权威持有量;失败 = 0
+        /// </summary>
+        [ProtoMember(3)]
+        public long NewCount { get; set; }
+    }
+    /// <summary>
+    /// 客户端玩法界面双击背包元素道具、请求取回一个到盘面(服务端权威 -1;身份从会话取)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_RetrieveElement : AMessage, IRequest
+    {
+        public static C2G_RetrieveElement Create(bool autoReturn = true)
+        {
+            var c2G_RetrieveElement = MessageObjectPool<C2G_RetrieveElement>.Rent();
+            c2G_RetrieveElement.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_RetrieveElement.SetIsPool(false);
+            }
+            
+            return c2G_RetrieveElement;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ItemId = default;
+            ReqSeq = default;
+            MessageObjectPool<C2G_RetrieveElement>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_RetrieveElement; } 
+        [ProtoIgnore]
+        public G2C_RetrieveElementResponse ResponseType { get; set; }
+        /// <summary>
+        /// 元素道具 id(服务端校验属元素道具集)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 请求序号(单调递增,幂等去重防弱网重发双扣)
+        /// </summary>
+        [ProtoMember(2)]
+        public long ReqSeq { get; set; }
+    }
+    /// <summary>
+    /// 取回裁决响应(成功后客户端再把元素飞回盘面)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_RetrieveElementResponse : AMessage, IResponse
+    {
+        public static G2C_RetrieveElementResponse Create(bool autoReturn = true)
+        {
+            var g2C_RetrieveElementResponse = MessageObjectPool<G2C_RetrieveElementResponse>.Rent();
+            g2C_RetrieveElementResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_RetrieveElementResponse.SetIsPool(false);
+            }
+            
+            return g2C_RetrieveElementResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            ItemId = default;
+            NewCount = default;
+            MessageObjectPool<G2C_RetrieveElementResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_RetrieveElementResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public GoddessBagResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 回带道具 id(= 请求)
+        /// </summary>
+        [ProtoMember(2)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 扣减后该道具权威持有量;失败/不足 = 当前持有
+        /// </summary>
+        [ProtoMember(3)]
+        public long NewCount { get; set; }
     }
     /// <summary>
     /// 堆叠轨单项(无独立状态的可堆叠道具:itemId → 持有数量)。快照 / 推送共用。

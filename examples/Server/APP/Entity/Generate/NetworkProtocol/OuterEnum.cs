@@ -220,6 +220,33 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 女神奖励背包操作(溢出入库 / 取回)裁决结果码
+	/// </summary>
+	public enum GoddessBagResultCode
+	{
+		/// <summary>
+		/// 成功(已落账 + 推送背包整份)
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 非法道具(itemId 不属元素道具集 / 无配置)或入参非法(count/reqSeq ≤ 0 / 越幅度上界)
+		/// </summary>
+		InvalidItem = 2,
+		/// <summary>
+		/// 持有不足(取回时该道具库存为 0)
+		/// </summary>
+		NotEnough = 3,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
 	/// 使用道具裁决结果码
 	/// </summary>
 	public enum UseItemResultCode

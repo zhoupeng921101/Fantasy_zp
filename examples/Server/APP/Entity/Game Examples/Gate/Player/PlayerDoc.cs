@@ -211,6 +211,20 @@ public sealed class PlayerDoc
     /// <summary>背包批次数组乐观并发版本(每次批次数组变更 +1;首登 0,旧档缺字段补 0)。</summary>
     public long InventoryVersion { get; set; }
 
+    // ---- 女神奖励溢出预算令牌(反作弊:把「溢出进背包」绑死到真实领取)----
+    // 女神领取(GoddessClaimServiceHelper.TryClaim)成功时签发一次性令牌:PendingOverflowNonce = 本次领取时刻(nowMs,
+    //   per-player 唯一足矣),PendingOverflowBudget = 本次奖励总量(sum TbGoddessReward.Count)。
+    // C2G_GoddessOverflow 请求带 nonce,服务端原子校验 nonce 匹配 + budget >= count 才落账,并 $inc budget -count(令牌预算单次消费,
+    //   用尽即失效);新一次领取覆盖 nonce + 重置 budget,旧令牌自然作废。无真实领取 → 无有效 nonce → 溢出被拒,堵住 RPC 刷取。
+    // 缺省 0L = 无有效令牌:旧档缺字段反序列化为 0L,nonce(真实为非 0 nowMs)恒不匹配 → 溢出拒(正确);领取 $set 首次写入使字段 present,
+    //   故无需 schema 迁移(令牌永远由领取先写、溢出后引用)。
+
+    /// <summary>女神奖励溢出预算令牌 id(= 末次领取时刻 nowMs;0 = 无有效令牌)。溢出 RPC 须带匹配 nonce。</summary>
+    public long PendingOverflowNonce { get; set; }
+
+    /// <summary>当前令牌剩余溢出预算(= 本次奖励总量,每次溢出入库 $inc 扣减;0 = 用尽/无令牌)。</summary>
+    public long PendingOverflowBudget { get; set; }
+
     /// <summary>schema 版本(加字段时升 + 缺字段保底)。</summary>
     public int SchemaVersion { get; set; }
 }
