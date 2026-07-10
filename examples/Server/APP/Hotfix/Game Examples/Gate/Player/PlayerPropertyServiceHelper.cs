@@ -74,9 +74,7 @@ public static class PlayerPropertyServiceHelper
             // 不写则文档无该字段,后续 ClaimOrIssuePlayerId 的「PlayerId == ""」filter 永不匹配。
             // 配合 ux_player_id partial index 用 $gt:"" 过滤,空串不进入唯一约束。
             .SetOnInsert(x => x.PlayerId, string.Empty)
-            .SetOnInsert(x => x.Coin, service.CoinInitial)
             .SetOnInsert(x => x.Diamond, service.DiamondInitial)
-            .SetOnInsert(x => x.Stamina, service.StaminaInitial)
             // P2 新增四货币首登 setOnInsert(旧文档反序列化时缺字段 → BSON 默认 0L,与 setOnInsert 0 一致;
             // 但 EnergyLastRecoverMs 必须 setOnInsert 为 nowMs,否则首登玩家流逝时间 = nowMs - 0 = 极大值,体力会一次性回满)。
             .SetOnInsert(x => x.SoulPower, service.SoulPowerInitial)
@@ -176,7 +174,7 @@ public static class PlayerPropertyServiceHelper
     /// 直接令订单交付 CAS(MergeOrderServiceHelper.TryDeliver claim)与体力恢复 bootstrap 等依赖「字段 present」的原子裁决空命中。
     ///
     /// 修法:用聚合管线 update + $ifNull 把每个字段 set 为「present 则保留既有值,absent 则填默认值」,
-    /// 单条原子 FindOneAndUpdate 完成,既不覆盖玩家既有数据(Coin/Diamond/PlayerId 等已存在的值原样保留),
+    /// 单条原子 FindOneAndUpdate 完成,既不覆盖玩家既有数据(Diamond/PlayerId 等已存在的值原样保留),
     /// 又保证补齐后所有字段 present、SchemaVersion 升到当前。filter 含 SchemaVersion < CurrentSchemaVersion → 幂等:
     /// 已是当前版本的文档不命中、不重复执行(并发多登录也只一路补成,其余路重读拿到已补齐文档)。
     ///
@@ -199,9 +197,7 @@ public static class PlayerPropertyServiceHelper
         // 聚合管线 $set + $ifNull:字段 present 保留既有值,absent 填默认值。默认值口径对齐 InitOrLoad setOnInsert。
         var setStage = new BsonDocument
         {
-            { "Coin",                new BsonDocument("$ifNull", new BsonArray { "$Coin", service.CoinInitial }) },
             { "Diamond",             new BsonDocument("$ifNull", new BsonArray { "$Diamond", service.DiamondInitial }) },
-            { "Stamina",             new BsonDocument("$ifNull", new BsonArray { "$Stamina", service.StaminaInitial }) },
             { "SoulPower",           new BsonDocument("$ifNull", new BsonArray { "$SoulPower", service.SoulPowerInitial }) },
             { "Piety",               new BsonDocument("$ifNull", new BsonArray { "$Piety", service.PietyInitial }) },
             { "GuardianExp",         new BsonDocument("$ifNull", new BsonArray { "$GuardianExp", service.GuardianExpInitial }) },
@@ -215,7 +211,6 @@ public static class PlayerPropertyServiceHelper
             { "LastOrderRefreshMs",  0L },
             { "OrderDeliveredMask",  0 },
             // P3 五元层进度计数器:旧档(schema < 5)缺字段 → 补 Initial(默认 0),present 则保留既有值。
-            // (GoddessLevel 已废弃移除:PropertyType 保留占位、不再存 doc 字段,旧档遗留字段作孤儿不读。)
             { "GoddessRating",       new BsonDocument("$ifNull", new BsonArray { "$GoddessRating", service.GoddessRatingInitial }) },
             { "UnlockedChapter",     new BsonDocument("$ifNull", new BsonArray { "$UnlockedChapter", service.UnlockedChapterInitial }) },
             { "BlindBoxCount",       new BsonDocument("$ifNull", new BsonArray { "$BlindBoxCount", service.BlindBoxCountInitial }) },
@@ -319,9 +314,7 @@ public static class PlayerPropertyServiceHelper
         // $set 所有玩法字段为默认值(对齐 InitOrLoad 的 setOnInsert);AccountId 是 _id 主键不可改、
         // PlayerId 故意不入 update 保留账号级身份锚。
         var update = Builders<PlayerDoc>.Update
-            .Set(x => x.Coin, service.CoinInitial)
             .Set(x => x.Diamond, service.DiamondInitial)
-            .Set(x => x.Stamina, service.StaminaInitial)
             .Set(x => x.SoulPower, service.SoulPowerInitial)
             .Set(x => x.Piety, service.PietyInitial)
             .Set(x => x.GuardianExp, service.GuardianExpInitial)
@@ -897,9 +890,7 @@ public static class PlayerPropertyServiceHelper
         info.SkinMono = doc.SkinMono;
         info.SkinMonoId = doc.SkinMonoId;
         info.TempleDecorated = doc.TempleDecorated;
-        AddProperty(info, PropertyType.Coin, doc.Coin);
         AddProperty(info, PropertyType.Diamond, doc.Diamond);
-        AddProperty(info, PropertyType.Stamina, doc.Stamina);
         // P2 四种玩法货币也并入登录快照。Energy 已由 InitOrLoad 调 RecoverEnergyIfDue 结算过,doc.Energy 为最新值。
         AddProperty(info, PropertyType.SoulPower, doc.SoulPower);
         AddProperty(info, PropertyType.Piety, doc.Piety);
@@ -959,20 +950,10 @@ public static class PlayerPropertyServiceHelper
     {
         switch (type)
         {
-            case PropertyType.Coin:
-                fieldName = nameof(PlayerDoc.Coin);
-                upperBound = service.CoinUpperBound;
-                singleDeltaLimit = service.CoinSingleDeltaLimit;
-                return true;
             case PropertyType.Diamond:
                 fieldName = nameof(PlayerDoc.Diamond);
                 upperBound = service.DiamondUpperBound;
                 singleDeltaLimit = service.DiamondSingleDeltaLimit;
-                return true;
-            case PropertyType.Stamina:
-                fieldName = nameof(PlayerDoc.Stamina);
-                upperBound = service.StaminaUpperBound;
-                singleDeltaLimit = service.StaminaSingleDeltaLimit;
                 return true;
             case PropertyType.SoulPower:
                 fieldName = nameof(PlayerDoc.SoulPower);
@@ -995,7 +976,6 @@ public static class PlayerPropertyServiceHelper
                 singleDeltaLimit = service.EnergySingleDeltaLimit;
                 return true;
             // P3 五元层进度计数器:同套原子写 / 限界信任(纯 $inc 计数器,无体力式恢复结算)。
-            // (PropertyType.GoddessLevel 已废弃:枚举保留占位,此处不再解析 → 落 default 返 false,变更请求视作未支持类型。)
             case PropertyType.GoddessRating:
                 fieldName = nameof(PlayerDoc.GoddessRating);
                 upperBound = service.GoddessRatingUpperBound;
@@ -1034,9 +1014,7 @@ public static class PlayerPropertyServiceHelper
     {
         return type switch
         {
-            PropertyType.Coin => doc.Coin,
             PropertyType.Diamond => doc.Diamond,
-            PropertyType.Stamina => doc.Stamina,
             PropertyType.SoulPower => doc.SoulPower,
             PropertyType.Piety => doc.Piety,
             PropertyType.GuardianExp => doc.GuardianExp,

@@ -1,29 +1,26 @@
 syntax = "proto3";
 
 // PlayerPropertyMessage.proto
-// 玩家属性服务端权威协议(Tier 2 第 1 子单:金币 / 钻石 / 体力)。
+// 玩家属性服务端权威协议(Tier 2 第 1 子单:金币 / 钻石)。
 // 设计基线:design-docs/37-player-attr-server.md §3.3 行为级协议契约。
 // 玩家身份由服务端从联网会话取(GateAccountFlagComponent → Account.Name = UUID),
 // 请求不携带账号、不携带绝对余额字段(反作弊红线:服务端永不信客户端传入绝对数值,见 §3.3.2)。
 // handler 仅消费类型 + delta + reason 三字段(Code Review SV17 必拦)。
 
-/// 属性类型(P3 扩到十三类:在七类货币/体力基础上新增六种元层进度计数器,服务端权威化,原云存档 blob 迁出第 1 批)
+/// 属性类型(P3 十类:钻石 + 五类玩法货币/体力 + 五种元层进度计数器,服务端权威化,原云存档 blob 迁出第 1 批)
 enum PropertyType
 {
-	Coin = 0,            /// 金币
-	Diamond = 1,         /// 钻石
-	Stamina = 2,         /// 体力
-	SoulPower = 3,       /// 灵力(玩法软货币,纯增减计数器)
-	Piety = 4,           /// 虔诚币(长期主线货币,纯增减计数器)
-	GuardianExp = 5,     /// 守护者累积经验(玩法侧第四种货币,纯增减计数器;与 PlayerDoc.Level/Exp 玩家账号经验不复用)
-	Energy = 6,          /// 玩法体力(带离线随时间恢复;服务端按 EnergyLastRecoverMs + EnergyRecoverIntervalMs 懒结算)
+	Diamond = 0,         /// 钻石
+	SoulPower = 1,       /// 灵力(玩法软货币,纯增减计数器)
+	Piety = 2,           /// 虔诚币(长期主线货币,纯增减计数器)
+	GuardianExp = 3,     /// 守护者累积经验(玩法侧第四种货币,纯增减计数器;与 PlayerDoc.Level/Exp 玩家账号经验不复用)
+	Energy = 4,          /// 玩法体力(带离线随时间恢复;服务端按 EnergyLastRecoverMs + EnergyRecoverIntervalMs 懒结算)
 	// P3 元层进度计数器(原云存档 blob 迁出第 1 批,纯数值进度;走同一套 PropertyChange 上报增量 + 限界信任落账)
-	GoddessLevel = 7,    /// 女神等级(玩法产出,消行融合经济产出;客户端算增量后上报,单调递增)
-	GoddessRating = 8,   /// 女神评级(玩法产出,单调递增)
-	UnlockedChapter = 9, /// 章节解锁数(玩法产出,单调递增)
-	BlindBoxCount = 10,  /// 盲盒计数(玩法产出;可增可减 —— 攒盒 +、开盒 -)
-	TempleRepaired = 11, /// 神庙修缮计数(动作产出,修缮动作触发,单调递增)
-	NextRepairIndex = 12,/// 神庙修缮游标(动作产出,指向下一个待修缮项,单调递增)
+	GoddessRating = 5,   /// 女神评级(玩法产出,单调递增)
+	UnlockedChapter = 6, /// 章节解锁数(玩法产出,单调递增)
+	BlindBoxCount = 7,   /// 盲盒计数(玩法产出;可增可减 —— 攒盒 +、开盒 -)
+	TempleRepaired = 8,  /// 神庙修缮计数(动作产出,修缮动作触发,单调递增)
+	NextRepairIndex = 9, /// 神庙修缮游标(动作产出,指向下一个待修缮项,单调递增)
 }
 
 /// 属性变更裁决结果码(§3.3.2 + §3.4)
@@ -147,7 +144,7 @@ message AttrLedgerEntry
 /// limit 必填(本子单不设默认);服务端钳制 [0, 100],超上限钳为 100 不报错(降级语义)。
 message C2G_QueryAttrLedger // IRequest,G2C_QueryAttrLedgerResponse
 {
-	int32 Kind = 1;              /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy / 8=GoddessLevel / 9=GoddessRating / 10=UnlockedChapter / 11=BlindBoxCount / 12=TempleRepaired / 13=NextRepairIndex,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
+	int32 Kind = 1;              /// 属性种类过滤(0 = 不过滤;1=Diamond / 2=SoulPower / 3=Piety / 4=GuardianExp / 5=Energy / 6=GoddessRating / 7=UnlockedChapter / 8=BlindBoxCount / 9=TempleRepaired / 10=NextRepairIndex,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
 	int64 SinceTs = 2;           /// 时间下界(只返 Timestamp > SinceTs 的行;0 = 不过滤;负数返 InvalidRequest)
 	int32 Limit = 3;             /// 单次最多返回行数(服务端钳制 [0, 100];Limit=0 返空 entries[];负数返 InvalidRequest)
 }

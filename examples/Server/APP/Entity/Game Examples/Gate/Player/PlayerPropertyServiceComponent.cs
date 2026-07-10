@@ -29,23 +29,11 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// </summary>
     public IMongoCollection<PlayerItemLedgerDoc>? ItemLedger;
 
-    /// <summary>金币首登初始值(运营配置,默认 0;§3.1 + plan D6 不读 PlayerPrefs 老值)。</summary>
-    public long CoinInitial;
-
     /// <summary>钻石首登初始值(运营配置,默认 0)。</summary>
     public long DiamondInitial;
 
-    /// <summary>体力首登初始值(运营配置,默认 5)。</summary>
-    public long StaminaInitial;
-
-    /// <summary>金币类型上界(运营配置,默认 999999999;§3.1)。</summary>
-    public long CoinUpperBound;
-
     /// <summary>钻石类型上界(运营配置,默认 999999;去变现下不大量发放对齐)。</summary>
     public long DiamondUpperBound;
-
-    /// <summary>体力类型上界(运营配置,默认 5;Tier 2+ 加体力上限独立字段后改为读上限字段)。</summary>
-    public long StaminaUpperBound;
 
     // ---- P2 新增:四种玩法货币的初始值 / 类型上界 / 单次变更上限 / 频率(2026-06 全栈迁移)----
     // 阈值全部是**占位值**,待真实玩法产销速率确定后按 design-docs/playflow 调参。
@@ -66,7 +54,7 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// <summary>守护者经验类型上界。</summary>
     public long GuardianExpUpperBound;
 
-    /// <summary>体力首登初始值(玩法体力,与原 Stamina 不复用)。</summary>
+    /// <summary>体力首登初始值(玩法体力)。</summary>
     public long EnergyInitial;
     /// <summary>
     /// 体力类型上界 = 存储硬顶 / ChangeProperty 单笔变更后余额上界(并非被动恢复软上限)。
@@ -93,9 +81,7 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// 比类型上界严格得多:类型上界是「总余额上限」,本上限是「单笔变更上限」。
     /// **占位值**,真实业务侧最大单笔(如一次奖励/一次消耗)幅度确定后按比例调参。
     /// </summary>
-    public long CoinSingleDeltaLimit;
     public long DiamondSingleDeltaLimit;
-    public long StaminaSingleDeltaLimit;
     public long SoulPowerSingleDeltaLimit;
     public long PietySingleDeltaLimit;
     public long GuardianExpSingleDeltaLimit;

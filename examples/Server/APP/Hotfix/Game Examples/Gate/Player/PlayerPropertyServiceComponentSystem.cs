@@ -13,23 +13,11 @@ namespace Fantasy;
 /// </summary>
 public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<PlayerPropertyServiceComponent>
 {
-    /// <summary>金币首登初始值(去变现:玩家从 0 起,运营按需邮件补偿;§读前必看 + §3.2)。</summary>
-    private const long DefaultCoinInitial = 0L;
-
     /// <summary>钻石首登初始值。</summary>
     private const long DefaultDiamondInitial = 0L;
 
-    /// <summary>体力首登初始值(与默认体力上限对齐)。</summary>
-    private const long DefaultStaminaInitial = 5L;
-
-    /// <summary>金币类型上界(约 9 位数,远低于 long.MaxValue,防整数溢出,§3.4)。</summary>
-    private const long DefaultCoinUpperBound = 999_999_999L;
-
     /// <summary>钻石类型上界(约 6 位数,与去变现下不大量发放对齐)。</summary>
     private const long DefaultDiamondUpperBound = 999_999L;
-
-    /// <summary>体力类型上界(与体力上限对齐;Tier 2+ 加上限字段后改为读上限)。</summary>
-    private const long DefaultStaminaUpperBound = 5L;
 
     // ---- P2 新增:四种玩法货币默认值 + 限界信任阈值 ----
     // 三货币(soul/piety/exp)的"单次上限"与"总上限"已按客户端口径对齐(同 mail/rank/体力对齐 SV 手抄惯例)。
@@ -74,12 +62,10 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     private const long DefaultEnergyUpperBound = 9999L;
 
     /// <summary>
-    /// Coin/Diamond 单次 delta 上限(占位):远低于类型上界,挡粗暴改值。
+    /// Diamond 单次 delta 上限(占位):远低于类型上界,挡粗暴改值。
     /// 真实业务侧最大单笔幅度(单次奖励 / 单次消耗)确定后,按倍率调参。
     /// </summary>
-    private const long DefaultCoinSingleDeltaLimit = 1_000_000L;
     private const long DefaultDiamondSingleDeltaLimit = 100_000L;
-    private const long DefaultStaminaSingleDeltaLimit = 5L;
     /// <summary>
     /// 灵力单次 delta 上限 500。依据:客户端最大单笔合法发放 = 史诗宝箱 200(`ChestSystem` 宝箱奖励档),
     /// 留余量含 2 箱。是限界信任主杠杆,必须 ≥ 真实最大单笔。源(宝箱档/祈愿消耗)改了需同步重审。
@@ -184,12 +170,8 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     {
         // 装入运营默认配置(本子单未引入运营热改面,常量即权威源;Tier 2+ 真要热改时,
         // 此处改读 MongoDB 配置集合 / Luban 配置同源,沿 mail / rank 先例)。
-        self.CoinInitial = DefaultCoinInitial;
         self.DiamondInitial = DefaultDiamondInitial;
-        self.StaminaInitial = DefaultStaminaInitial;
-        self.CoinUpperBound = DefaultCoinUpperBound;
         self.DiamondUpperBound = DefaultDiamondUpperBound;
-        self.StaminaUpperBound = DefaultStaminaUpperBound;
 
         // P2 新增四货币 + 限界信任阈值。
         self.SoulPowerInitial = DefaultSoulPowerInitial;
@@ -209,9 +191,7 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         var (energyRecoverAmount, energyRecoverInterval) = GlobalCfg.ParseEnergyRecover();
         self.EnergyRecoverIntervalMs = energyRecoverInterval * 1000L;
         self.EnergyRecoverPerTick = energyRecoverAmount;
-        self.CoinSingleDeltaLimit = DefaultCoinSingleDeltaLimit;
         self.DiamondSingleDeltaLimit = DefaultDiamondSingleDeltaLimit;
-        self.StaminaSingleDeltaLimit = DefaultStaminaSingleDeltaLimit;
         self.SoulPowerSingleDeltaLimit = DefaultSoulPowerSingleDeltaLimit;
         self.PietySingleDeltaLimit = DefaultPietySingleDeltaLimit;
         self.GuardianExpSingleDeltaLimit = DefaultGuardianExpSingleDeltaLimit;
@@ -273,13 +253,11 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         const long maxSafeUpperBound = long.MaxValue / 2;
 
         // 七属性上界、初始、单次 delta 上限的统一校验(P2 扩四类一并检查)。
-        // name 字段仅供 Log 展示用,故直接用字符串字面量(组件本身字段名是 CoinInitial / CoinUpperBound,
+        // name 字段仅供 Log 展示用,故直接用字符串字面量(组件本身字段名是 DiamondInitial / DiamondUpperBound,
         // 这里要表达的是 PropertyType 的语义名)。
         var checks = new (long initial, long upperBound, long singleDeltaLimit, string name)[]
         {
-            (self.CoinInitial, self.CoinUpperBound, self.CoinSingleDeltaLimit, "Coin"),
             (self.DiamondInitial, self.DiamondUpperBound, self.DiamondSingleDeltaLimit, "Diamond"),
-            (self.StaminaInitial, self.StaminaUpperBound, self.StaminaSingleDeltaLimit, "Stamina"),
             (self.SoulPowerInitial, self.SoulPowerUpperBound, self.SoulPowerSingleDeltaLimit, "SoulPower"),
             (self.PietyInitial, self.PietyUpperBound, self.PietySingleDeltaLimit, "Piety"),
             (self.GuardianExpInitial, self.GuardianExpUpperBound, self.GuardianExpSingleDeltaLimit, "GuardianExp"),
@@ -470,8 +448,8 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         //   EnergyRecoverIntervalMs / PerTick ← global.xlsx id=3 EnergyRecoverSeconds("amount#interval" 复合)
         //   订单池容量 / 刷新节律 ← MergeOrderConfigServer.ActiveOrders/OrderRefreshIntervalSec(读 global id=1/id=2)
         Log.Info($"PlayerPropertyServiceComponent 初始化完成,玩家属性账本集合句柄已绑定(players + player_attr_ledger);" +
-                 $"初始值[coin={self.CoinInitial} diamond={self.DiamondInitial} stamina={self.StaminaInitial}]," +
-                 $"上界[coin={self.CoinUpperBound} diamond={self.DiamondUpperBound} stamina={self.StaminaUpperBound}];" +
+                 $"初始值[diamond={self.DiamondInitial}]," +
+                 $"上界[diamond={self.DiamondUpperBound}];" +
                  $"Luban A类[EnergyRecoverSoftCap={self.EnergyRecoverSoftCap} EnergyRecoverIntervalMs={self.EnergyRecoverIntervalMs} EnergyRecoverPerTick={self.EnergyRecoverPerTick}" +
                  $" OrderCount={MergeOrderConfigServer.ActiveOrders} OrderRefreshIntervalSec={MergeOrderConfigServer.OrderRefreshIntervalSec}].");
     }

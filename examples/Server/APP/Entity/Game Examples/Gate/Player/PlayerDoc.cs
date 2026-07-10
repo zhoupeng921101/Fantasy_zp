@@ -28,14 +28,8 @@ public sealed class PlayerDoc
     /// </summary>
     public string PlayerId { get; set; } = string.Empty;
 
-    /// <summary>金币余额(非负;原子 FindOneAndUpdate 用条件过滤保证 0 <= 余额 + delta <= 上界,SV8/SV9/SV11)。</summary>
-    public long Coin { get; set; }
-
-    /// <summary>钻石余额(非负;同上)。</summary>
+    /// <summary>钻石余额(非负;原子 FindOneAndUpdate 用条件过滤保证 0 <= 余额 + delta <= 上界,SV8/SV9/SV11)。</summary>
     public long Diamond { get; set; }
-
-    /// <summary>体力余额(非负;同上)。</summary>
-    public long Stamina { get; set; }
 
     /// <summary>昵称(首登 setOnInsert 默认空串;旧文档缺字段时初始化器保底为空串)。</summary>
     public string Nickname { get; set; } = string.Empty;
@@ -57,11 +51,11 @@ public sealed class PlayerDoc
     public long LastChangeUnixMs { get; set; }
 
     // ---- P2 新增:四种玩法货币并轨服务端权威(2026-06 全栈迁移)----
-    // 与既有 Coin/Diamond/Stamina/Level/Exp 彼此独立、不复用、不映射。
+    // 与既有 Diamond/Level/Exp 彼此独立、不复用、不映射。
     // 旧文档反序列化时缺字段 → MongoDB.Bson 默认值(数值 = 0、long = 0L)即合理初值。
     // 命名约定:守护者经验用 GuardianExp 与 PlayerDoc.Exp(玩家账号经验)显式区分。
 
-    /// <summary>灵力(玩法软货币;非负,与 Coin 同条件过滤范式落账)。</summary>
+    /// <summary>灵力(玩法软货币;非负,与 Diamond 同条件过滤范式落账)。</summary>
     public long SoulPower { get; set; }
 
     /// <summary>虔诚币(长期主线货币;非负,纯增减计数器)。</summary>

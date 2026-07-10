@@ -321,62 +321,50 @@ namespace Fantasy
 	}
 
 	/// <summary>
-	/// 属性类型(P3 扩到十三类:在七类货币/体力基础上新增六种元层进度计数器,服务端权威化,原云存档 blob 迁出第 1 批)
+	/// 属性类型(P3 十类:钻石 + 五类玩法货币/体力 + 五种元层进度计数器,服务端权威化,原云存档 blob 迁出第 1 批)
 	/// </summary>
 	public enum PropertyType
 	{
 		/// <summary>
-		/// 金币
-		/// </summary>
-		Coin = 0,
-		/// <summary>
 		/// 钻石
 		/// </summary>
-		Diamond = 1,
-		/// <summary>
-		/// 体力
-		/// </summary>
-		Stamina = 2,
+		Diamond = 0,
 		/// <summary>
 		/// 灵力(玩法软货币,纯增减计数器)
 		/// </summary>
-		SoulPower = 3,
+		SoulPower = 1,
 		/// <summary>
 		/// 虔诚币(长期主线货币,纯增减计数器)
 		/// </summary>
-		Piety = 4,
+		Piety = 2,
 		/// <summary>
 		/// 守护者累积经验(玩法侧第四种货币,纯增减计数器;与 PlayerDoc.Level/Exp 玩家账号经验不复用)
 		/// </summary>
-		GuardianExp = 5,
+		GuardianExp = 3,
 		/// <summary>
 		/// 玩法体力(带离线随时间恢复;服务端按 EnergyLastRecoverMs + EnergyRecoverIntervalMs 懒结算)
 		/// </summary>
-		Energy = 6,
-		/// <summary>
-		/// 女神等级(玩法产出,消行融合经济产出;客户端算增量后上报,单调递增)
-		/// </summary>
-		GoddessLevel = 7,
+		Energy = 4,
 		/// <summary>
 		/// 女神评级(玩法产出,单调递增)
 		/// </summary>
-		GoddessRating = 8,
+		GoddessRating = 5,
 		/// <summary>
 		/// 章节解锁数(玩法产出,单调递增)
 		/// </summary>
-		UnlockedChapter = 9,
+		UnlockedChapter = 6,
 		/// <summary>
 		/// 盲盒计数(玩法产出;可增可减 —— 攒盒 +、开盒 -)
 		/// </summary>
-		BlindBoxCount = 10,
+		BlindBoxCount = 7,
 		/// <summary>
 		/// 神庙修缮计数(动作产出,修缮动作触发,单调递增)
 		/// </summary>
-		TempleRepaired = 11,
+		TempleRepaired = 8,
 		/// <summary>
 		/// 神庙修缮游标(动作产出,指向下一个待修缮项,单调递增)
 		/// </summary>
-		NextRepairIndex = 12
+		NextRepairIndex = 9
 	}
 
 	/// <summary>

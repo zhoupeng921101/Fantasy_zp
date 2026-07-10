@@ -5786,7 +5786,7 @@ namespace Fantasy
         [ProtoIgnore]
         public G2C_QueryAttrLedgerResponse ResponseType { get; set; }
         /// <summary>
-        /// 属性种类过滤(0 = 不过滤;1=Coin / 2=Diamond / 3=Stamina / 4=SoulPower / 5=Piety / 6=GuardianExp / 7=Energy / 8=GoddessLevel / 9=GoddessRating / 10=UnlockedChapter / 11=BlindBoxCount / 12=TempleRepaired / 13=NextRepairIndex,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
+        /// 属性种类过滤(0 = 不过滤;1=Diamond / 2=SoulPower / 3=Piety / 4=GuardianExp / 5=Energy / 6=GoddessRating / 7=UnlockedChapter / 8=BlindBoxCount / 9=TempleRepaired / 10=NextRepairIndex,协议层整数 = PropertyType 枚举 + 1 错开一位作 sentinel,未知值返 InvalidRequest)
         /// </summary>
         [ProtoMember(1)]
         public int Kind { get; set; }

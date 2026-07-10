@@ -49,7 +49,7 @@ public sealed class C2G_QueryAttrLedgerHandler : MessageRPC<C2G_QueryAttrLedger,
             return;
         }
 
-        // kind = 0 表「不过滤」;1/2/3 = Coin/Diamond/Stamina 映射到 PropertyType 枚举;其他整数 → InvalidRequest。
+        // kind = 0 表「不过滤」;1..10 = 各 PropertyType + 1 映射到 PropertyType 枚举;其他整数 → InvalidRequest。
         PropertyType? kindForFilter = null;
         if (request.Kind != 0)
         {
