@@ -570,6 +570,48 @@ public static class InventoryServiceHelper
         }
     }
 
+    // ==================== GM 发测试道具 ====================
+
+    /// <summary>GM 发测试道具单次数量上限(调试入口防误填天量;正常调试远不及)。</summary>
+    private const long MaxGrantTestCount = 100_000L;
+
+    /// <summary>
+    /// GM 发背包测试道具(调试用):按 itemId 给指定账号发 count 个 —— 限时道具(TbItemDef.Term != 0)追加一条批次(GrantLot)、
+    /// 可堆叠道具(Term == 0)累加持有(GrantItem)。开发者调试入口,只做基本合法性校验(itemId 存在 + count 有界),不设反作弊。
+    /// 返回 (code, doc):code=Success 且 doc 非空 → 发后文档供 handler 推整份背包快照;失败时 doc 为 null。
+    /// </summary>
+    public static async FTask<(GrantTestItemResultCode code, PlayerDoc? doc)> GrantTestItem(
+        Scene scene, string accountId, int itemId, long count)
+    {
+        if (itemId <= 0 || count <= 0 || count > MaxGrantTestCount)
+        {
+            return (GrantTestItemResultCode.InvalidRequest, null);
+        }
+        var service = scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (service?.Players is not { } players)
+        {
+            return (GrantTestItemResultCode.ServiceUnavailable, null);
+        }
+        var def = GameConfigSystem.Tables?.TbItemDef?.GetOrDefault(itemId);
+        if (def == null)
+        {
+            return (GrantTestItemResultCode.UnknownItem, null);
+        }
+
+        const string reason = "gm_grant_test_item";
+        // 限时走批次轨(GrantLot 内含过期时刻计算),非限时走堆叠轨(GrantItem)。
+        bool ok = def.Term != 0
+            ? (await GrantLot(service, accountId, itemId, count, reason)).ok
+            : (await ItemHoldingsServiceHelper.GrantItem(service, accountId, itemId, count, reason)).ok;
+        if (!ok)
+        {
+            return (GrantTestItemResultCode.ServiceUnavailable, null);
+        }
+
+        var doc = await ReadDoc(players, accountId);
+        return (GrantTestItemResultCode.Success, doc);
+    }
+
     // ==================== 内部工具 ====================
 
     /// <summary>批次是否已过期(ExpireMs > 0 且 now >= ExpireMs;ExpireMs<=0 视为永不过期,批次轨一般不出现)。</summary>

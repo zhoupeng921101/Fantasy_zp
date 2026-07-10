@@ -732,5 +732,32 @@ namespace Fantasy
 		ServiceUnavailable = 2
 	}
 
+	/// <summary>
+	/// GM 发测试道具裁决结果码
+	/// </summary>
+	public enum GrantTestItemResultCode
+	{
+		/// <summary>
+		/// 发放成功(已入背包并推送整份快照)
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号身份(未登录 / 链路异常)
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 服务不可用(MongoDB 不可达 / 写入异常)
+		/// </summary>
+		ServiceUnavailable = 2,
+		/// <summary>
+		/// 道具 id 无 TbItemDef 配置
+		/// </summary>
+		UnknownItem = 3,
+		/// <summary>
+		/// 入参非法(itemId <= 0 / count <= 0 / count 超上限)
+		/// </summary>
+		InvalidRequest = 4
+	}
+
 
 }

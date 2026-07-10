@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+// ZZZGrantTestItemMessage.proto
+// GM 发背包测试道具(调试用):按 itemId 给调用方自己发 count 个道具 —— 限时道具(TbItemDef.Term != 0)追加一条批次(GrantLot)、
+// 可堆叠道具(Term == 0)累加持有(GrantItem),发后推整份背包快照(G2C_InventoryDeltaPush),客户端整份覆盖投影。
+// 身份从会话取,不携带账号,只发给自己;开发者调试入口,只做基本合法性校验(itemId 存在 + count 有界),不设反作弊。
+//
+// 文件名 ZZZ 前缀刻意排到所有现存 .proto(含 ZZClearInventory)之后:导出工具按文件名字母序遍历分配
+// opcode(单调计数器),新消息只消费末尾新计数,不挪动任何既有 opcode。
+
+/// GM 发测试道具裁决结果码
+enum GrantTestItemResultCode
+{
+	/// 发放成功(已入背包并推送整份快照)
+	Success = 0,
+	/// 会话未挂账号身份(未登录 / 链路异常)
+	NotLoggedIn = 1,
+	/// 服务不可用(MongoDB 不可达 / 写入异常)
+	ServiceUnavailable = 2,
+	/// 道具 id 无 TbItemDef 配置
+	UnknownItem = 3,
+	/// 入参非法(itemId <= 0 / count <= 0 / count 超上限)
+	InvalidRequest = 4
+}
+
+/// 客户端 GM 发测试道具请求(身份从会话取,不携带账号)
+message C2G_GrantTestItemRequest // IRequest,G2C_GrantTestItemResponse
+{
+	int32 ItemId = 1; /// 道具 id(TbItemDef 主键)
+	int64 Count = 2; /// 发放数量(> 0)
+}
+/// 服务端发测试道具裁决响应
+message G2C_GrantTestItemResponse // IResponse
+{
+	GrantTestItemResultCode ResultCode = 1; /// 裁决结果码
+}

@@ -7542,4 +7542,109 @@ namespace Fantasy
         [ProtoMember(1)]
         public ClearInventoryResultCode ResultCode { get; set; }
     }
+    /// <summary>
+    /// 客户端 GM 发测试道具请求(身份从会话取,不携带账号)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_GrantTestItemRequest : AMessage, IRequest
+    {
+        public static C2G_GrantTestItemRequest Create(bool autoReturn = true)
+        {
+            var c2G_GrantTestItemRequest = MessageObjectPool<C2G_GrantTestItemRequest>.Rent();
+            c2G_GrantTestItemRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_GrantTestItemRequest.SetIsPool(false);
+            }
+            
+            return c2G_GrantTestItemRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ItemId = default;
+            Count = default;
+            MessageObjectPool<C2G_GrantTestItemRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_GrantTestItemRequest; } 
+        [ProtoIgnore]
+        public G2C_GrantTestItemResponse ResponseType { get; set; }
+        /// <summary>
+        /// 道具 id(TbItemDef 主键)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ItemId { get; set; }
+        /// <summary>
+        /// 发放数量(> 0)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Count { get; set; }
+    }
+    /// <summary>
+    /// 服务端发测试道具裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_GrantTestItemResponse : AMessage, IResponse
+    {
+        public static G2C_GrantTestItemResponse Create(bool autoReturn = true)
+        {
+            var g2C_GrantTestItemResponse = MessageObjectPool<G2C_GrantTestItemResponse>.Rent();
+            g2C_GrantTestItemResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_GrantTestItemResponse.SetIsPool(false);
+            }
+            
+            return g2C_GrantTestItemResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            MessageObjectPool<G2C_GrantTestItemResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_GrantTestItemResponse; } 
+        [ProtoMember(2)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public GrantTestItemResultCode ResultCode { get; set; }
+    }
 }
