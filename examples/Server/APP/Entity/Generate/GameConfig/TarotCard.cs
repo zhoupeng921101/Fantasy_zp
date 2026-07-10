@@ -22,7 +22,7 @@ public sealed partial class TarotCard : Luban.BeanBase
         {int n0 = System.Math.Min(_buf.ReadSize(), _buf.Size);UnlockCosts = new System.Collections.Generic.List<int>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { int _e0;  _e0 = _buf.ReadInt(); UnlockCosts.Add(_e0);}}
         ChapterId = _buf.ReadInt();
         CollectReward = _buf.ReadInt();
-        ShardReward = _buf.ReadInt();
+        {int n0 = System.Math.Min(_buf.ReadSize(), _buf.Size);ShardReward = new System.Collections.Generic.List<int>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { int _e0;  _e0 = _buf.ReadInt(); ShardReward.Add(_e0);}}
     }
 
     public static TarotCard DeserializeTarotCard(ByteBuf _buf)
@@ -55,9 +55,9 @@ public sealed partial class TarotCard : Luban.BeanBase
     /// </summary>
     public readonly int CollectReward;
     /// <summary>
-    /// 碎片解锁奖励:固定奖励id(0=无);每解锁一个碎片按此id从TbRewardCurrency(货币)+TbRewardItem(材料)全发
+    /// 碎片解锁奖励数组:索引i=第i+1个碎片解锁时发放的奖励盒box_id(引用TbRewardBox,整盒全发);长度≤总碎片数,缺省/空=该碎片无奖励
     /// </summary>
-    public readonly int ShardReward;
+    public readonly System.Collections.Generic.List<int> ShardReward;
    
     public const int __ID__ = 1429819994;
     public override int GetTypeId() => __ID__;
@@ -82,7 +82,7 @@ public sealed partial class TarotCard : Luban.BeanBase
         + "unlockCosts:" + Luban.StringUtil.CollectionToString(UnlockCosts) + ","
         + "chapterId:" + ChapterId + ","
         + "collectReward:" + CollectReward + ","
-        + "shardReward:" + ShardReward + ","
+        + "shardReward:" + Luban.StringUtil.CollectionToString(ShardReward) + ","
         + "}";
     }
 }

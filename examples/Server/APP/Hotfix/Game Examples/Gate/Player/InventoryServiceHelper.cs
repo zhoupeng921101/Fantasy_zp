@@ -662,8 +662,11 @@ public static class InventoryServiceHelper
         return true;
     }
 
-    /// <summary>num.ENumType → 服务端 PropertyType。EXP(经验)无对应 PropertyType(PlayerDoc.Exp 不在 PropertyType 枚举)→ false。</summary>
-    private static bool MapNumTypeToProperty(GameConfig.num.ENumType numType, out PropertyType type)
+    /// <summary>
+    /// num.ENumType → 服务端 PropertyType。EXP(经验)无对应 PropertyType(PlayerDoc.Exp 不在 PropertyType 枚举)→ false。
+    /// public:货币产出的单一映射源,供道具使用(TryResolveCurrencyProduce)与固定奖励盒发放(RewardBoxServiceHelper)共用,不另写一份。
+    /// </summary>
+    public static bool MapNumTypeToProperty(GameConfig.num.ENumType numType, out PropertyType type)
     {
         switch (numType)
         {
