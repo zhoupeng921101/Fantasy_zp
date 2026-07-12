@@ -328,7 +328,16 @@ public static class MailDecisionHelper
             RewardId = rewardId,
             SendUnixMs = TimeHelper.Now
         };
-        await self.Directed.InsertOneAsync(doc);
+        try
+        {
+            await self.Directed.InsertOneAsync(doc);
+        }
+        catch (MongoException e)
+        {
+            // 兑现契约「服务不可用返 null」:MongoDB 抖动 / 未就绪时插入抛异常,返 null 让调用方据此重试,不外泄异常。
+            Log.Warning($"MailDecisionHelper.SendMailTo 投递失败 account={account} reward={rewardId},err={e.Message}");
+            return null;
+        }
         return DirectedPrefix + directedId;
     }
 

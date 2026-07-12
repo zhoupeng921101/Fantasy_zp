@@ -39,5 +39,17 @@ namespace Fantasy
         /// <summary> Gate服务器通知Map取消订阅一个领域事件到Gate上 </summary>
         public const uint G2Map_UnsubscribeSphereEventRequest = 1073751833;
         public const uint Map2G_UnsubscribeSphereEventResponse = 1207969561;
+        /// <summary> GM 给指定账号发道具(限时/可堆叠由服务端按配置自动分轨) </summary>
+        public const uint Http2G_GmGrantItemRequest = 1073751834;
+        public const uint G2Http_GmGrantItemResponse = 1207969562;
+        /// <summary> GM 给指定账号加减货币(高信任通道,单次幅度上限由 Gate 侧校验) </summary>
+        public const uint Http2G_GmChangeCurrencyRequest = 1073751835;
+        public const uint G2Http_GmChangeCurrencyResponse = 1207969563;
+        /// <summary> GM 给指定账号投一封带奖励的定向邮件 </summary>
+        public const uint Http2G_GmSendMailRequest = 1073751836;
+        public const uint G2Http_GmSendMailResponse = 1207969564;
+        /// <summary> GM 重置指定账号(清空背包 + 邮件数据) </summary>
+        public const uint Http2G_GmResetPlayerRequest = 1073751837;
+        public const uint G2Http_GmResetPlayerResponse = 1207969565;
     }
 }

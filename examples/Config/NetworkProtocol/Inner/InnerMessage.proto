@@ -125,3 +125,63 @@ message Map2G_UnsubscribeSphereEventResponse // IAddressResponse
 {
 
 }
+
+// ==================== GM 运维(HttpGift Scene -> Gate Scene) ====================
+// GM HTTP 场景收到运维请求后,把操作转发到 Gate 场景执行(Gate 持有玩家权威组件),
+// 复用现有权威 helper 写库并触发在线推送。Response.Code:0=成功,非0=失败(附 Message 说明)。
+
+/// GM 给指定账号发道具(限时/可堆叠由服务端按配置自动分轨)
+message Http2G_GmGrantItemRequest // IAddressRequest,G2Http_GmGrantItemResponse
+{
+	string AccountId = 1;
+	int32 ItemId = 2;
+	int64 Count = 3;
+}
+message G2Http_GmGrantItemResponse // IAddressResponse
+{
+	int32 Code = 1;			// 0=成功;非0=GrantTestItemResultCode 或 GM 侧校验失败码
+	string Message = 2;
+}
+
+/// GM 给指定账号加减货币(高信任通道,单次幅度上限由 Gate 侧校验)
+message Http2G_GmChangeCurrencyRequest // IAddressRequest,G2Http_GmChangeCurrencyResponse
+{
+	string AccountId = 1;
+	int32 Type = 2;			// PropertyType 枚举值
+	int64 Delta = 3;		// 变更量,可正可负
+	string Reason = 4;		// 流水事由(空则用默认)
+}
+message G2Http_GmChangeCurrencyResponse // IAddressResponse
+{
+	int32 Code = 1;			// 0=成功;非0=PropertyChangeResultCode 或 GM 侧校验失败码
+	string Message = 2;
+	int64 NewAmount = 3;	// 成功时的变更后余额
+}
+
+/// GM 给指定账号投一封带奖励的定向邮件
+message Http2G_GmSendMailRequest // IAddressRequest,G2Http_GmSendMailResponse
+{
+	string AccountId = 1;
+	int32 SenderTextId = 2;
+	int32 TitleTextId = 3;
+	int32 ContentTextId = 4;
+	int32 ExpireDays = 5;
+	int32 RewardId = 6;
+}
+message G2Http_GmSendMailResponse // IAddressResponse
+{
+	int32 Code = 1;			// 0=成功;非0=失败(服务不可用)
+	string Message = 2;
+	string MailId = 3;		// 成功时投递的对外邮件标识
+}
+
+/// GM 重置指定账号(清空背包 + 邮件数据)
+message Http2G_GmResetPlayerRequest // IAddressRequest,G2Http_GmResetPlayerResponse
+{
+	string AccountId = 1;
+}
+message G2Http_GmResetPlayerResponse // IAddressResponse
+{
+	int32 Code = 1;			// 0=成功;非0=部分/全部失败(附 Message)
+	string Message = 2;
+}

@@ -1059,4 +1059,412 @@ namespace Fantasy
         [ProtoMember(1)]
         public uint ErrorCode { get; set; }
     }
+    /// <summary>
+    /// GM 给指定账号发道具(限时/可堆叠由服务端按配置自动分轨)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class Http2G_GmGrantItemRequest : AMessage, IAddressRequest
+    {
+        public static Http2G_GmGrantItemRequest Create(bool autoReturn = true)
+        {
+            var http2G_GmGrantItemRequest = MessageObjectPool<Http2G_GmGrantItemRequest>.Rent();
+            http2G_GmGrantItemRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                http2G_GmGrantItemRequest.SetIsPool(false);
+            }
+            
+            return http2G_GmGrantItemRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            AccountId = default;
+            ItemId = default;
+            Count = default;
+            MessageObjectPool<Http2G_GmGrantItemRequest>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.Http2G_GmGrantItemRequest; } 
+        [ProtoIgnore]
+        public G2Http_GmGrantItemResponse ResponseType { get; set; }
+        [ProtoMember(1)]
+        public string AccountId { get; set; }
+        [ProtoMember(2)]
+        public int ItemId { get; set; }
+        [ProtoMember(3)]
+        public long Count { get; set; }
+    }
+    [Serializable]
+    [ProtoContract]
+    public partial class G2Http_GmGrantItemResponse : AMessage, IAddressResponse
+    {
+        public static G2Http_GmGrantItemResponse Create(bool autoReturn = true)
+        {
+            var g2Http_GmGrantItemResponse = MessageObjectPool<G2Http_GmGrantItemResponse>.Rent();
+            g2Http_GmGrantItemResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2Http_GmGrantItemResponse.SetIsPool(false);
+            }
+            
+            return g2Http_GmGrantItemResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            Code = default;
+            Message = default;
+            MessageObjectPool<G2Http_GmGrantItemResponse>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.G2Http_GmGrantItemResponse; } 
+        [ProtoMember(3)]
+        public uint ErrorCode { get; set; }
+        [ProtoMember(1)]
+        public int Code { get; set; }
+        [ProtoMember(2)]
+        public string Message { get; set; }
+    }
+    /// <summary>
+    /// GM 给指定账号加减货币(高信任通道,单次幅度上限由 Gate 侧校验)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class Http2G_GmChangeCurrencyRequest : AMessage, IAddressRequest
+    {
+        public static Http2G_GmChangeCurrencyRequest Create(bool autoReturn = true)
+        {
+            var http2G_GmChangeCurrencyRequest = MessageObjectPool<Http2G_GmChangeCurrencyRequest>.Rent();
+            http2G_GmChangeCurrencyRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                http2G_GmChangeCurrencyRequest.SetIsPool(false);
+            }
+            
+            return http2G_GmChangeCurrencyRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            AccountId = default;
+            Type = default;
+            Delta = default;
+            Reason = default;
+            MessageObjectPool<Http2G_GmChangeCurrencyRequest>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.Http2G_GmChangeCurrencyRequest; } 
+        [ProtoIgnore]
+        public G2Http_GmChangeCurrencyResponse ResponseType { get; set; }
+        [ProtoMember(1)]
+        public string AccountId { get; set; }
+        [ProtoMember(2)]
+        public int Type { get; set; }
+        [ProtoMember(3)]
+        public long Delta { get; set; }
+        [ProtoMember(4)]
+        public string Reason { get; set; }
+    }
+    [Serializable]
+    [ProtoContract]
+    public partial class G2Http_GmChangeCurrencyResponse : AMessage, IAddressResponse
+    {
+        public static G2Http_GmChangeCurrencyResponse Create(bool autoReturn = true)
+        {
+            var g2Http_GmChangeCurrencyResponse = MessageObjectPool<G2Http_GmChangeCurrencyResponse>.Rent();
+            g2Http_GmChangeCurrencyResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2Http_GmChangeCurrencyResponse.SetIsPool(false);
+            }
+            
+            return g2Http_GmChangeCurrencyResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            Code = default;
+            Message = default;
+            NewAmount = default;
+            MessageObjectPool<G2Http_GmChangeCurrencyResponse>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.G2Http_GmChangeCurrencyResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        [ProtoMember(1)]
+        public int Code { get; set; }
+        [ProtoMember(2)]
+        public string Message { get; set; }
+        [ProtoMember(3)]
+        public long NewAmount { get; set; }
+    }
+    /// <summary>
+    /// GM 给指定账号投一封带奖励的定向邮件
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class Http2G_GmSendMailRequest : AMessage, IAddressRequest
+    {
+        public static Http2G_GmSendMailRequest Create(bool autoReturn = true)
+        {
+            var http2G_GmSendMailRequest = MessageObjectPool<Http2G_GmSendMailRequest>.Rent();
+            http2G_GmSendMailRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                http2G_GmSendMailRequest.SetIsPool(false);
+            }
+            
+            return http2G_GmSendMailRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            AccountId = default;
+            SenderTextId = default;
+            TitleTextId = default;
+            ContentTextId = default;
+            ExpireDays = default;
+            RewardId = default;
+            MessageObjectPool<Http2G_GmSendMailRequest>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.Http2G_GmSendMailRequest; } 
+        [ProtoIgnore]
+        public G2Http_GmSendMailResponse ResponseType { get; set; }
+        [ProtoMember(1)]
+        public string AccountId { get; set; }
+        [ProtoMember(2)]
+        public int SenderTextId { get; set; }
+        [ProtoMember(3)]
+        public int TitleTextId { get; set; }
+        [ProtoMember(4)]
+        public int ContentTextId { get; set; }
+        [ProtoMember(5)]
+        public int ExpireDays { get; set; }
+        [ProtoMember(6)]
+        public int RewardId { get; set; }
+    }
+    [Serializable]
+    [ProtoContract]
+    public partial class G2Http_GmSendMailResponse : AMessage, IAddressResponse
+    {
+        public static G2Http_GmSendMailResponse Create(bool autoReturn = true)
+        {
+            var g2Http_GmSendMailResponse = MessageObjectPool<G2Http_GmSendMailResponse>.Rent();
+            g2Http_GmSendMailResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2Http_GmSendMailResponse.SetIsPool(false);
+            }
+            
+            return g2Http_GmSendMailResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            Code = default;
+            Message = default;
+            MailId = default;
+            MessageObjectPool<G2Http_GmSendMailResponse>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.G2Http_GmSendMailResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        [ProtoMember(1)]
+        public int Code { get; set; }
+        [ProtoMember(2)]
+        public string Message { get; set; }
+        [ProtoMember(3)]
+        public string MailId { get; set; }
+    }
+    /// <summary>
+    /// GM 重置指定账号(清空背包 + 邮件数据)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class Http2G_GmResetPlayerRequest : AMessage, IAddressRequest
+    {
+        public static Http2G_GmResetPlayerRequest Create(bool autoReturn = true)
+        {
+            var http2G_GmResetPlayerRequest = MessageObjectPool<Http2G_GmResetPlayerRequest>.Rent();
+            http2G_GmResetPlayerRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                http2G_GmResetPlayerRequest.SetIsPool(false);
+            }
+            
+            return http2G_GmResetPlayerRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            AccountId = default;
+            MessageObjectPool<Http2G_GmResetPlayerRequest>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.Http2G_GmResetPlayerRequest; } 
+        [ProtoIgnore]
+        public G2Http_GmResetPlayerResponse ResponseType { get; set; }
+        [ProtoMember(1)]
+        public string AccountId { get; set; }
+    }
+    [Serializable]
+    [ProtoContract]
+    public partial class G2Http_GmResetPlayerResponse : AMessage, IAddressResponse
+    {
+        public static G2Http_GmResetPlayerResponse Create(bool autoReturn = true)
+        {
+            var g2Http_GmResetPlayerResponse = MessageObjectPool<G2Http_GmResetPlayerResponse>.Rent();
+            g2Http_GmResetPlayerResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2Http_GmResetPlayerResponse.SetIsPool(false);
+            }
+            
+            return g2Http_GmResetPlayerResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            Code = default;
+            Message = default;
+            MessageObjectPool<G2Http_GmResetPlayerResponse>.Return(this);
+        }
+        public uint OpCode() { return InnerOpcode.G2Http_GmResetPlayerResponse; } 
+        [ProtoMember(3)]
+        public uint ErrorCode { get; set; }
+        [ProtoMember(1)]
+        public int Code { get; set; }
+        [ProtoMember(2)]
+        public string Message { get; set; }
+    }
 }
