@@ -12,6 +12,24 @@ public sealed class GameSessionFlagComponentDestroySystem : DestroySystem<GameSe
     protected override void Destroy(GameSessionFlagComponent self)
     {
         GameSession? game = self.GameSession;
-        game?.Dispose();
+        if (game == null)
+        {
+            return;
+        }
+
+        // 存盘防抖兜底:会话断开(登出 / 关 App)时若有未落盘的步,fire-and-forget flush 一次再销毁内存实例,
+        // 把丢失窗口从「防抖间隔」缩到「硬崩溃中途」(优雅断线 0 丢失)。
+        // 这里不能用会在 await 后回写 game 的 FlushIfDirty:本处 fire-and-forget 后立即 Dispose,异步体回写会命中已销毁(池化归还)的实体。
+        // 故同步判 dirty + 同步 BuildDoc 快照,再 fire Save(异步体只用已构建的 doc,不再触碰 game);实体即将销毁,无需回写已落盘步号。
+        if (game.Step > game.LastPersistedStep)
+        {
+            var service = game.Scene?.GetComponent<GameSessionServiceComponent>();
+            if (service != null)
+            {
+                GameSessionPersistHelper.Save(service, GameSessionHelper.BuildDoc(game)).Coroutine();
+            }
+        }
+
+        game.Dispose();
     }
 }

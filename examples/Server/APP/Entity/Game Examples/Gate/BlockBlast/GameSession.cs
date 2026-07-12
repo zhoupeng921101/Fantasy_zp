@@ -67,4 +67,10 @@ public sealed class GameSession : Entity
     /// 不进入扣费/清盘路径。同一 Scene 内 handler 仅在 await 点交错,同步的「查-置」区段原子,故守卫无竞态。
     /// </summary>
     public bool ClearToolInFlight;
+
+    /// <summary>存盘防抖:上次已落盘到的步号(内存态,不入 Doc)。进入对局时对齐当前步(视为已干净),据此判断是否到点该存。</summary>
+    public int LastPersistedStep;
+
+    /// <summary>存盘防抖:上次落盘的服务端时刻(Unix ms,内存态,不入 Doc)。</summary>
+    public long LastPersistUnixMs;
 }

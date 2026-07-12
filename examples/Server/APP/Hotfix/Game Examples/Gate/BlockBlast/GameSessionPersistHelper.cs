@@ -31,15 +31,71 @@ public static class GameSessionPersistHelper
         }
     }
 
+    /// <summary>存盘防抖:普通落子最多每 N 步落盘一次(降低对局写库频率,头号写源)。</summary>
+    private const int PersistEveryNSteps = 5;
+
+    /// <summary>存盘防抖:普通落子最多每 T 毫秒落盘一次。</summary>
+    private const long PersistIntervalMs = 3000;
+
+    /// <summary>
+    /// 防抖存盘:仅在 force(消行 / 清盘 / 清行列等关键事件)、距上次存盘 ≥N 步、或 ≥T 毫秒时才真写库;
+    /// 否则跳过本次写库(内存态已推进,到下个存盘点或断线 flush 时补上)。
+    /// 写库前同步快照当前态并乐观标记「已落盘到当前步」——存盘是全量快照(非增量),即便本次写失败,后续任一成功写自愈。
+    /// 权衡:硬崩溃最坏丢单玩家最近一个防抖窗口(≤N 步 / ≤T 毫秒)的落子;消行必存不丢;优雅断线由 DestroySystem flush 补上。
+    /// </summary>
+    public static async FTask SaveIfDue(GameSessionServiceComponent service, GameSession game, long nowMs, bool force)
+    {
+        if (game == null)
+        {
+            return;
+        }
+        bool due = force
+                   || game.Step - game.LastPersistedStep >= PersistEveryNSteps
+                   || nowMs - game.LastPersistUnixMs >= PersistIntervalMs;
+        if (!due)
+        {
+            return;
+        }
+        int stepSnapshot = game.Step;
+        var doc = GameSessionHelper.BuildDoc(game); // 同步快照当前态(BuildDoc 内无 await,原子)
+        // 仅在**确认写库成功**后推进已落盘步号:写失败不推进,断线 flush 的脏检查(Step > LastPersistedStep)仍能兜底
+        // (否则 force 存盘瞬时失败 + 随即断线会漏掉该步)。guard stepSnapshot > 现值:防 await 期间并发写乱序完成造成回退。
+        if (await Save(service, doc) && stepSnapshot > game.LastPersistedStep)
+        {
+            game.LastPersistedStep = stepSnapshot;
+            game.LastPersistUnixMs = nowMs;
+        }
+    }
+
+    /// <summary>
+    /// flush 防抖窗口内未落盘的步(dirty=Step>LastPersistedStep 才写)。供断线(DestroySystem)与同会话重进对局(GameStart 弃旧局前)
+    /// 复用同一兜底口径,避免绕过防抖直接销毁内存局丢步。仅确认成功才推进已落盘步号。
+    /// </summary>
+    public static async FTask FlushIfDirty(GameSessionServiceComponent service, GameSession game)
+    {
+        if (game == null || game.Step <= game.LastPersistedStep)
+        {
+            return;
+        }
+        int stepSnapshot = game.Step;
+        var doc = GameSessionHelper.BuildDoc(game);
+        if (await Save(service, doc) && stepSnapshot > game.LastPersistedStep)
+        {
+            game.LastPersistedStep = stepSnapshot;
+            game.LastPersistUnixMs = Fantasy.Helper.TimeHelper.Now;
+        }
+    }
+
     /// <summary>
     /// 覆盖式存盘(_id=playerId upsert,整体替换)。doc 由 GameSessionHelper.BuildDoc 组装。
-    /// 不可达 / 异常静默吞掉(Warning 留痕):存盘失败不应让落子裁决回滚(权威态已在内存推进,下次存盘补上)。
+    /// 返回是否**确认写库成功**:不可达 / 异常吞掉(Warning 留痕)返 false —— 防抖存盘据此仅在成功时推进已落盘步号,
+    /// 使写失败后的断线 flush 脏检查仍能兜底(存盘失败本身不回滚落子裁决,权威态已在内存推进)。
     /// </summary>
-    public static async FTask Save(GameSessionServiceComponent service, GameSessionDoc doc)
+    public static async FTask<bool> Save(GameSessionServiceComponent service, GameSessionDoc doc)
     {
         if (service?.Sessions == null || doc == null || string.IsNullOrEmpty(doc.PlayerId))
         {
-            return;
+            return false;
         }
 
         doc.LastUpdateUnixMs = Fantasy.Helper.TimeHelper.Now;
@@ -49,10 +105,12 @@ public static class GameSessionPersistHelper
             var filter = Builders<GameSessionDoc>.Filter.Eq(x => x.PlayerId, doc.PlayerId);
             var options = new ReplaceOptions { IsUpsert = true };
             await service.Sessions.ReplaceOneAsync(filter, doc, options);
+            return true;
         }
         catch (Exception e)
         {
             Log.Warning($"GameSessionPersistHelper.Save 失败 playerId={doc.PlayerId} gameId={doc.GameId} err={e.Message}");
+            return false;
         }
     }
 

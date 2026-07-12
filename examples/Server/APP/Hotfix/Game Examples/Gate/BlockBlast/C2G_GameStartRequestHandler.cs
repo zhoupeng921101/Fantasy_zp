@@ -28,19 +28,25 @@ public sealed class C2G_GameStartRequestHandler : MessageRPC<C2G_GameStartReques
             return;
         }
 
+        var persistService = session.Scene.GetComponent<GameSessionServiceComponent>();
+
         // 一会话只持一局:进入对局前清掉旧内存实例(若有)。持久 Doc 不随之删除——续存的核心是 Doc 仍在。
         var flag = session.GetComponent<GameSessionFlagComponent>();
         if (flag != null)
         {
             GameSession? oldGame = flag.GameSession;
-            oldGame?.Dispose();
+            if (oldGame != null)
+            {
+                // 弃旧局前 flush 防抖窗口内未落盘的步(与断线 DestroySystem 同口径),避免重进对局静默丢步。
+                await GameSessionPersistHelper.FlushIfDirty(persistService, oldGame);
+                oldGame.Dispose();
+            }
         }
         else
         {
             flag = session.AddComponent<GameSessionFlagComponent>();
         }
 
-        var persistService = session.Scene.GetComponent<GameSessionServiceComponent>();
         var doc = await GameSessionPersistHelper.Load(persistService, account.PlayerId);
 
         var game = Entity.Create<GameSession>(session.Scene);
@@ -67,6 +73,10 @@ public sealed class C2G_GameStartRequestHandler : MessageRPC<C2G_GameStartReques
             // 新建即落首次存盘,使下次进入对局能恢复(即便玩家未落子就退出)。
             await GameSessionPersistHelper.Save(persistService, GameSessionHelper.BuildDoc(game));
         }
+
+        // 存盘防抖初始化:续局(已从 Doc 载)/ 新建(已首存)此刻都视为已落盘到当前步,后续按 SaveIfDue 判点。
+        game.LastPersistedStep = game.Step;
+        game.LastPersistUnixMs = Fantasy.Helper.TimeHelper.Now;
 
         flag.GameSession = game;
 

@@ -151,7 +151,8 @@ public sealed class C2G_ClearToolRequestHandler : MessageRPC<C2G_ClearToolReques
 
         // 清行列成功后存盘:盘面/步号落 Doc,供续局 / 快照恢复(与落子成功后存盘同口径)。
         var persistService = session.Scene.GetComponent<GameSessionServiceComponent>();
-        await GameSessionPersistHelper.Save(persistService, GameSessionHelper.BuildDoc(game));
+        // 清行列(脱困道具)是关键事件,force 立即存(并推进防抖的已落盘步号,保持状态一致)。
+        await GameSessionPersistHelper.SaveIfDue(persistService, game, Fantasy.Helper.TimeHelper.Now, force: true);
 
         Log.Info($"[BlockBlast] ClearTool account={accountId} gameId={game.GameId} step={game.Step} " +
                  $"pos=({request.PosX},{request.PosY}) cleared={clearedCells} cost={cost} newEnergy={energyAfter}");

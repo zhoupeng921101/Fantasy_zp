@@ -72,8 +72,9 @@ public sealed class C2G_PlaceRequestHandler : MessageRPC<C2G_PlaceRequest, G2C_P
                 // 落子体力服务端派生。
                 await DerivePlaceEnergy(session, game, eliminatedLines, response);
 
-                // 对局永续:不判 jam 终局、不删档。盘面卡死由客户端消除道具清行列脱困,落子后总是存盘。
-                await GameSessionPersistHelper.Save(persistService, GameSessionHelper.BuildDoc(game));
+                // 对局永续:不判 jam 终局、不删档。盘面存盘防抖(消行必存,否则每 N 步 / T 秒存一次),
+                // 断线由 DestroySystem flush 兜底。体力仍每步落 players 文档(见 DerivePlaceEnergy)。
+                await GameSessionPersistHelper.SaveIfDue(persistService, game, Fantasy.Helper.TimeHelper.Now, force: eliminatedLines > 0);
             }
         }
 
@@ -130,8 +131,10 @@ public sealed class C2G_PlaceRequestHandler : MessageRPC<C2G_PlaceRequest, G2C_P
         long netDelta = target - energyBefore;
 
         var reason = $"place:g{game.GameId}:s{game.Step}";
+        // 落子派生体力是高频派生型变更(每步一行会使流水无界暴涨、且体力可由落子确定性推得):不写流水。
+        // 余额仍原子落库 + 推送对齐;有意义的体力事件(清行列道具 / 订单产出 / GM)照常写流水。
         var (energyResult, energyAfter) = await PlayerPropertyServiceHelper.ChangeProperty(
-            session.Scene, accountId, PropertyType.Energy, netDelta, reason, serverAuthoritative: true);
+            session.Scene, accountId, PropertyType.Energy, netDelta, reason, serverAuthoritative: true, writeLedger: false);
 
         if (energyResult == PropertyChangeResultCode.Success)
         {

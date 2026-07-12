@@ -599,10 +599,15 @@ public static class PlayerPropertyServiceHelper
     ///
     /// 仅 Success 时由调用方起推送(`SendDeltaPushTo`);本方法**不**直接起推送
     /// (调用方上下文不同:handler 在请求路径,进程内 API 在业务系统刀,推送时机由调用方控)。
+    ///
+    /// writeLedger:
+    ///   true(默认)= 成功后旁路追加一行属性流水(player_attr_ledger),有意义交易(购买 / 奖励 / GM / 货币收支)审计留痕。
+    ///   false       = 不写流水。仅用于**高频派生型低价值**变更(如落子每步派生的体力增减)——每步一行会使流水无界暴涨、
+    ///                 且体力由落子确定性可推、盘面文档已隐含记录,细粒度审计价值低。余额权威变更本身不受影响(照常原子落库 + 推送)。
     /// </summary>
     public static async FTask<(PropertyChangeResultCode resultCode, long newAmount)> ChangeProperty(
         Scene scene, string accountId, PropertyType type, long delta, string reason,
-        bool serverAuthoritative = false)
+        bool serverAuthoritative = false, bool writeLedger = true)
     {
         var service = scene.GetComponent<PlayerPropertyServiceComponent>();
         if (service == null)
@@ -712,13 +717,17 @@ public static class PlayerPropertyServiceHelper
                 // 调用方 return 后才 SendDeltaPushTo → 推送给客户端,保证 ledger 永远先于推送写入。
                 // ledger 失败仅告警不回滚(余额已成功定格,SV11);AttrLedger 句柄 null(MongoDB 不可达)静默跳过。
                 // BalanceBefore = newAmount - delta(等价于 returnDocument Before,设计 44 §3.1)。
-                await AttrLedgerHelper.AppendAsync(
-                    service, accountId, type,
-                    balanceBefore: newAmount - delta,
-                    balanceAfter: newAmount,
-                    delta: delta,
-                    reasonRaw: reason ?? string.Empty,
-                    timestampMs: nowMs);
+                // writeLedger=false(高频派生型变更,如落子每步体力)跳过追加,防流水无界暴涨;余额权威变更不受影响。
+                if (writeLedger)
+                {
+                    await AttrLedgerHelper.AppendAsync(
+                        service, accountId, type,
+                        balanceBefore: newAmount - delta,
+                        balanceAfter: newAmount,
+                        delta: delta,
+                        reasonRaw: reason ?? string.Empty,
+                        timestampMs: nowMs);
+                }
 
                 return (PropertyChangeResultCode.Success, newAmount);
             }

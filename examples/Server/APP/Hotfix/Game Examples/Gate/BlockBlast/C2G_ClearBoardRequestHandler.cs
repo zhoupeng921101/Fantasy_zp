@@ -39,7 +39,8 @@ public sealed class C2G_ClearBoardRequestHandler : MessageRPC<C2G_ClearBoardRequ
 
         // 清盘成功后存盘:盘面 / 步号落 Doc,供续局 / 快照恢复(与落子 / 消除道具成功后存盘同口径)。
         var persistService = session.Scene.GetComponent<GameSessionServiceComponent>();
-        await GameSessionPersistHelper.Save(persistService, GameSessionHelper.BuildDoc(game));
+        // 清盘是关键事件,force 立即存(并推进防抖的已落盘步号,保持状态一致)。
+        await GameSessionPersistHelper.SaveIfDue(persistService, game, Fantasy.Helper.TimeHelper.Now, force: true);
 
         // 回带最新权威态供客户端重投影(契约对齐 G2C_ClearToolResponse)。
         response.Step = game.Step;
