@@ -52,13 +52,13 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
 
     /// <summary>
     /// 玩法体力默认初始 / 上界。
-    /// Initial=20 ← 客户端 `MergeOrderConfig.EnergyStart` 常量(B 类,Stage 2 入表);
+    /// Initial=100 ← 与客户端 `MergeOrderConfig.EnergyStart` 同步(对齐策划体力/命运能量系统:初始 100 = 1 级满体上限,软上限读 global id=4=100);
     /// UpperBound=9999 = 存储硬顶 / ChangeProperty 单笔变更后余额上界,远大于软上限。
     ///   订单交付 +8、内购 / 许愿 / 盲盒等主动来源允许把体力顶到软上限以上(规则:其他来源不被软上限钳制);
     ///   9999 仅作 sanity 天花板挡荒谬值,真业务远不可能撞顶。
     /// 软上限 / 恢复 tick 改读 Luban global.xlsx(id=4/id=3),见 Awake 内。
     /// </summary>
-    private const long DefaultEnergyInitial = 20L;
+    private const long DefaultEnergyInitial = 100L;
     private const long DefaultEnergyUpperBound = 9999L;
 
     /// <summary>
