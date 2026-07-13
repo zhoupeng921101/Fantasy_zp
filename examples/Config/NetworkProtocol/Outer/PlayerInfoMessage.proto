@@ -30,6 +30,8 @@ message PlayerInfo
 	int64 ServerNowMs = 19;                    /// 服务端权威当前时刻(Unix 毫秒 UTC);客户端锚定倒计时基准,批次剩余 = ExpireMs - (ServerNowMs + 本地流逝)
 	bool InventoryLoaded = 20;                 /// 背包权威整份标志(true=Holdings/Lots 为权威全量;false=服务端读库降级,客户端保留本地投影不清空)
 	int64 LastUseReqSeq = 21;                  /// 使用事务幂等锚当前值(服务端持久);客户端登录 seed 本地 reqSeq 底,保重登后首个使用序号 > 服务端已处理值(防时钟回拨误判 Duplicate)
+	int32 AdEnergyUsedToday = 22;              /// 今日已用看广告领体力次数(服务端权威;快照前已跑懒每日重置,故为重置后当日值)
+	int32 AdEnergyDailyLimit = 23;             /// 每日看广告领体力次数上限(= AdEnergyConfigServer.DailyMax,供客户端算今日剩余)
 }
 
 /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)

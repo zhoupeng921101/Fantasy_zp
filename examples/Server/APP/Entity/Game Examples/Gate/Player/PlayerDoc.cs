@@ -158,6 +158,20 @@ public sealed class PlayerDoc
     /// </summary>
     public long WishLastResetUnixMs { get; set; }
 
+    // ---- 看广告领体力(每日限领)服务端权威(体力系统:补广告获取源,桩流程)----
+    // 与祈愿同范式的每日次数闸,独立计数(AdEnergyUsedToday + AdEnergyLastResetUnixMs),与祈愿计数彼此独立。
+    // 无灵力消耗(广告免费源);发体力走既有 Energy 字段 + ChangeProperty,此处只持每日闸状态。
+    // 缺省:AdEnergyUsedToday=0;AdEnergyLastResetUnixMs 首登 setOnInsert=nowMs(同 WishLastResetUnixMs 手法,避免 0L 被 TransitionLocal 判 1970 年、首登即误判跨天)。
+
+    /// <summary>今日已用看广告领体力次数(首登 setOnInsert 默认 0;懒每日重置跨天归零)。</summary>
+    public int AdEnergyUsedToday { get; set; }
+
+    /// <summary>
+    /// 上次看广告领体力每日重置时刻(Unix 毫秒,UTC)。跨天判据同祈愿(本值与 nowMs 的服务端本地日期不同日)。
+    /// 首登 setOnInsert=nowMs;每次懒重置成功后刷新到 nowMs。旧文档缺字段由 MigrateSchemaIfNeeded 补 nowMs。
+    /// </summary>
+    public long AdEnergyLastResetUnixMs { get; set; }
+
     // ---- 皮肤态 / 神庙装饰标志服务端权威(原云存档 blob 迁出第 3 批·子批 3b,2026-07)----
     // 三个「设置状态」(SET 语义,非累加计数):皮肤单色开关 + 当前单色 id + 已装饰厅数。
     // 皮肤 / 装饰纯装饰、低危,走 client-report 限界信任(存客户端上报值 + 基本 sanity),不建服务端配置自算。

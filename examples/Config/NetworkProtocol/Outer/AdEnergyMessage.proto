@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+// AdEnergyMessage.proto
+// 看广告领体力(每日限领)服务端权威协议(体力系统:补广告获取源,桩流程——无真实广告 SDK,服务端只做每日限次 + 发体力)。
+//
+// 每日看广告领体力次数闸 + 体力发一律服务端裁决(PlayerDoc.AdEnergyUsedToday / AdEnergyLastResetUnixMs)。
+// 请求不带账号 / 不带次数——身份从会话取,发放量与每日上限由服务端按 AdEnergyConfigServer 派生(反作弊红线)。
+// 处理原子:懒每日重置(按服务端本地日期跨天则 AdEnergyUsedToday=0)→ 门控(AdEnergyUsedToday >= DailyMax 拒)→
+//   检体力空间(已达软上限则拒、不消耗次数)→ 发体力 EnergyGrant(服务端夹 EnergyCap 软上限)→ AdEnergyUsedToday+1。
+// 与祈愿(WishMessage)同范式,区别:无灵力消耗(广告是免费源),故拒绝路径少一个 NotEnoughSoul。
+// 桩流程:本轮客户端点「看广告」直接发本 RPC(无真实广告播放);后续接广告 SDK 只在客户端「播放完成回调」后再发本 RPC,服务端不变。
+//
+// 设计基线:.claude/rules/data-authority.md(每日限领资源=服务端闸 + 派生、限界信任、身份服务端)。
+
+/// 看广告领体力裁决结果码
+enum ClaimAdEnergyResultCode
+{
+	Success = 0,              /// 成功:体力已发(夹软上限)、AdEnergyUsedToday+1;响应回带最新值供客户端对账
+	NotLoggedIn = 1,          /// 会话未挂账号(登录链路异常)→ 客户端重登
+	DailyLimitReached = 2,    /// 今日看广告领体力次数已达上限(懒重置后仍 >= DailyMax),不发、不消耗次数
+	OverLimit = 3,            /// 体力已达软上限,领了也发不进,不发、不消耗次数
+	ServiceUnavailable = 4,   /// MongoDB 不可达 / 服务未就绪 / 写库异常
+}
+
+/// 客户端请求看广告领体力(身份从会话取,不带账号 / 次数——服务端按 AdEnergyConfigServer 派生 + 按 PlayerDoc 判每日闸)
+message C2G_ClaimAdEnergyRequest // IRequest,G2C_ClaimAdEnergyResponse
+{
+}
+
+/// 服务端看广告领体力裁决响应
+message G2C_ClaimAdEnergyResponse // IResponse
+{
+	int32 ResultCode = 1;              /// 裁决结果码(ClaimAdEnergyResultCode)
+	int64 Energy = 2;                  /// 服务端当前权威体力(成功 = 发后夹软上限;失败 = 当前值;读取失败为 0)
+	int32 AdEnergyUsedToday = 3;       /// 今日已用看广告领体力次数(懒重置 + 本次成功 +1 后的权威值;失败 = 懒重置后当前值)
+	int32 AdEnergyDailyLimit = 4;      /// 每日看广告领体力次数上限(= AdEnergyConfigServer.DailyMax,供客户端算今日剩余次数)
+}

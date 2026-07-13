@@ -142,6 +142,117 @@ namespace Fantasy
         public bool TargetReached { get; set; }
     }
     /// <summary>
+    /// 客户端请求看广告领体力(身份从会话取,不带账号 / 次数——服务端按 AdEnergyConfigServer 派生 + 按 PlayerDoc 判每日闸)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_ClaimAdEnergyRequest : AMessage, IRequest
+    {
+        public static C2G_ClaimAdEnergyRequest Create(bool autoReturn = true)
+        {
+            var c2G_ClaimAdEnergyRequest = MessageObjectPool<C2G_ClaimAdEnergyRequest>.Rent();
+            c2G_ClaimAdEnergyRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_ClaimAdEnergyRequest.SetIsPool(false);
+            }
+            
+            return c2G_ClaimAdEnergyRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_ClaimAdEnergyRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_ClaimAdEnergyRequest; } 
+        [ProtoIgnore]
+        public G2C_ClaimAdEnergyResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端看广告领体力裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_ClaimAdEnergyResponse : AMessage, IResponse
+    {
+        public static G2C_ClaimAdEnergyResponse Create(bool autoReturn = true)
+        {
+            var g2C_ClaimAdEnergyResponse = MessageObjectPool<G2C_ClaimAdEnergyResponse>.Rent();
+            g2C_ClaimAdEnergyResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_ClaimAdEnergyResponse.SetIsPool(false);
+            }
+            
+            return g2C_ClaimAdEnergyResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Energy = default;
+            AdEnergyUsedToday = default;
+            AdEnergyDailyLimit = default;
+            MessageObjectPool<G2C_ClaimAdEnergyResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_ClaimAdEnergyResponse; } 
+        [ProtoMember(5)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码(ClaimAdEnergyResultCode)
+        /// </summary>
+        [ProtoMember(1)]
+        public int ResultCode { get; set; }
+        /// <summary>
+        /// 服务端当前权威体力(成功 = 发后夹软上限;失败 = 当前值;读取失败为 0)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Energy { get; set; }
+        /// <summary>
+        /// 今日已用看广告领体力次数(懒重置 + 本次成功 +1 后的权威值;失败 = 懒重置后当前值)
+        /// </summary>
+        [ProtoMember(3)]
+        public int AdEnergyUsedToday { get; set; }
+        /// <summary>
+        /// 每日看广告领体力次数上限(= AdEnergyConfigServer.DailyMax,供客户端算今日剩余次数)
+        /// </summary>
+        [ProtoMember(4)]
+        public int AdEnergyDailyLimit { get; set; }
+    }
+    /// <summary>
     /// 发牌调度器完整状态向量:候选队列 + 跨手累积调度态 + PRNG 游标。
     /// 供重连恢复与客户端发牌预测对账消费;权威态回带,不被客户端反向写入。
     /// 含 PRNG 游标(RngS0/RngS1)后,客户端可在 snapshot / 对账时完全复位预测发牌器游标,
@@ -5403,6 +5514,8 @@ namespace Fantasy
             ServerNowMs = default;
             InventoryLoaded = default;
             LastUseReqSeq = default;
+            AdEnergyUsedToday = default;
+            AdEnergyDailyLimit = default;
             MessageObjectPool<PlayerInfo>.Return(this);
         }
         /// <summary>
@@ -5510,6 +5623,16 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(21)]
         public long LastUseReqSeq { get; set; }
+        /// <summary>
+        /// 今日已用看广告领体力次数(服务端权威;快照前已跑懒每日重置,故为重置后当日值)
+        /// </summary>
+        [ProtoMember(22)]
+        public int AdEnergyUsedToday { get; set; }
+        /// <summary>
+        /// 每日看广告领体力次数上限(= AdEnergyConfigServer.DailyMax,供客户端算今日剩余)
+        /// </summary>
+        [ProtoMember(23)]
+        public int AdEnergyDailyLimit { get; set; }
     }
     /// <summary>
     /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)

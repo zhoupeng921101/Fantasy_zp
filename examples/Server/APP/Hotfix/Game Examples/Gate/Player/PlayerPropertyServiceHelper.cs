@@ -102,6 +102,9 @@ public static class PlayerPropertyServiceHelper
             //   避免 0L 被 TransitionLocal 判为 1970 年、首登即误判跨天)。
             .SetOnInsert(x => x.WishUsedToday, 0)
             .SetOnInsert(x => x.WishLastResetUnixMs, nowMs)
+            // 看广告领体力每日闸服务端权威:今日次数首登 0;上次重置时刻 setOnInsert=nowMs(同祈愿手法,避免 0L 被 TransitionLocal 判 1970 年、首登即误判跨天)。
+            .SetOnInsert(x => x.AdEnergyUsedToday, 0)
+            .SetOnInsert(x => x.AdEnergyLastResetUnixMs, nowMs)
             // 皮肤态 / 神庙装饰标志服务端权威(3b):缺省对齐客户端默认(彩色 0 / 单色 id -1=Unselected / 无装饰 0)。
             .SetOnInsert(x => x.SkinMono, 0)
             .SetOnInsert(x => x.SkinMonoId, -1)
@@ -150,6 +153,10 @@ public static class PlayerPropertyServiceHelper
             // 祈愿每日重置(3a):登录拉快照前跑一次懒重置,保证客户端登录看到的 WishUsedToday 是「重置后」的当日值。
             // 经上面补字段后 WishLastResetUnixMs 必 present(旧档补为 nowMs),跨天判据口径稳定。
             await WishHelper.ResetWishIfDue(service, accountId, doc, nowMs);
+
+            // 看广告领体力每日重置:登录拉快照前跑一次懒重置,保证客户端登录看到的 AdEnergyUsedToday 是「重置后」的当日值。
+            // 经上面补字段后 AdEnergyLastResetUnixMs 必 present(旧档补为 nowMs),跨天判据口径稳定。
+            await ClaimAdEnergyHelper.ResetAdEnergyIfDue(service, accountId, doc, nowMs);
 
             // 背包惰性过期结算:登录拉快照前剔除已过期批次(无补偿删库 + 记流水,有补偿留库待结算),
             // 就地更新 doc.ItemLots,使随后快照下发的批次轨不含已过期批次。
@@ -232,6 +239,9 @@ public static class PlayerPropertyServiceHelper
             //   (补 nowMs 而非 0,避免旧档补齐当次即被 TransitionLocal 判 1970 年跨天;present 则保留既有值)。
             { "WishUsedToday",       new BsonDocument("$ifNull", new BsonArray { "$WishUsedToday", 0 }) },
             { "WishLastResetUnixMs", new BsonDocument("$ifNull", new BsonArray { "$WishLastResetUnixMs", nowMs }) },
+            // 看广告领体力每日闸(schema < 13):旧档缺字段 → 次数补 0、上次重置时刻补 nowMs(present 则保留既有值)。
+            { "AdEnergyUsedToday",       new BsonDocument("$ifNull", new BsonArray { "$AdEnergyUsedToday", 0 }) },
+            { "AdEnergyLastResetUnixMs", new BsonDocument("$ifNull", new BsonArray { "$AdEnergyLastResetUnixMs", nowMs }) },
             // 皮肤态 / 神庙装饰标志服务端权威(3b):旧档(schema < 9)缺字段 → 补客户端默认(彩色 0 / 单色 id -1 / 无装饰 0),present 则保留既有值。
             { "SkinMono",            new BsonDocument("$ifNull", new BsonArray { "$SkinMono", 0 }) },
             { "SkinMonoId",          new BsonDocument("$ifNull", new BsonArray { "$SkinMonoId", -1 }) },
@@ -337,6 +347,9 @@ public static class PlayerPropertyServiceHelper
             // 祈愿服务端权威(3a):清档重置今日次数为 0、上次重置时刻为 nowMs(对齐首登 setOnInsert)。
             .Set(x => x.WishUsedToday, 0)
             .Set(x => x.WishLastResetUnixMs, nowMs)
+            // 看广告领体力每日闸:清档重置今日次数为 0、上次重置时刻为 nowMs(对齐首登 setOnInsert)。
+            .Set(x => x.AdEnergyUsedToday, 0)
+            .Set(x => x.AdEnergyLastResetUnixMs, nowMs)
             // 皮肤态 / 神庙装饰标志服务端权威(3b):清档重置为客户端默认(彩色 0 / 单色 id -1 / 无装饰 0)。
             .Set(x => x.SkinMono, 0)
             .Set(x => x.SkinMonoId, -1)
@@ -895,6 +908,9 @@ public static class PlayerPropertyServiceHelper
         //   客户端据此算今日剩余祈愿次数(替代从 blob 读)。
         info.WishUsedToday = doc.WishUsedToday;
         info.WishDailyLimit = WishConfigServer.WishDailyLimit;
+        // 看广告领体力每日闸服务端权威:今日次数(InitOrLoad 已跑 ResetAdEnergyIfDue,doc.AdEnergyUsedToday 为重置后当日值)+ 每日上限,客户端据此算今日剩余次数。
+        info.AdEnergyUsedToday = doc.AdEnergyUsedToday;
+        info.AdEnergyDailyLimit = AdEnergyConfigServer.DailyMax;
         // 皮肤态 / 神庙装饰标志服务端权威(3b):三态并入登录快照,客户端据此拿权威初值(替代从 blob 读)。
         info.SkinMono = doc.SkinMono;
         info.SkinMonoId = doc.SkinMonoId;

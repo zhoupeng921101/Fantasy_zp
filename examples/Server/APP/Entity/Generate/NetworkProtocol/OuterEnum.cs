@@ -27,6 +27,33 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 看广告领体力裁决结果码
+	/// </summary>
+	public enum ClaimAdEnergyResultCode
+	{
+		/// <summary>
+		/// 成功:体力已发(夹软上限)、AdEnergyUsedToday+1;响应回带最新值供客户端对账
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 今日看广告领体力次数已达上限(懒重置后仍 >= DailyMax),不发、不消耗次数
+		/// </summary>
+		DailyLimitReached = 2,
+		/// <summary>
+		/// 体力已达软上限,领了也发不进,不发、不消耗次数
+		/// </summary>
+		OverLimit = 3,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
 	/// 落子裁决结果码
 	/// </summary>
 	public enum PlaceResultCode

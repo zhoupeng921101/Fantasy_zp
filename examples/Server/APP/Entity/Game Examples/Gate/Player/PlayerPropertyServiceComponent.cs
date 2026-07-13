@@ -173,6 +173,6 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// <summary>已装饰厅数标量上界(sanity:客户端上报超此值拒。0 到上界闭区间合法;= 神庙厅数宽松天花板)。</summary>
     public long TempleDecoratedMax;
 
-    /// <summary>玩家数据 schema 版本(常量 12)。加持久字段时升版,旧档由登录链路 MigrateSchemaIfNeeded 按此版补齐。</summary>
-    public const int CurrentSchemaVersion = 12;
+    /// <summary>玩家数据 schema 版本(常量 13)。加持久字段时升版,旧档由登录链路 MigrateSchemaIfNeeded 按此版补齐。</summary>
+    public const int CurrentSchemaVersion = 13;
 }
