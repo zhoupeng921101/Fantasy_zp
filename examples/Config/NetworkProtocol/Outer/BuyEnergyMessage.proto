@@ -17,6 +17,7 @@ enum BuyEnergyResultCode
 	NotEnoughDiamond = 2,    /// 钻石不足,未扣钻、未发体力(响应回带当前钻石余额供 toast)
 	OverLimit = 3,           /// 体力加满发放量后超存储上界,未扣钻、未发体力(响应回带当前体力余额)
 	ServiceUnavailable = 4,  /// MongoDB 不可达 / 服务未就绪 / 写库异常,未生效
+	DailyLimitReached = 5,   /// 今日钻石购买体力次数已达上限(懒重置后仍 >= DailyLimit),未扣钻、未发、不消耗次数
 }
 
 /// 客户端请求购买体力(身份从会话取,不带账号 / 不带单价 / 不带发放量——服务端自己派生)
@@ -30,4 +31,6 @@ message G2C_BuyEnergyResponse // IResponse
 	BuyEnergyResultCode ResultCode = 1;   /// 裁决结果码
 	int64 Diamond = 2;                    /// 成功 = 扣后钻石余额;NotEnoughDiamond / 其它失败 = 当前钻石余额;读失败为 0
 	int64 Energy = 3;                     /// 成功 = 发后体力余额;OverLimit / 其它失败 = 当前体力余额;读失败为 0
+	int32 BuyEnergyUsedToday = 4;         /// 裁决后今日已用购买次数(服务端权威;成功 = +1 后当日值,拒绝 = 懒重置后当日值),客户端据此算剩余
+	int32 BuyEnergyDailyLimit = 5;        /// 每日购买次数上限(= BuyEnergyConfigServer.DailyLimit),客户端据此算剩余
 }

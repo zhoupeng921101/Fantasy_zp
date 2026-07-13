@@ -1083,10 +1083,12 @@ namespace Fantasy
             ResultCode = default;
             Diamond = default;
             Energy = default;
+            BuyEnergyUsedToday = default;
+            BuyEnergyDailyLimit = default;
             MessageObjectPool<G2C_BuyEnergyResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_BuyEnergyResponse; } 
-        [ProtoMember(4)]
+        [ProtoMember(6)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 裁决结果码
@@ -1103,6 +1105,16 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public long Energy { get; set; }
+        /// <summary>
+        /// 裁决后今日已用购买次数(服务端权威;成功 = +1 后当日值,拒绝 = 懒重置后当日值),客户端据此算剩余
+        /// </summary>
+        [ProtoMember(4)]
+        public int BuyEnergyUsedToday { get; set; }
+        /// <summary>
+        /// 每日购买次数上限(= BuyEnergyConfigServer.DailyLimit),客户端据此算剩余
+        /// </summary>
+        [ProtoMember(5)]
+        public int BuyEnergyDailyLimit { get; set; }
     }
     /// <summary>
     /// 客户端请求换装(身份从会话取,不带账号;服务端校验目标已解锁才切换)
@@ -5516,6 +5528,8 @@ namespace Fantasy
             LastUseReqSeq = default;
             AdEnergyUsedToday = default;
             AdEnergyDailyLimit = default;
+            BuyEnergyUsedToday = default;
+            BuyEnergyDailyLimit = default;
             MessageObjectPool<PlayerInfo>.Return(this);
         }
         /// <summary>
@@ -5633,6 +5647,16 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(23)]
         public int AdEnergyDailyLimit { get; set; }
+        /// <summary>
+        /// 今日已用钻石购买体力次数(服务端权威;快照前已跑懒每日重置,故为重置后当日值)
+        /// </summary>
+        [ProtoMember(24)]
+        public int BuyEnergyUsedToday { get; set; }
+        /// <summary>
+        /// 每日钻石购买体力次数上限(= BuyEnergyConfigServer.DailyLimit,供客户端算今日剩余)
+        /// </summary>
+        [ProtoMember(25)]
+        public int BuyEnergyDailyLimit { get; set; }
     }
     /// <summary>
     /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)

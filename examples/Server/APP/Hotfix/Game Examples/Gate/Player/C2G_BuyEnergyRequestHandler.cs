@@ -27,10 +27,12 @@ public sealed class C2G_BuyEnergyRequestHandler : MessageRPC<C2G_BuyEnergyReques
             return;
         }
 
-        var (resultCode, diamond, energy) = await BuyEnergyHelper.TryBuy(session.Scene, account);
+        var (resultCode, diamond, energy, buyEnergyUsedToday) = await BuyEnergyHelper.TryBuy(session.Scene, account);
         response.ResultCode = resultCode;
         response.Diamond = diamond;
         response.Energy = energy;
+        response.BuyEnergyUsedToday = buyEnergyUsedToday;
+        response.BuyEnergyDailyLimit = BuyEnergyConfigServer.DailyLimit;
     }
 
     /// <summary>从会话取登录时绑定的账号名(同 C2G_RenameRequestHandler 范式)。无登录标记返回 null。</summary>

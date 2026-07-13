@@ -12,4 +12,7 @@ public static class BuyEnergyConfigServer
 
     /// <summary>单次购买发放体力数(占位 100)。</summary>
     public const long EnergyGrant = 100L;
+
+    /// <summary>每日钻石购买体力次数上限(占位 5;设计付费获取「每日购买次数有限」)。后续「随特权等级解锁更多次数」是跨系统扩展,不在本轮。</summary>
+    public const int DailyLimit = 5;
 }

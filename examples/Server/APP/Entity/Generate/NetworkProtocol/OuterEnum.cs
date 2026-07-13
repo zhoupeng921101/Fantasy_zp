@@ -166,7 +166,11 @@ namespace Fantasy
 		/// <summary>
 		/// MongoDB 不可达 / 服务未就绪 / 写库异常,未生效
 		/// </summary>
-		ServiceUnavailable = 4
+		ServiceUnavailable = 4,
+		/// <summary>
+		/// 今日钻石购买体力次数已达上限(懒重置后仍 >= DailyLimit),未扣钻、未发、不消耗次数
+		/// </summary>
+		DailyLimitReached = 5
 	}
 
 	/// <summary>
