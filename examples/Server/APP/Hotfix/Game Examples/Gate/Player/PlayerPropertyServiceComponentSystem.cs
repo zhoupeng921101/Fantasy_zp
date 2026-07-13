@@ -62,6 +62,12 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
     private const long DefaultEnergyUpperBound = 9999L;
 
     /// <summary>
+    /// 体力溢出储存池独立上限(体力系统 Round G,占位 500 = 5× 软上限 100)。自然恢复超软上限的部分存入池,池满真弃;
+    /// 玩家手动取用把池转回体力。后续可上 Luban 与客户端同源。
+    /// </summary>
+    private const long DefaultEnergyOverflowPoolCap = 500L;
+
+    /// <summary>
     /// Diamond 单次 delta 上限(占位):远低于类型上界,挡粗暴改值。
     /// 真实业务侧最大单笔幅度(单次奖励 / 单次消耗)确定后,按倍率调参。
     /// </summary>
@@ -191,6 +197,7 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         var (energyRecoverAmount, energyRecoverInterval) = GlobalCfg.ParseEnergyRecover();
         self.EnergyRecoverIntervalMs = energyRecoverInterval * 1000L;
         self.EnergyRecoverPerTick = energyRecoverAmount;
+        self.EnergyOverflowPoolCap = DefaultEnergyOverflowPoolCap;
         self.DiamondSingleDeltaLimit = DefaultDiamondSingleDeltaLimit;
         self.SoulPowerSingleDeltaLimit = DefaultSoulPowerSingleDeltaLimit;
         self.PietySingleDeltaLimit = DefaultPietySingleDeltaLimit;
@@ -299,6 +306,12 @@ public sealed class PlayerPropertyServiceComponentAwakeSystem : AwakeSystem<Play
         if (self.EnergyRecoverSoftCap <= 0L || self.EnergyRecoverSoftCap > self.EnergyUpperBound)
         {
             Log.Error($"PlayerPropertyServiceComponent: EnergyRecoverSoftCap={self.EnergyRecoverSoftCap} 非法(必须 ∈ (0, EnergyUpperBound={self.EnergyUpperBound}])。");
+            return false;
+        }
+        // 溢出储存池上限:>= 0(0 = 关闭溢出储存,超软上限直接弃;> 0 = 存池,池满弃),且 <= long.MaxValue/2 留加法余量。
+        if (self.EnergyOverflowPoolCap < 0L || self.EnergyOverflowPoolCap > maxSafeUpperBound)
+        {
+            Log.Error($"PlayerPropertyServiceComponent: EnergyOverflowPoolCap={self.EnergyOverflowPoolCap} 非法(必须 ∈ [0, long.MaxValue/2])。");
             return false;
         }
         if (self.PropertyChangeMinIntervalMs < 0L)

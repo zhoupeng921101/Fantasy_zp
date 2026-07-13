@@ -77,6 +77,12 @@ public sealed class PlayerPropertyServiceComponent : Entity
     public long EnergyRecoverPerTick;
 
     /// <summary>
+    /// 体力溢出储存池独立上限(体力系统 Round G):自然恢复超软上限的部分存入池,池满则真弃。
+    /// 与体力软上限 / 硬顶彼此独立。**占位值**,真实容量按玩法节律确定。
+    /// </summary>
+    public long EnergyOverflowPoolCap;
+
+    /// <summary>
     /// 单次 ChangeProperty 的 delta 绝对值上限(限界信任·防粗暴改值,挡 |delta| 超过此值的客户端伪造)。
     /// 比类型上界严格得多:类型上界是「总余额上限」,本上限是「单笔变更上限」。
     /// **占位值**,真实业务侧最大单笔(如一次奖励/一次消耗)幅度确定后按比例调参。
@@ -173,6 +179,6 @@ public sealed class PlayerPropertyServiceComponent : Entity
     /// <summary>已装饰厅数标量上界(sanity:客户端上报超此值拒。0 到上界闭区间合法;= 神庙厅数宽松天花板)。</summary>
     public long TempleDecoratedMax;
 
-    /// <summary>玩家数据 schema 版本(常量 14)。加持久字段时升版,旧档由登录链路 MigrateSchemaIfNeeded 按此版补齐。</summary>
-    public const int CurrentSchemaVersion = 14;
+    /// <summary>玩家数据 schema 版本(常量 15)。加持久字段时升版,旧档由登录链路 MigrateSchemaIfNeeded 按此版补齐。</summary>
+    public const int CurrentSchemaVersion = 15;
 }

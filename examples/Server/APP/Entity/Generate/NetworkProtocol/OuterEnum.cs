@@ -734,6 +734,29 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 取用溢出储存裁决结果码
+	/// </summary>
+	public enum WithdrawOverflowResultCode
+	{
+		/// <summary>
+		/// 成功:池已转入体力(实际取用量 = min(池, 硬顶-体力));响应回带取用后体力 + 池余
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 无可取:池为 0,或体力已达存储硬顶转不进(未动数据)
+		/// </summary>
+		Empty = 2,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常,未生效
+		/// </summary>
+		ServiceUnavailable = 3
+	}
+
+	/// <summary>
 	/// 清档裁决结果码
 	/// </summary>
 	public enum ClearPlayerDataResultCode

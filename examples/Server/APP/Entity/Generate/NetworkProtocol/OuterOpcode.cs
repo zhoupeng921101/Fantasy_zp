@@ -210,21 +210,25 @@ namespace Fantasy
         public const uint C2G_WishForEnergyRequest = 268445497;
         /// <summary> 服务端祈愿裁决响应 </summary>
         public const uint G2C_WishForEnergyResponse = 402663225;
+        /// <summary> 客户端请求取用溢出储存(身份从会话取,不带账号 / 不带数量——服务端把整池尽量转入体力) </summary>
+        public const uint C2G_WithdrawOverflowRequest = 268445498;
+        /// <summary> 服务端取用溢出储存裁决响应 </summary>
+        public const uint G2C_WithdrawOverflowResponse = 402663226;
         /// <summary> 客户端请求清空自己的玩家数据(身份从会话取,不携带 playerId / 不接受指定清别人) </summary>
-        public const uint C2G_ClearPlayerDataRequest = 268445498;
+        public const uint C2G_ClearPlayerDataRequest = 268445499;
         /// <summary> 服务端清档裁决响应 </summary>
-        public const uint G2C_ClearPlayerDataResponse = 402663226;
+        public const uint G2C_ClearPlayerDataResponse = 402663227;
         /// <summary> 客户端 GM 清盘请求(身份从会话取,不携带账号) </summary>
-        public const uint C2G_ClearBoardRequest = 268445499;
+        public const uint C2G_ClearBoardRequest = 268445500;
         /// <summary> 服务端清盘裁决 + 最新权威态 </summary>
-        public const uint G2C_ClearBoardResponse = 402663227;
+        public const uint G2C_ClearBoardResponse = 402663228;
         /// <summary> 客户端 GM 清背包请求(身份从会话取,不携带账号) </summary>
-        public const uint C2G_ClearInventoryRequest = 268445500;
+        public const uint C2G_ClearInventoryRequest = 268445501;
         /// <summary> 服务端清背包裁决响应 </summary>
-        public const uint G2C_ClearInventoryResponse = 402663228;
+        public const uint G2C_ClearInventoryResponse = 402663229;
         /// <summary> 客户端 GM 发测试道具请求(身份从会话取,不携带账号) </summary>
-        public const uint C2G_GrantTestItemRequest = 268445501;
+        public const uint C2G_GrantTestItemRequest = 268445502;
         /// <summary> 服务端发测试道具裁决响应 </summary>
-        public const uint G2C_GrantTestItemResponse = 402663229;
+        public const uint G2C_GrantTestItemResponse = 402663230;
     }
 }

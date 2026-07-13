@@ -5530,6 +5530,7 @@ namespace Fantasy
             AdEnergyDailyLimit = default;
             BuyEnergyUsedToday = default;
             BuyEnergyDailyLimit = default;
+            EnergyOverflowPool = default;
             MessageObjectPool<PlayerInfo>.Return(this);
         }
         /// <summary>
@@ -5657,6 +5658,11 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(25)]
         public int BuyEnergyDailyLimit { get; set; }
+        /// <summary>
+        /// 体力溢出储存池当前值(服务端权威;自然恢复超软上限的存量,玩家手动取用转回体力)
+        /// </summary>
+        [ProtoMember(26)]
+        public long EnergyOverflowPool { get; set; }
     }
     /// <summary>
     /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)
@@ -7468,6 +7474,117 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(5)]
         public int WishDailyLimit { get; set; }
+    }
+    /// <summary>
+    /// 客户端请求取用溢出储存(身份从会话取,不带账号 / 不带数量——服务端把整池尽量转入体力)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_WithdrawOverflowRequest : AMessage, IRequest
+    {
+        public static C2G_WithdrawOverflowRequest Create(bool autoReturn = true)
+        {
+            var c2G_WithdrawOverflowRequest = MessageObjectPool<C2G_WithdrawOverflowRequest>.Rent();
+            c2G_WithdrawOverflowRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_WithdrawOverflowRequest.SetIsPool(false);
+            }
+            
+            return c2G_WithdrawOverflowRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_WithdrawOverflowRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_WithdrawOverflowRequest; } 
+        [ProtoIgnore]
+        public G2C_WithdrawOverflowResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端取用溢出储存裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_WithdrawOverflowResponse : AMessage, IResponse
+    {
+        public static G2C_WithdrawOverflowResponse Create(bool autoReturn = true)
+        {
+            var g2C_WithdrawOverflowResponse = MessageObjectPool<G2C_WithdrawOverflowResponse>.Rent();
+            g2C_WithdrawOverflowResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_WithdrawOverflowResponse.SetIsPool(false);
+            }
+            
+            return g2C_WithdrawOverflowResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Energy = default;
+            EnergyOverflowPool = default;
+            Withdrawn = default;
+            MessageObjectPool<G2C_WithdrawOverflowResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_WithdrawOverflowResponse; } 
+        [ProtoMember(5)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public WithdrawOverflowResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 服务端当前权威体力(成功 = 取用后;失败 = 当前值;读失败为 0)
+        /// </summary>
+        [ProtoMember(2)]
+        public long Energy { get; set; }
+        /// <summary>
+        /// 服务端当前权威溢出池余(成功 = 扣后;失败 = 当前值;读失败为 0)
+        /// </summary>
+        [ProtoMember(3)]
+        public long EnergyOverflowPool { get; set; }
+        /// <summary>
+        /// 本次实际取用量(成功 > 0;Empty = 0)
+        /// </summary>
+        [ProtoMember(4)]
+        public long Withdrawn { get; set; }
     }
     /// <summary>
     /// 客户端请求清空自己的玩家数据(身份从会话取,不携带 playerId / 不接受指定清别人)

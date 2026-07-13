@@ -82,6 +82,8 @@ public static class PlayerPropertyServiceHelper
             .SetOnInsert(x => x.GuardianExp, service.GuardianExpInitial)
             .SetOnInsert(x => x.Energy, service.EnergyInitial)
             .SetOnInsert(x => x.EnergyLastRecoverMs, nowMs)
+            // 体力溢出储存池(Round G):首登空池 0。
+            .SetOnInsert(x => x.EnergyOverflowPool, 0L)
             // P2 Phase 1·订单进度状态显式写默认值(数值字段缺失 BSON 反序列化为 0 与本处 setOnInsert 0 一致;
             // 但显式 setOnInsert 让首登 doc 字段全部 present,后续 CAS filter Eq(0L) / Eq(0) 形态稳定不依赖 absent==0 隐式语义)。
             .SetOnInsert(x => x.OrderCursor, 0)
@@ -217,6 +219,8 @@ public static class PlayerPropertyServiceHelper
             { "GuardianExp",         new BsonDocument("$ifNull", new BsonArray { "$GuardianExp", service.GuardianExpInitial }) },
             { "Energy",              new BsonDocument("$ifNull", new BsonArray { "$Energy", service.EnergyInitial }) },
             { "EnergyLastRecoverMs", new BsonDocument("$ifNull", new BsonArray { "$EnergyLastRecoverMs", nowMs }) },
+            // 体力溢出储存池(schema < 15):旧档缺字段 → 补空池 0(present 则保留既有值)。
+            { "EnergyOverflowPool",  new BsonDocument("$ifNull", new BsonArray { "$EnergyOverflowPool", 0L }) },
             // 订单进度三字段:v10 起**无条件重置**(非 $ifNull 保留)。订单池由代码 8 条迁 Luban TbMergeOrder 22 条,
             // 游标派生 pool[(cursor+i) mod 池长] 的取模基数变了,旧档 cursor/mask 指向的订单整体漂移、标记失义;
             // 重置三字段 = 等价重新发第一批(LastOrderRefreshMs=0 → 下次接触 bootstrap 重锚定),一次性、幂等
@@ -340,6 +344,8 @@ public static class PlayerPropertyServiceHelper
             .Set(x => x.GuardianExp, service.GuardianExpInitial)
             .Set(x => x.Energy, service.EnergyInitial)
             .Set(x => x.EnergyLastRecoverMs, nowMs)
+            // 体力溢出储存池(Round G):清档重置为空池 0(对齐首登 setOnInsert)。
+            .Set(x => x.EnergyOverflowPool, 0L)
             .Set(x => x.OrderCursor, 0)
             .Set(x => x.LastOrderRefreshMs, 0L)
             .Set(x => x.OrderDeliveredMask, 0)
@@ -927,6 +933,8 @@ public static class PlayerPropertyServiceHelper
         // 钻石购买体力每日闸服务端权威(Round F):今日次数(InitOrLoad 已跑 ResetBuyEnergyIfDue,为重置后当日值)+ 每日上限,客户端据此算今日剩余。
         info.BuyEnergyUsedToday = doc.BuyEnergyUsedToday;
         info.BuyEnergyDailyLimit = BuyEnergyConfigServer.DailyLimit;
+        // 体力溢出储存池(Round G):登录快照带池当前值(RecoverEnergyIfDue 已结算,doc.EnergyOverflowPool 为最新),客户端据此显示池 + 决定取用按钮可用。
+        info.EnergyOverflowPool = doc.EnergyOverflowPool;
         // 皮肤态 / 神庙装饰标志服务端权威(3b):三态并入登录快照,客户端据此拿权威初值(替代从 blob 读)。
         info.SkinMono = doc.SkinMono;
         info.SkinMonoId = doc.SkinMonoId;
@@ -1070,17 +1078,18 @@ public static class PlayerPropertyServiceHelper
     }
 
     /// <summary>
-    /// 体力被动恢复懒结算(P2):变更/查询 Energy 之前,按 EnergyLastRecoverMs 与 nowMs 流逝时间补恢复量。
-    /// 镜像客户端 MergeOrderState.ApplyTimeRegen 语义(规则:只有被动恢复有 SoftCap 软上限,主动来源可超):
-    ///   - doc.Energy &lt; SoftCap:$set(Energy, min(Energy + ticks*perTick, SoftCap)) + 推进 EnergyLastRecoverMs;
-    ///   - doc.Energy &gt;= SoftCap:**不**写 Energy(保留主动来源溢出的盈余),**仍**推进 EnergyLastRecoverMs
-    ///     (不囤积流逝的 ticks;一旦消费降到 SoftCap 以下,从那刻起重新累计)。
+    /// 体力被动恢复懒结算(P2 + Round G 溢出储存池):变更/查询 Energy 之前,按 EnergyLastRecoverMs 与 nowMs 流逝时间补恢复量。
+    /// 镜像客户端 MergeOrderState.ApplyTimeRegen 语义(规则:只有被动恢复有 SoftCap 软上限,主动来源可超),
+    /// 且超软上限的本该浪费的恢复量改路由进溢出储存池 EnergyOverflowPool(独立上限 EnergyOverflowPoolCap,池满真弃,不清零,玩家手动取用):
+    ///   - doc.Energy &lt; SoftCap:体力补到 min(Energy + ticks*perTick, SoftCap),超软上限的余量入池 + 推进 EnergyLastRecoverMs;
+    ///   - doc.Energy &gt;= SoftCap:**不**写 Energy(保留主动来源溢出的盈余),本轮恢复量全部入池,**仍**推进 EnergyLastRecoverMs
+    ///     (不囤积流逝的 ticks;一旦消费降到 SoftCap 以下,从那刻起重新累计)。池写入并入同一条 CAS 原子命令,不新增写次数。
     /// CAS:filter 含 EnergyLastRecoverMs == lastMs 防并发双结算(SV11 沿三老属性原子单写范式)。
     /// 旧文档兼容:doc.EnergyLastRecoverMs == 0(P0/P1 期玩家无此字段,BSON 反序列化默认 0)→
     /// 视为「首次接触新字段」,写入 nowMs 而不补恢复量(防 nowMs - 0 = epoch 流逝直接回满)。
     /// 失败(MongoDB 不可达 / 抖动)→ Warning 不抛、不阻断后续 ChangeProperty(返回的 doc 仍可用)。
     /// </summary>
-    private static async FTask RecoverEnergyIfDue(
+    internal static async FTask RecoverEnergyIfDue(
         PlayerPropertyServiceComponent service, string accountId, PlayerDoc doc, long nowMs)
     {
         var players = service.Players;
@@ -1122,6 +1131,9 @@ public static class PlayerPropertyServiceHelper
         var newLastMs = lastMs + advanceMs;
         var softCap = service.EnergyRecoverSoftCap;
         var perTick = service.EnergyRecoverPerTick;
+        // 溢出储存池(体力系统 Round G):恢复超软上限的部分入独立池(池满真弃)。
+        var totalRecover = ticks * perTick;
+        var poolCap = service.EnergyOverflowPoolCap;
 
         // CAS filter 共用:_id 锚 + EnergyLastRecoverMs == lastMs 防并发双结算。
         var casFilter = Builders<PlayerDoc>.Filter.And(
@@ -1138,7 +1150,11 @@ public static class PlayerPropertyServiceHelper
         // 与"主动来源可超 30"规则冲突 — 订单交付攒下的盈余会被下一次被动恢复抹掉)。
         if (doc.Energy >= softCap)
         {
+            // 已到/超软上限:不动 Energy(保主动来源盈余),本轮恢复量全部路由进溢出池(池满钳到 poolCap)。
+            var newPool = doc.EnergyOverflowPool + totalRecover;
+            if (newPool > poolCap) newPool = poolCap;
             var update = Builders<PlayerDoc>.Update.Set(x => x.EnergyLastRecoverMs, newLastMs);
+            if (newPool != doc.EnergyOverflowPool) update = update.Set(x => x.EnergyOverflowPool, newPool);
             try
             {
                 var newDoc = await players.FindOneAndUpdateAsync(casFilter, update, options);
@@ -1146,23 +1162,30 @@ public static class PlayerPropertyServiceHelper
                 {
                     doc.EnergyLastRecoverMs = newDoc.EnergyLastRecoverMs;
                     doc.Energy = newDoc.Energy;
-                    Log.Debug($"Energy 恢复结算跳过(已超软上限) account={accountId} energy={newDoc.Energy} softCap={softCap} lastRecoverMs={newDoc.EnergyLastRecoverMs}");
+                    doc.EnergyOverflowPool = newDoc.EnergyOverflowPool;
+                    Log.Debug($"Energy 恢复结算跳过(已超软上限)入溢出池 account={accountId} energy={newDoc.Energy} pool={newDoc.EnergyOverflowPool}/{poolCap} softCap={softCap} lastRecoverMs={newDoc.EnergyLastRecoverMs}");
                 }
             }
             catch (MongoException e)
             {
-                Log.Warning($"RecoverEnergyIfDue 推进 lastMs 失败 account={accountId} ticks={ticks},err={e.Message}");
+                Log.Warning($"RecoverEnergyIfDue 推进 lastMs / 入溢出池失败 account={accountId} ticks={ticks},err={e.Message}");
             }
             return;
         }
 
-        // doc.Energy < softCap:补恢复并钳到 softCap;条件过滤 + $set 直接置目标值,而非 $inc 防超 softCap。
-        var targetEnergy = doc.Energy + ticks * perTick;
-        if (targetEnergy > softCap) targetEnergy = softCap;
+        // doc.Energy < softCap:先把体力补到软上限,超出软上限的余量(长时间离线攒的 tick)路由进溢出池。
+        // 条件过滤 + $set 直接置目标值,而非 $inc 防超 softCap。
+        var room = softCap - doc.Energy;                       // > 0(本分支)
+        var energyGain = totalRecover < room ? totalRecover : room;
+        var overflowGain = totalRecover - energyGain;          // >= 0
+        var targetEnergy = doc.Energy + energyGain;            // <= softCap
+        var newPoolB = doc.EnergyOverflowPool + overflowGain;
+        if (newPoolB > poolCap) newPoolB = poolCap;
 
         var setUpdate = Builders<PlayerDoc>.Update
             .Set(x => x.Energy, targetEnergy)
             .Set(x => x.EnergyLastRecoverMs, newLastMs);
+        if (newPoolB != doc.EnergyOverflowPool) setUpdate = setUpdate.Set(x => x.EnergyOverflowPool, newPoolB);
         try
         {
             var newDoc = await players.FindOneAndUpdateAsync(casFilter, setUpdate, options);
@@ -1170,7 +1193,8 @@ public static class PlayerPropertyServiceHelper
             {
                 doc.Energy = newDoc.Energy;
                 doc.EnergyLastRecoverMs = newDoc.EnergyLastRecoverMs;
-                Log.Debug($"Energy 恢复结算 account={accountId} ticks={ticks} energy={newDoc.Energy} lastRecoverMs={newDoc.EnergyLastRecoverMs}");
+                doc.EnergyOverflowPool = newDoc.EnergyOverflowPool;
+                Log.Debug($"Energy 恢复结算 account={accountId} ticks={ticks} energy={newDoc.Energy} pool={newDoc.EnergyOverflowPool}/{poolCap} lastRecoverMs={newDoc.EnergyLastRecoverMs}");
             }
             // newDoc == null:并发已被另一路结算,本路当作已完成(下次变更时取到最新 doc)。
         }

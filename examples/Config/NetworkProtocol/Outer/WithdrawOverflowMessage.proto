@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+// WithdrawOverflowMessage.proto
+// 体力溢出储存池「取用」服务端权威协议(体力系统 Round G)。
+// 自然恢复超软上限的体力存入独立池 PlayerDoc.EnergyOverflowPool(由 RecoverEnergyIfDue 路由);
+// 玩家点「取用」把池转回体力:服务端原子把 min(池, EnergyUpperBound - 当前体力) 从池扣入体力 + 记体力流水 + delta 推送。
+// 请求不带账号 / 不带数量——身份从会话取,取用量服务端派生(反作弊红线,同 BuyEnergy / ClaimAdEnergy 范式)。
+// 空池 / 体力已达硬顶 → 无可取(Empty),不动数据。
+// 设计基线:.claude/rules/data-authority.md(资源服务端权威、限界信任、身份服务端)。
+
+/// 取用溢出储存裁决结果码
+enum WithdrawOverflowResultCode
+{
+	Success = 0,             /// 成功:池已转入体力(实际取用量 = min(池, 硬顶-体力));响应回带取用后体力 + 池余
+	NotLoggedIn = 1,         /// 会话未挂账号(登录链路异常)→ 客户端重登
+	Empty = 2,               /// 无可取:池为 0,或体力已达存储硬顶转不进(未动数据)
+	ServiceUnavailable = 3,  /// MongoDB 不可达 / 服务未就绪 / 写库异常,未生效
+}
+
+/// 客户端请求取用溢出储存(身份从会话取,不带账号 / 不带数量——服务端把整池尽量转入体力)
+message C2G_WithdrawOverflowRequest // IRequest,G2C_WithdrawOverflowResponse
+{
+}
+
+/// 服务端取用溢出储存裁决响应
+message G2C_WithdrawOverflowResponse // IResponse
+{
+	WithdrawOverflowResultCode ResultCode = 1;   /// 裁决结果码
+	int64 Energy = 2;                            /// 服务端当前权威体力(成功 = 取用后;失败 = 当前值;读失败为 0)
+	int64 EnergyOverflowPool = 3;                /// 服务端当前权威溢出池余(成功 = 扣后;失败 = 当前值;读失败为 0)
+	int64 Withdrawn = 4;                         /// 本次实际取用量(成功 > 0;Empty = 0)
+}

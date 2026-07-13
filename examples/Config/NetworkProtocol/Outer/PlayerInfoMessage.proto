@@ -34,6 +34,7 @@ message PlayerInfo
 	int32 AdEnergyDailyLimit = 23;             /// 每日看广告领体力次数上限(= AdEnergyConfigServer.DailyMax,供客户端算今日剩余)
 	int32 BuyEnergyUsedToday = 24;             /// 今日已用钻石购买体力次数(服务端权威;快照前已跑懒每日重置,故为重置后当日值)
 	int32 BuyEnergyDailyLimit = 25;            /// 每日钻石购买体力次数上限(= BuyEnergyConfigServer.DailyLimit,供客户端算今日剩余)
+	int64 EnergyOverflowPool = 26;            /// 体力溢出储存池当前值(服务端权威;自然恢复超软上限的存量,玩家手动取用转回体力)
 }
 
 /// 服务端登录后下发玩家信息整份快照(主动 push,取代 G2C_PropertyInitSnapshot)

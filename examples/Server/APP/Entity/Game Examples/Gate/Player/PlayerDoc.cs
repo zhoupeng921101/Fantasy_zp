@@ -70,6 +70,12 @@ public sealed class PlayerDoc
     /// <summary>体力上次恢复结算时刻(Unix 毫秒,UTC)。首登 setOnInsert 为 nowMs;每次结算成功后刷新到结算所覆盖的整数倍 tick 末端。</summary>
     public long EnergyLastRecoverMs { get; set; }
 
+    /// <summary>
+    /// 体力溢出储存池(体力系统 Round G):自然恢复到软上限后本该浪费的 tick 改存入此独立池(独立上限 EnergyOverflowPoolCap),
+    /// 不随自然恢复清零;玩家手动取用(C2G_WithdrawOverflow)把池转入体力。非负,缺省 0(新玩家空池)。
+    /// </summary>
+    public long EnergyOverflowPool { get; set; }
+
     // ---- P2 Phase 1·normal 订单·服务端权威订单进度状态 ----
     // 服务端不持「激活订单数组」(可由 OrderCursor + DeliveredMask 派生:激活订单 = pool[(cursor - ActiveOrders + i) % poolLen],
     // 已交付的槽按 mask 位置空)。这样订单池配置/数组长度改了不会让旧 doc 失配,且不冗余存可推导的数据。
