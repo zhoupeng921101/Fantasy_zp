@@ -6,7 +6,6 @@ using System.Threading;
 using Fantasy;
 using Fantasy.Async;
 using GameLogic;
-using GameLogic.Core;
 using MongoDB.Bson;
 using MongoDB.Driver;
 

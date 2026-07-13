@@ -50,8 +50,7 @@
     <Compile Include="$(BBSrc)\OfferOverrides.cs"           Link="ClientSrc\OfferOverrides.cs" />
     <Compile Include="$(BBSrc)\DynamicWeightDiff.cs"         Link="ClientSrc\DynamicWeightDiff.cs" />
 
-    <!-- 测量脚手架已移出生产模块到 Editor-only 测试目录;按新路径链接同一份源。 -->
-    <Compile Include="..\..\..\UnityProject\Assets\Editor\Tests\BlockBlast\GenCoreDeterminismHarness.cs" Link="ClientSrc\GenCoreDeterminismHarness.cs" />
+    <Compile Include="$(BBSrc)\GenCoreDeterminismHarness.cs"  Link="ClientSrc\GenCoreDeterminismHarness.cs" />
   </ItemGroup>
 
 </Project>

@@ -94,6 +94,6 @@
       <Compile Include="$(BBSrc)\BlockScoring.cs"           Link="BlockBlastGenCore\BlockScoring.cs" />
       <Compile Include="$(BBSrc)\OfferOverrides.cs"         Link="BlockBlastGenCore\OfferOverrides.cs" />
       <Compile Include="$(BBSrc)\DynamicWeightDiff.cs"      Link="BlockBlastGenCore\DynamicWeightDiff.cs" />
-      <Compile Include="..\..\..\..\..\UnityProject\Assets\Editor\Tests\BlockBlast\GenCoreDeterminismHarness.cs" Link="BlockBlastGenCore\GenCoreDeterminismHarness.cs" />
+      <Compile Include="$(BBSrc)\GenCoreDeterminismHarness.cs" Link="BlockBlastGenCore\GenCoreDeterminismHarness.cs" />
     </ItemGroup>
 </Project>

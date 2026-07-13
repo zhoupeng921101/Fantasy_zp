@@ -1,7 +1,5 @@
 using System.Collections.Generic;
 using GameLogic;
-using GameLogic.Algorithms;
-using GameLogic.Core;
 
 namespace Fantasy;
 

@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using GameLogic;
-using GameLogic.Algorithms;
-using GameLogic.Core;
 
 namespace BlockBlastGenCore
 {

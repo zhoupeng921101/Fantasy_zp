@@ -2,7 +2,7 @@ using System;
 using Fantasy.Async;
 using Fantasy.Network;
 using Fantasy.Network.Interface;
-using GameLogic.Core;
+using GameLogic;
 
 namespace Fantasy;
 

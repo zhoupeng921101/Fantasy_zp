@@ -2,8 +2,6 @@ using System.Collections.Generic;
 using Fantasy.Entitas;
 using Fantasy.Network;
 using GameLogic;
-using GameLogic.Algorithms;
-using GameLogic.Core;
 
 namespace Fantasy;
 
