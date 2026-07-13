@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+// BuyEnergyMessage.proto
+// 钻石购买体力(命运能量)服务端权威协议(体力系统 Round D)。
+// 单价与发放量服务端派生(BuyEnergyConfigServer),客户端请求不带数值——反作弊红线,同改名费(RenameMessage)范式。
+// 原子处理:先检体力空间(当前体力 + 发放量 ≤ 存储上界,超回 OverLimit 不扣钻)→ ChangeProperty(Diamond, -单价,
+//   serverAuthoritative)钻不足回 NotEnoughDiamond → 成功再 ChangeProperty(Energy, +发放量, serverAuthoritative)
+//   + 钻/体力双 delta 推送;发体力极端失败则退钻回 OverLimit,不留「扣了钻没体力」。
+// 身份从会话取(GateAccountFlagComponent → Account.Name = UUID),请求不带账号 / 不带数值。
+// 设计基线:.claude/rules/data-authority.md(资源服务端权威、限界信任)。
+
+/// 购买体力裁决结果码
+enum BuyEnergyResultCode
+{
+	Success = 0,             /// 成功:钻石已扣、体力已发;响应回带扣后钻石 + 发后体力供客户端对账
+	NotLoggedIn = 1,         /// 会话未挂账号(登录链路异常)→ 客户端重登
+	NotEnoughDiamond = 2,    /// 钻石不足,未扣钻、未发体力(响应回带当前钻石余额供 toast)
+	OverLimit = 3,           /// 体力加满发放量后超存储上界,未扣钻、未发体力(响应回带当前体力余额)
+	ServiceUnavailable = 4,  /// MongoDB 不可达 / 服务未就绪 / 写库异常,未生效
+}
+
+/// 客户端请求购买体力(身份从会话取,不带账号 / 不带单价 / 不带发放量——服务端自己派生)
+message C2G_BuyEnergyRequest // IRequest,G2C_BuyEnergyResponse
+{
+}
+
+/// 服务端购买体力裁决响应
+message G2C_BuyEnergyResponse // IResponse
+{
+	BuyEnergyResultCode ResultCode = 1;   /// 裁决结果码
+	int64 Diamond = 2;                    /// 成功 = 扣后钻石余额;NotEnoughDiamond / 其它失败 = 当前钻石余额;读失败为 0
+	int64 Energy = 3;                     /// 成功 = 发后体力余额;OverLimit / 其它失败 = 当前体力余额;读失败为 0
+}

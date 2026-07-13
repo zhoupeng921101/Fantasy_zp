@@ -116,6 +116,33 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 购买体力裁决结果码
+	/// </summary>
+	public enum BuyEnergyResultCode
+	{
+		/// <summary>
+		/// 成功:钻石已扣、体力已发;响应回带扣后钻石 + 发后体力供客户端对账
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 会话未挂账号(登录链路异常)→ 客户端重登
+		/// </summary>
+		NotLoggedIn = 1,
+		/// <summary>
+		/// 钻石不足,未扣钻、未发体力(响应回带当前钻石余额供 toast)
+		/// </summary>
+		NotEnoughDiamond = 2,
+		/// <summary>
+		/// 体力加满发放量后超存储上界,未扣钻、未发体力(响应回带当前体力余额)
+		/// </summary>
+		OverLimit = 3,
+		/// <summary>
+		/// MongoDB 不可达 / 服务未就绪 / 写库异常,未生效
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
 	/// 修饰种类(与客户端 AvatarType 对齐:1=头像 / 2=头像框)
 	/// </summary>
 	public enum CosmeticKind

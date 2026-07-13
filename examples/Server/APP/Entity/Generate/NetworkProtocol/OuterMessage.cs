@@ -889,6 +889,111 @@ namespace Fantasy
         public string SliceJson { get; set; }
     }
     /// <summary>
+    /// 客户端请求购买体力(身份从会话取,不带账号 / 不带单价 / 不带发放量——服务端自己派生)
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_BuyEnergyRequest : AMessage, IRequest
+    {
+        public static C2G_BuyEnergyRequest Create(bool autoReturn = true)
+        {
+            var c2G_BuyEnergyRequest = MessageObjectPool<C2G_BuyEnergyRequest>.Rent();
+            c2G_BuyEnergyRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_BuyEnergyRequest.SetIsPool(false);
+            }
+            
+            return c2G_BuyEnergyRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<C2G_BuyEnergyRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_BuyEnergyRequest; } 
+        [ProtoIgnore]
+        public G2C_BuyEnergyResponse ResponseType { get; set; }
+    }
+    /// <summary>
+    /// 服务端购买体力裁决响应
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_BuyEnergyResponse : AMessage, IResponse
+    {
+        public static G2C_BuyEnergyResponse Create(bool autoReturn = true)
+        {
+            var g2C_BuyEnergyResponse = MessageObjectPool<G2C_BuyEnergyResponse>.Rent();
+            g2C_BuyEnergyResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_BuyEnergyResponse.SetIsPool(false);
+            }
+            
+            return g2C_BuyEnergyResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            Diamond = default;
+            Energy = default;
+            MessageObjectPool<G2C_BuyEnergyResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_BuyEnergyResponse; } 
+        [ProtoMember(4)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public BuyEnergyResultCode ResultCode { get; set; }
+        /// <summary>
+        /// 成功 = 扣后钻石余额;NotEnoughDiamond / 其它失败 = 当前钻石余额;读失败为 0
+        /// </summary>
+        [ProtoMember(2)]
+        public long Diamond { get; set; }
+        /// <summary>
+        /// 成功 = 发后体力余额;OverLimit / 其它失败 = 当前体力余额;读失败为 0
+        /// </summary>
+        [ProtoMember(3)]
+        public long Energy { get; set; }
+    }
+    /// <summary>
     /// 客户端请求换装(身份从会话取,不带账号;服务端校验目标已解锁才切换)
     /// </summary>
     [Serializable]
