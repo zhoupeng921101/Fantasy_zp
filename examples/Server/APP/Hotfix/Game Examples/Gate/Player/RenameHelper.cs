@@ -9,8 +9,8 @@ namespace Fantasy;
 ///
 /// 昵称与改名次数服务端权威(PlayerDoc.Nickname / RenameCount);改名费服务端派生(RenameConfigServer.PriceFor)。
 /// 处理顺序(与客户端 PlayerRenameService.TryRename 同判定次序,身份/费用/次数一律服务端说了算):
-///   ① 基本 sanity:非空 / 不全空白 / 长度 ≤ RenameConfigServer.MaxNicknameLength(客户端已做完整合法性 + 屏蔽字,
-///      服务端本批只挡最基本非法,屏蔽字列表留后续加固);
+///   ① 基本 sanity:非空 / 不全空白 / 长度 ≤ RenameConfigServer.MaxNicknameLength;
+///   ①.5 屏蔽字终审:ProfanityFilterServer.IsClean 服务端裁定(前端预检不作数);机制已就位、词表待填(空表恒过);
 ///   ② 读 doc 拿当前 RenameCount + Diamond(未首登 → ServiceUnavailable);
 ///   ③ 算费:RenameCount==0 免费,否则 PriceFor(RenameCount);
 ///   ④ 需扣费 → PlayerPropertyServiceHelper.ChangeProperty(Diamond, -cost, serverAuthoritative:true,
@@ -49,6 +49,13 @@ public static class RenameHelper
         if (string.IsNullOrWhiteSpace(name) || name.Length > RenameConfigServer.MaxNicknameLength)
         {
             // 读当前权威值回带(供客户端回退显示);读失败也返 InvalidName(名字非法优先于服务读失败)。
+            var (curName, curCount, curDiamond) = await ReadCurrent(players, accountId);
+            return (RenameResultCode.InvalidName, curName, curCount, curDiamond);
+        }
+
+        // ①.5 屏蔽字服务端终审(合规底线:前端预检不作数,服务端裁定)。命中屏蔽词返 InvalidName + 当前权威值(供客户端回退)。
+        if (!ProfanityFilterServer.IsClean(name))
+        {
             var (curName, curCount, curDiamond) = await ReadCurrent(players, accountId);
             return (RenameResultCode.InvalidName, curName, curCount, curDiamond);
         }
