@@ -41,10 +41,11 @@ dotnet run -c Release --project Fantasy.Benchmark/Fantasy.Benchmark.csproj
 # 打包 NuGet 包（输出到 ./nupkg/）
 dotnet pack Fantasy.Packages/Fantasy.Net/Fantasy.Net.csproj -c Release
 
-# 导出网络协议：先编辑 Tools/ProtocolExportTool/ExporterSettings.json
-# （设置 NetworkProtocolDirectory / ...Server / ...Client 路径），然后：
-Tools/ProtocolExportTool/Run.bat        # Windows
-# 或：  dotnet Tools/ProtocolExportTool/Fantasy.ProtocolExportTool.dll export --silent
+# 导出网络协议（ExporterSettings.json 已入库为相对路径配置，锚定工具目录=进程 cwd，
+# 在任意 Fantasy worktree 内导出即直写该 worktree 的双端；改导出目标才需编辑它）：
+Tools/ProtocolExportTool/Run.bat        # Windows（自切入工具目录）
+# 或：  cd Tools/ProtocolExportTool && dotnet Fantasy.ProtocolExportTool.dll export --silent
+# 勿在别的目录直跑 DLL：相对配置按 cwd 解析，找不到 ExporterSettings.json 会直接失败
 
 # 重新构建 Unity 兼容的源生成器并复制进 Unity 包
 # （以 "Unity" 配置构建 SG = Roslyn 4.3.0，复制到 Fantasy.Unity/RoslynAnalyzers）

@@ -15,6 +15,9 @@ echo.
 
 set "SCRIPT_DIR=%~dp0"
 
+REM ExporterSettings.json 以相对路径锚定本目录(cwd),必须先切入再执行
+cd /d "%SCRIPT_DIR%"
+
 dotnet "%SCRIPT_DIR%Fantasy.ProtocolExportTool.dll" export --silent
 
 echo.
