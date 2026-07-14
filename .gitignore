@@ -38,3 +38,6 @@ Fantasy.Packages/Fantasy.Cil/Resources
 
 # SSH 私钥，禁止提交
 *.pem
+
+#dev-flow gate tickets (runtime evidence, never committed)
+.gate/
