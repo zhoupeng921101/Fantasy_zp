@@ -10,7 +10,7 @@ namespace Fantasy;
 [MemoryPackable]
 public sealed partial class TestSphereEvent : SphereEventArgs
 {
-    public string Tag { get; set; }
+    public string Tag { get; set; } = string.Empty;
 }
 
 public sealed class C2G_SubscribeSphereEventRequestHandler : MessageRPC<C2G_SubscribeSphereEventRequest, G2C_SubscribeSphereEventResponse>

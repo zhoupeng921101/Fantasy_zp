@@ -140,7 +140,7 @@ public class ProtocolGenerator
 
         if (createdSuccessfully)
         {
-            // 输出已移至 ProtocolExportService 统一处理
+            protocolExporter.SaveOpCodeLock();
         }
     }
 }

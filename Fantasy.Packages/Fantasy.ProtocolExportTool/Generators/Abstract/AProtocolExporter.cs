@@ -34,6 +34,16 @@ public abstract partial class AProtocolExporter( string protocolDirectory, strin
     protected readonly string ProtocolDirectory = NormalizePath(protocolDirectory);
     protected readonly string ClientDirectory = NormalizePath(clientDirectory);
     protected readonly string ServerDirectory = NormalizePath(serverDirectory);
+
+    private readonly OpCodeLock _opCodeLock = OpCodeLock.Load(NormalizePath(protocolDirectory));
+
+    /// <summary>
+    /// 回写 OpCode 保号账本;仅在整次导出成功后调用(失败不落盘,避免半成品分配进账本)。
+    /// </summary>
+    public void SaveOpCodeLock()
+    {
+        _opCodeLock.Save();
+    }
     
     private static string NormalizePath(string path)
     {
@@ -463,7 +473,7 @@ public abstract partial class AProtocolExporter( string protocolDirectory, strin
     {
         var validator = new ProtocolValidator();
         var isOuter = protocol.Equals("Outer", StringComparison.OrdinalIgnoreCase);
-        var opCodeGenerator = new OpCodeGenerator(isOuter);
+        var opCodeGenerator = new OpCodeGenerator(isOuter, _opCodeLock);
 
         // 1. 解析所有文件
         foreach (var (filePath, fileLines) in ReadProtocolFilesLinesWithPath(protocol))

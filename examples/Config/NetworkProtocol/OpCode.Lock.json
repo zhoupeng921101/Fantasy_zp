@@ -1,0 +1,201 @@
+{
+  "Inner": {
+    "AddressMessage": {
+      "G2A_TestMessage": 10001,
+      "G2SubScene_SentMessage": 10002
+    },
+    "AddressRequest": {
+      "G2A_TestRequest": 10001,
+      "G2M_RequestAddressableId": 10002,
+      "G2Chat_CreateRouteRequest": 10003,
+      "M2M_SendUnitRequest": 10004,
+      "G2M_CreateSubSceneRequest": 10005,
+      "G2SubScene_AddressableIdRequest": 10006,
+      "G2Map_TestRouteMessageRequest": 10007,
+      "G2Map_SubscribeSphereEventRequest": 10008,
+      "G2Map_UnsubscribeSphereEventRequest": 10009,
+      "Http2G_GmGrantItemRequest": 10010,
+      "Http2G_GmChangeCurrencyRequest": 10011,
+      "Http2G_GmSendMailRequest": 10012,
+      "Http2G_GmResetPlayerRequest": 10013
+    },
+    "AddressResponse": {
+      "G2A_TestResponse": 10001,
+      "M2G_ResponseAddressableId": 10002,
+      "Chat2G_CreateRouteResponse": 10003,
+      "M2M_SendUnitResponse": 10004,
+      "M2G_CreateSubSceneResponse": 10005,
+      "SubScene2G_AddressableIdResponse": 10006,
+      "Map2G_TestRouteMessageResponse": 10007,
+      "G2Map_SubscribeSphereEventResponse": 10008,
+      "Map2G_UnsubscribeSphereEventResponse": 10009,
+      "G2Http_GmGrantItemResponse": 10010,
+      "G2Http_GmChangeCurrencyResponse": 10011,
+      "G2Http_GmSendMailResponse": 10012,
+      "G2Http_GmResetPlayerResponse": 10013
+    },
+    "AddressableMessage": {
+      "G2M_SendAddressableMessage": 10001
+    },
+    "RoamingMessage": {
+      "Chat2M_TestMessage": 10001
+    },
+    "RoamingRequest": {
+      "G2Map_TestRoamingMessageRequest": 10001
+    },
+    "RoamingResponse": {
+      "Map2G_TestRoamingMessageResponse": 10001
+    }
+  },
+  "Outer": {
+    "AddressableMessage": {
+      "C2M_TestMessage": 10001,
+      "C2SubScene_TestMessage": 10002,
+      "C2SubScene_TestDisposeMessage": 10003
+    },
+    "AddressableRequest": {
+      "C2M_TestRequest": 10001,
+      "C2M_MoveToMapRequest": 10002
+    },
+    "AddressableResponse": {
+      "M2C_TestResponse": 10001,
+      "M2C_MoveToMapResponse": 10002
+    },
+    "CustomRouteMessage": {
+      "C2Chat_TestMessage": 10001,
+      "C2Chat_TestRequestPushMessage": 10002,
+      "Chat2C_PushMessage": 10003
+    },
+    "CustomRouteRequest": {
+      "C2Chat_TestMessageRequest": 10001
+    },
+    "CustomRouteResponse": {
+      "Chat2C_TestMessageResponse": 10001
+    },
+    "Message": {
+      "G2C_InventoryDeltaPush": 10001,
+      "C2G_TestEmptyMessage": 10002,
+      "C2G_TestMessage": 10003,
+      "C2G_TestRequestPushMessage": 10004,
+      "G2C_PushMessage": 10005,
+      "C2G_SendAddressableToMap": 10006,
+      "C2G_SendToSubSceneMessage": 10007,
+      "C2G_TestRouteToRoaming": 10008,
+      "C2G_TestRoamingToRoaming": 10009,
+      "G2C_PlayerInfoSnapshot": 10010,
+      "G2C_PropertyDeltaPush": 10011,
+      "C2G_TestEnumMessage": 10012
+    },
+    "Request": {
+      "C2G_ActivityIncrement": 10001,
+      "C2G_ClaimAdEnergyRequest": 10002,
+      "C2G_GameStartRequest": 10003,
+      "C2G_PlaceRequest": 10004,
+      "C2G_ClearToolRequest": 10005,
+      "C2G_GameSnapshotRequest": 10006,
+      "C2G_BuyEnergyRequest": 10007,
+      "C2G_EquipCosmeticRequest": 10008,
+      "C2G_UnlockCosmeticRequest": 10009,
+      "C2G_UnlockCosmeticBatchRequest": 10010,
+      "C2G_EnterMainGameRequest": 10011,
+      "C2G_LoginGameRequest": 10012,
+      "C2G_GoddessClaimRequest": 10013,
+      "C2G_GoddessOverflow": 10014,
+      "C2G_RetrieveElement": 10015,
+      "C2G_UseItem": 10016,
+      "C2G_MailListRequest": 10017,
+      "C2G_MailClaimRequest": 10018,
+      "C2G_DeliverOrderRequest": 10019,
+      "C2G_TestRequest": 10020,
+      "C2G_CreateAddressableRequest": 10021,
+      "C2G_CreateChatRouteRequest": 10022,
+      "C2G_CreateSubSceneRequest": 10023,
+      "C2G_CreateSubSceneAddressableRequest": 10024,
+      "C2G_ConnectRoamingRequest": 10025,
+      "C2G_LoginRoamingRequest": 10026,
+      "C2G_SubscribeSphereEventRequest": 10027,
+      "C2G_PublishSphereEventRequest": 10028,
+      "C2G_UnsubscribeSphereEventRequest": 10029,
+      "C2G_MapUnsubscribeSphereEventRequest": 10030,
+      "C2G_TestMemoryPackRequest": 10031,
+      "C2G_PropertyChangeRequest": 10032,
+      "C2G_PropertyBatchChangeRequest": 10033,
+      "C2G_QueryAttrLedger": 10034,
+      "C2G_SetProfileStateRequest": 10035,
+      "C2G_RankSubmitScoreRequest": 10036,
+      "C2G_RankQueryRequest": 10037,
+      "C2G_RedeemCodeRequest": 10038,
+      "C2G_RenameRequest": 10039,
+      "C2G_TarotPurchaseRequest": 10040,
+      "C2G_WishForEnergyRequest": 10041,
+      "C2G_WithdrawOverflowRequest": 10042,
+      "C2G_ClearPlayerDataRequest": 10043,
+      "C2G_ClearBoardRequest": 10044,
+      "C2G_ClearInventoryRequest": 10045,
+      "C2G_GrantTestItemRequest": 10046
+    },
+    "Response": {
+      "G2C_ActivityIncrementResponse": 10001,
+      "G2C_ClaimAdEnergyResponse": 10002,
+      "G2C_GameStartResponse": 10003,
+      "G2C_PlaceResponse": 10004,
+      "G2C_ClearToolResponse": 10005,
+      "G2C_GameSnapshotResponse": 10006,
+      "G2C_BuyEnergyResponse": 10007,
+      "G2C_EquipCosmeticResponse": 10008,
+      "G2C_UnlockCosmeticResponse": 10009,
+      "G2C_UnlockCosmeticBatchResponse": 10010,
+      "G2C_EnterMainGameResponse": 10011,
+      "G2C_LoginGameResponse": 10012,
+      "G2C_GoddessClaimResponse": 10013,
+      "G2C_GoddessOverflowResponse": 10014,
+      "G2C_RetrieveElementResponse": 10015,
+      "G2C_UseItemResponse": 10016,
+      "G2C_MailListResponse": 10017,
+      "G2C_MailClaimResponse": 10018,
+      "G2C_DeliverOrderResponse": 10019,
+      "G2C_TestResponse": 10020,
+      "G2C_CreateAddressableResponse": 10021,
+      "G2C_CreateChatRouteResponse": 10022,
+      "G2C_CreateSubSceneResponse": 10023,
+      "G2C_CreateSubSceneAddressableResponse": 10024,
+      "G2C_ConnectRoamingResponse": 10025,
+      "G2C_LoginRoamingResponse": 10026,
+      "G2C_SubscribeSphereEventResponse": 10027,
+      "G2C_PublishSphereEventResponse": 10028,
+      "G2C_UnsubscribeSphereEventResponse": 10029,
+      "G2C_MapUnsubscribeSphereEventResponse": 10030,
+      "G2C_TestMemoryPackResponse": 10031,
+      "G2C_PropertyChangeResponse": 10032,
+      "G2C_PropertyBatchChangeResponse": 10033,
+      "G2C_QueryAttrLedgerResponse": 10034,
+      "G2C_SetProfileStateResponse": 10035,
+      "G2C_RankSubmitScoreResponse": 10036,
+      "G2C_RankQueryResponse": 10037,
+      "G2C_RedeemCodeResponse": 10038,
+      "G2C_RenameResponse": 10039,
+      "G2C_TarotPurchaseResponse": 10040,
+      "G2C_WishForEnergyResponse": 10041,
+      "G2C_WithdrawOverflowResponse": 10042,
+      "G2C_ClearPlayerDataResponse": 10043,
+      "G2C_ClearBoardResponse": 10044,
+      "G2C_ClearInventoryResponse": 10045,
+      "G2C_GrantTestItemResponse": 10046
+    },
+    "RoamingMessage": {
+      "C2Chat_TestRoamingMessage": 10001,
+      "C2Map_TestRoamingMessage": 10002,
+      "C2Map_PushMessageToClient": 10003,
+      "Map2C_PushMessageToClient": 10004,
+      "C2Chat_TestSendMapMessage": 10005
+    },
+    "RoamingRequest": {
+      "C2Chat_TestRPCRoamingRequest": 10001,
+      "C2Map_TestTransferRequest": 10002
+    },
+    "RoamingResponse": {
+      "Chat2C_TestRPCRoamingResponse": 10001,
+      "Map2C_TestTransferResponse": 10002
+    }
+  }
+}

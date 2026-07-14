@@ -5,71 +5,77 @@ using Fantasy.ProtocolExportTool.Models;
 namespace Fantasy.ProtocolExportTool.Generators;
 
 /// <summary>
-/// OpCode 生成器 - 为消息生成唯一的 OpCode
+/// OpCode 生成器 - 为消息生成唯一的 OpCode。
+/// 计数器经 OpCodeLock 保号分配(已记录复用、新增取 max+1、删除留坟不复用),
+/// 不再使用内存递增计数器——编号与文件扫描顺序解耦。
 /// </summary>
-public sealed class OpCodeGenerator(bool isOuter)
+public sealed class OpCodeGenerator(bool isOuter, OpCodeLock opCodeLock)
 {
-    private readonly ProtocolOpCode _opCode = new();
+    /// <summary>
+    /// 与历史递增分配的起始值一致(ProtocolOpCode 时代的 Start),空账本首次导出的编号与旧逻辑逐一相同。
+    /// </summary>
+    private const uint Start = 10001;
+
+    private readonly string _side = isOuter ? "Outer" : "Inner";
 
     /// <summary>
     /// 为消息生成 OpCode
     /// </summary>
     public OpcodeInfo Generate(MessageDefinition message)
     {
-        var opcodeInfo = new OpcodeInfo
+        var (protocolType, category) = GetProtocolTypeAndCategory(message.InterfaceType);
+        var counter = opCodeLock.Acquire(_side, category, message.Name, Start);
+
+        return new OpcodeInfo
         {
             Name = message.Name,
             ProtocolType = message.Protocol.OpCodeType,
-            Comment = string.Join(" ", message.DocumentationComments)
+            Comment = string.Join(" ", message.DocumentationComments),
+            Code = OpCode.Create(message.Protocol.OpCodeType, protocolType, counter)
         };
-
-        var (protocolType, counter) = GetProtocolTypeAndCounter(message.InterfaceType);
-        opcodeInfo.Code = OpCode.Create(message.Protocol.OpCodeType, protocolType, counter);
-        
-        return opcodeInfo;
     }
 
     /// <summary>
-    /// 获取协议类型和计数器引用
+    /// 获取协议类型与账本类别(类别 = 独立编号空间,与旧实现中各计数器字段一一对应)
     /// </summary>
-    private (uint protocolType, uint counter) GetProtocolTypeAndCounter(string interfaceType)
+    private (uint protocolType, string category) GetProtocolTypeAndCategory(string interfaceType)
     {
         return interfaceType switch
         {
-            "IMessage" when isOuter => (_opCode.Message = OpCodeType.OuterMessage, _opCode.AMessage++),
-            "IMessage" when !isOuter => (_opCode.Message = OpCodeType.InnerMessage, _opCode.AMessage++),
+            "IMessage" when isOuter => (OpCodeType.OuterMessage, "Message"),
+            "IMessage" => (OpCodeType.InnerMessage, "Message"),
 
-            "IRequest" when isOuter => (_opCode.Request = OpCodeType.OuterRequest, _opCode.ARequest++),
-            "IRequest" when !isOuter => (_opCode.Request = OpCodeType.InnerRequest, _opCode.ARequest++),
+            "IRequest" when isOuter => (OpCodeType.OuterRequest, "Request"),
+            "IRequest" => (OpCodeType.InnerRequest, "Request"),
 
-            "IResponse" when isOuter => (_opCode.Response = OpCodeType.OuterResponse, _opCode.AResponse++),
-            "IResponse" when !isOuter => (_opCode.Response = OpCodeType.InnerResponse, _opCode.AResponse++),
+            "IResponse" when isOuter => (OpCodeType.OuterResponse, "Response"),
+            "IResponse" => (OpCodeType.InnerResponse, "Response"),
 
-            "IAddressMessage" when !isOuter => (_opCode.AddressMessage = OpCodeType.InnerAddressMessage, _opCode.AAddressMessage++),
-            "IAddressRequest" when !isOuter => (_opCode.AddressRequest = OpCodeType.InnerAddressRequest, _opCode.AAddressRequest++),
-            "IAddressResponse" when !isOuter => (_opCode.AddressResponse = OpCodeType.InnerAddressResponse, _opCode.AAddressResponse++),
+            "IAddressMessage" when !isOuter => (OpCodeType.InnerAddressMessage, "AddressMessage"),
+            "IAddressRequest" when !isOuter => (OpCodeType.InnerAddressRequest, "AddressRequest"),
+            "IAddressResponse" when !isOuter => (OpCodeType.InnerAddressResponse, "AddressResponse"),
 
-            "IAddressableMessage" when isOuter => (_opCode.AddressableMessage = OpCodeType.OuterAddressableMessage, _opCode.AAddressableMessage++),
-            "IAddressableMessage" when !isOuter => (_opCode.AddressableMessage = OpCodeType.InnerAddressableMessage, _opCode.AAddressableMessage++),
+            "IAddressableMessage" when isOuter => (OpCodeType.OuterAddressableMessage, "AddressableMessage"),
+            "IAddressableMessage" => (OpCodeType.InnerAddressableMessage, "AddressableMessage"),
 
-            "IAddressableRequest" when isOuter => (_opCode.AddressableRequest = OpCodeType.OuterAddressableRequest, _opCode.AAddressableRequest++),
-            "IAddressableRequest" when !isOuter => (_opCode.AddressableRequest = OpCodeType.InnerAddressableRequest, _opCode.AAddressableRequest++),
+            "IAddressableRequest" when isOuter => (OpCodeType.OuterAddressableRequest, "AddressableRequest"),
+            "IAddressableRequest" => (OpCodeType.InnerAddressableRequest, "AddressableRequest"),
 
-            "IAddressableResponse" when isOuter => (_opCode.AddressableResponse = OpCodeType.OuterAddressableResponse, _opCode.AAddressableResponse++),
-            "IAddressableResponse" when !isOuter => (_opCode.AddressableResponse = OpCodeType.InnerAddressableResponse, _opCode.AAddressableResponse++),
+            "IAddressableResponse" when isOuter => (OpCodeType.OuterAddressableResponse, "AddressableResponse"),
+            "IAddressableResponse" => (OpCodeType.InnerAddressableResponse, "AddressableResponse"),
 
-            "ICustomRouteMessage" when isOuter => (_opCode.CustomRouteMessage = OpCodeType.OuterCustomRouteMessage, _opCode.ACustomRouteMessage++),
-            "ICustomRouteRequest" when isOuter => (_opCode.CustomRouteRequest = OpCodeType.OuterCustomRouteRequest, _opCode.ACustomRouteRequest++),
-            "ICustomRouteResponse" when isOuter => (_opCode.CustomRouteResponse = OpCodeType.OuterCustomRouteResponse, _opCode.ACustomRouteResponse++),
+            "ICustomRouteMessage" when isOuter => (OpCodeType.OuterCustomRouteMessage, "CustomRouteMessage"),
+            "ICustomRouteRequest" when isOuter => (OpCodeType.OuterCustomRouteRequest, "CustomRouteRequest"),
+            "ICustomRouteResponse" when isOuter => (OpCodeType.OuterCustomRouteResponse, "CustomRouteResponse"),
 
-            "IRoamingMessage" when isOuter => (_opCode.RoamingMessage = OpCodeType.OuterRoamingMessage, _opCode.ARoamingMessage++),
-            "IRoamingMessage" when !isOuter => (_opCode.RoamingMessage = OpCodeType.InnerRoamingMessage, _opCode.ARoamingMessage++),
+            "IRoamingMessage" when isOuter => (OpCodeType.OuterRoamingMessage, "RoamingMessage"),
+            "IRoamingMessage" => (OpCodeType.InnerRoamingMessage, "RoamingMessage"),
 
-            "IRoamingRequest" when isOuter => (_opCode.RoamingRequest = OpCodeType.OuterRoamingRequest, _opCode.ARoamingRequest++),
-            "IRoamingRequest" when !isOuter => (_opCode.RoamingRequest = OpCodeType.InnerRoamingRequest, _opCode.ARoamingRequest++),
+            "IRoamingRequest" when isOuter => (OpCodeType.OuterRoamingRequest, "RoamingRequest"),
+            "IRoamingRequest" => (OpCodeType.InnerRoamingRequest, "RoamingRequest"),
 
-            "IRoamingResponse" when isOuter => (_opCode.RoamingResponse = OpCodeType.OuterRoamingResponse, _opCode.ARoamingResponse++),
-            "IRoamingResponse" when !isOuter => (_opCode.RoamingResponse = OpCodeType.InnerRoamingResponse, _opCode.ARoamingResponse++),
+            "IRoamingResponse" when isOuter => (OpCodeType.OuterRoamingResponse, "RoamingResponse"),
+            "IRoamingResponse" => (OpCodeType.InnerRoamingResponse, "RoamingResponse"),
 
             _ => throw new InvalidOperationException($"Unsupported interface type: {interfaceType}")
         };
