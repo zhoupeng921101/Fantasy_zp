@@ -69,3 +69,8 @@
 #*.RTF   diff=astextplain
 
 *.sh text eol=lf
+
+# 协议生成物与保号账本行尾定死 LF(双向),与导出工具的 LF 写出策略配对,
+# 行尾归一不押各环境转换配置
+examples/Server/APP/Entity/Generate/NetworkProtocol/** text eol=lf
+examples/Config/NetworkProtocol/OpCode.Lock.json text eol=lf

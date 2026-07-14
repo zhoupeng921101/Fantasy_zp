@@ -112,7 +112,8 @@ public sealed class OpCodeLock
             }
 
             var json = JsonSerializer.Serialize(shape, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_filePath, json, new UTF8Encoding(false));
+            // 行尾统一 LF,与生成物同策略(WriteIndented 在 Windows 产出 CRLF)
+            File.WriteAllText(_filePath, json.Replace("\r\n", "\n"), new UTF8Encoding(false));
         }
     }
 }
