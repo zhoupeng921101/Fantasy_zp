@@ -1,16 +1,16 @@
 {
     "Export": {
         "NetworkProtocolDirectory": {
-            "Value": "D:/work/TEngine_block/Fantasy/examples/Config/NetworkProtocol",
-            "Comment": "ProtoBuf文件所在的文件夹位置"
+            "Value": "../../examples/Config/NetworkProtocol",
+            "Comment": "ProtoBuf文件所在的文件夹位置(相对路径锚定本工具目录=进程 cwd,导出须在本目录执行;相对化使同一份配置在任意 Fantasy worktree 内直写该 worktree 自己的双端)"
         },
         "NetworkProtocolServerDirectory": {
-            "Value": "D:/work/TEngine_block/Fantasy/examples/Server/APP/Entity/Generate/NetworkProtocol",
+            "Value": "../../examples/Server/APP/Entity/Generate/NetworkProtocol",
             "Comment": "ProtoBuf生成到服务端的文件夹位置"
         },
         "NetworkProtocolClientDirectory": {
-            "Value": "D:/work/TEngine_block/UnityProject/Assets/Fantasy/Generate/NetworkProtocol",
-            "Comment": "ProtoBuf生成到客户端的文件夹位置(直指 UnityProject,免手工同步)"
+            "Value": "../../../UnityProject/Assets/Fantasy/Generate/NetworkProtocol",
+            "Comment": "ProtoBuf生成到客户端的文件夹位置(直指与 Fantasy 并列的 UnityProject,免手工同步;槽位内即槽位自己的 UnityProject)"
         }
     }
 }
