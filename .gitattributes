@@ -71,6 +71,9 @@
 *.sh text eol=lf
 
 # 协议生成物与保号账本行尾定死 LF(双向),与导出工具的 LF 写出策略配对,
-# 行尾归一不押各环境转换配置
-examples/Server/APP/Entity/Generate/NetworkProtocol/** text eol=lf
+# 行尾归一不押各环境转换配置。
+# 生成物 merge=genours:不做文本合并,合并自动保留本侧、随后重导覆盖(dev-flow「冲突分流」);
+# 账本 OpCode.Lock.json 不设 merge 驱动——撞号必须显式冲突、人工按规则处置。
+# 驱动是仓库本地配置,新克隆需一次性执行:git config merge.genours.driver true
+examples/Server/APP/Entity/Generate/NetworkProtocol/** text eol=lf merge=genours
 examples/Config/NetworkProtocol/OpCode.Lock.json text eol=lf
