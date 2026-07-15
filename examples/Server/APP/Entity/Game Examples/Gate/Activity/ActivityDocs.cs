@@ -18,7 +18,9 @@ namespace Fantasy;
 ///   — 32 SendMailTo 入口签名直接吃散字段(sender/title/content/expireDays/rewardId),
 ///     不另引「activity 查 mail 模板」中间层(减少一次查表 + 避免循环依赖)。
 /// 后续刀加新活动 = 加新行 + 在服务端 ActivityType 分支按需加触发钩子。
+/// IgnoreExtraElements 容忍旧 schema 文档(曾带退役的 Reward int 字段)反序列化不崩(同 RedeemCodeDoc 退役字段约定)。
 /// </summary>
+[BsonIgnoreExtraElements]
 public sealed class ActivityDefDoc
 {
     /// <summary>活动 id,作为 _id 主键。对应 activity.xlsx activity_id。</summary>

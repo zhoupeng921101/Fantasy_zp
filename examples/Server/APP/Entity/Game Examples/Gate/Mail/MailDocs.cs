@@ -14,7 +14,9 @@ namespace Fantasy;
 /// 集合 mail_template;_id = 模板 id 字符串(与客户端 mail.xlsx 的 id 同源, SV13)。
 /// 全服广播:每个账号都应收所有活跃(未过期)模板,减去该账号已领过的(已领仍下发但标已领态)。
 /// 对外协议中该邮件的标识 MailId = "t{TemplateId}"(广播与定向用同一标识空间, 见 MailDecisionHelper)。
+/// IgnoreExtraElements 容忍旧 schema 文档(曾带退役的 RewardId int 字段)反序列化不崩(同 RedeemCodeDoc 退役字段约定)。
 /// </summary>
+[BsonIgnoreExtraElements]
 public sealed class MailTemplateDoc
 {
     /// <summary>模板 id 字符串,作为 _id 主键(取客户端 mail.xlsx 的 id, SV13)。</summary>
@@ -44,8 +46,10 @@ public sealed class MailTemplateDoc
 /// 系统定向邮件文档:服务端进程内发奖入口(设计 32 §3.5)投给指定账号的邮件。
 /// 集合 mail_directed;_id = 生成的定向邮件唯一 id(GUID)。
 /// 仅 Account 字段所指账号应收;对外标识 MailId = "d{DirectedId}"。
-/// 与广播模板走同一套领取 / 防重 / 抽奖机制(领取记录都按 (账号,MailId) 原子写)。
+/// 与广播模板走同一套领取 / 防重机制(领取记录都按 (账号,MailId) 原子写)。
+/// IgnoreExtraElements 容忍旧 schema 文档(曾带退役的 RewardId int 字段)反序列化不崩(同 RedeemCodeDoc 退役字段约定)。
 /// </summary>
+[BsonIgnoreExtraElements]
 public sealed class MailDirectedDoc
 {
     /// <summary>定向邮件唯一 id,作为 _id 主键(发奖入口生成的 GUID)。</summary>

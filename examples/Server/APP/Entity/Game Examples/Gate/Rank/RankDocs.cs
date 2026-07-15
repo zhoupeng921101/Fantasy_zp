@@ -74,7 +74,9 @@ public sealed class RankDefDoc
 /// 名次奖励档(榜定义内嵌项):一个名次区间对应一组内联奖励条目。
 /// 对应 rank.xlsx 一行的 rank_min / rank_max / reward;同榜多行 = 多档,聚合进 RankDefDoc.Tiers。
 /// 结算时按账号名次落哪档发哪档奖(空列表 = 该档无奖, 设计 33 §3.2)。
+/// IgnoreExtraElements 容忍旧 schema 文档(曾带退役的 Reward int 字段)反序列化不崩(同 RedeemCodeDoc 退役字段约定)。
 /// </summary>
+[BsonIgnoreExtraElements]
 public sealed class RankRewardTierDoc
 {
     /// <summary>名次区间下界(含)。对应 rank.xlsx rank_min。</summary>
