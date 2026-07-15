@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace Fantasy;
@@ -5,6 +6,7 @@ namespace Fantasy;
 // 邮件服务端存储的原生 MongoDB 文档定义(非框架 Entity)。
 // 领奖防重需要 MongoDB 原子条件操作(唯一键插入)防并发双领,
 // 框架 IDatabase 高层 API 只能先读后写(设计 32 §五 明令禁止),故直接用原生 IMongoDatabase + BSON 文档。
+// 附件以内嵌 RewardEntryDoc 列表表达(类型 + 目标 id + 数量),领取时全部发放(服务端权威到账)。
 // 设计基线:design-docs/32-mail-server.md §二/§五。
 
 /// <summary>
@@ -31,8 +33,8 @@ public sealed class MailTemplateDoc
     /// <summary>有效期(天);&lt;=0 用全局 retain_days 兜底。对应 mail.xlsx expire_days。</summary>
     public int ExpireDays { get; set; }
 
-    /// <summary>附件礼包随机库 id(0 = 无奖励;指向 gift_pool 的 Index)。对应 mail.xlsx reward_id。</summary>
-    public int RewardId { get; set; }
+    /// <summary>内嵌附件奖励条目(空列表 = 无奖励纯通知邮件),领取时全部发放。</summary>
+    public List<RewardEntryDoc> Rewards { get; set; } = new List<RewardEntryDoc>();
 
     /// <summary>发件/收件时间基线(服务端 Unix 毫秒, UTC),过期 = 此时间 + 有效期天数。</summary>
     public long SendUnixMs { get; set; }
@@ -65,8 +67,8 @@ public sealed class MailDirectedDoc
     /// <summary>有效期(天);&lt;=0 用全局 retain_days 兜底。</summary>
     public int ExpireDays { get; set; }
 
-    /// <summary>附件礼包随机库 id(0 = 无奖励;指向 gift_pool 的 Index)。</summary>
-    public int RewardId { get; set; }
+    /// <summary>内嵌附件奖励条目(空列表 = 无奖励纯通知邮件),领取时全部发放。</summary>
+    public List<RewardEntryDoc> Rewards { get; set; } = new List<RewardEntryDoc>();
 
     /// <summary>发件/收件时间(服务端 Unix 毫秒, UTC),过期 = 此时间 + 有效期天数。</summary>
     public long SendUnixMs { get; set; }
@@ -91,28 +93,4 @@ public sealed class MailClaimRecordDoc
 
     /// <summary>领取成功的服务端时刻(Unix 毫秒, UTC)。</summary>
     public long ClaimedUnixMs { get; set; }
-}
-
-/// <summary>
-/// 礼包随机库条目:服务端抽奖用(与客户端 gift_random 同源导出, SV13)。
-/// 集合 gift_pool;_id = 行主键 auto_id。同 Index = 一个奖池;按 Rate 权重抽一条得「道具 id × 数量」。
-/// 设计 32 读前必看 第 2 条:抽奖在服务端,客户端不申报、不能虚增。
-/// </summary>
-public sealed class GiftPoolEntryDoc
-{
-    /// <summary>行主键(对应 gift_random auto_id),作为 _id 主键。</summary>
-    [BsonId]
-    public int AutoId { get; set; }
-
-    /// <summary>所属礼包 id(同 Index = 一个奖池)。对应 gift_random index。</summary>
-    public int Index { get; set; }
-
-    /// <summary>奖品道具 id(指向 item.TbItemDef)。对应 gift_random item_id。</summary>
-    public int ItemId { get; set; }
-
-    /// <summary>该奖品数量。对应 gift_random num。</summary>
-    public int Num { get; set; }
-
-    /// <summary>权重(抽中概率 = rate / 同 Index 全部 rate 之和)。对应 gift_random rate。</summary>
-    public int Rate { get; set; }
 }

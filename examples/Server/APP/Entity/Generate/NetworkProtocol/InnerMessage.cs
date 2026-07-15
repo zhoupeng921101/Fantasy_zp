@@ -1305,7 +1305,7 @@ namespace Fantasy
             TitleTextId = default;
             ContentTextId = default;
             ExpireDays = default;
-            RewardId = default;
+            Rewards = default;
             MessageObjectPool<Http2G_GmSendMailRequest>.Return(this);
         }
         public uint OpCode() { return InnerOpcode.Http2G_GmSendMailRequest; } 
@@ -1322,7 +1322,7 @@ namespace Fantasy
         [ProtoMember(5)]
         public int ExpireDays { get; set; }
         [ProtoMember(6)]
-        public int RewardId { get; set; }
+        public string Rewards { get; set; }
     }
     [Serializable]
     [ProtoContract]

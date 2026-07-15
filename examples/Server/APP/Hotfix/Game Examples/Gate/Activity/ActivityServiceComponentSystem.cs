@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Fantasy.Async;
 using Fantasy.Entitas.Interface;
+using GameConfig.reward;
 using MongoDB.Driver;
 
 namespace Fantasy;
@@ -23,13 +24,13 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
     ///   - Type          ← activity.xlsx type(1=Login,本子单仅接此)
     ///   - Cycle         ← activity.xlsx cycle(1=Daily 跨日重置 / 3=OneShot 永发一次性)
     ///   - Target        ← activity.xlsx target(达标阈值)
-    ///   - Reward        ← activity.xlsx reward(礼包随机库 id;指向 gift_pool 的 Index)
+    ///   - Rewards       ← activity.xlsx reward(内联奖励条目列表;空列表 = 仅记已发不投邮件)
     ///   - 邮件字段(展开 mail_def):SenderTextId / TitleTextId / ContentTextId / ExpireDays
     ///     验收期 textId 未必有多语言条目,客户端展示落空值,不影响 SV 真往返(看 mails 集合 + 抽奖落地)。
     ///   - StartAtMs=0 / EndAtMs=0(永远开放)
     /// 行 1 = 每日登录奖(Tier 4 第 1 子单 PASS 基线,设计 39)。
     /// 行 2 = EVENT 头像解锁活动(Tier 4 第 2 子单,设计 40):累计登录 7 次永久解锁限定头像 avt_star。
-    ///        Reward=6101 EVENT 礼包(MailServiceComponentSystem.GiftPoolSeeds 已注册,单项必中 ItemId=30101 × 1)。
+    ///        Rewards 内联 EVENT 头像解锁道具 30101 × 1(客户端段解析 UseEffect=5 EVENT 消费)。
     ///        Cycle=OneShot 一次性永发(达标后 LastClaimedCycleKey=1 永远 ≥ 1,沿 §3.3)。
     /// 后续 N 套活动 = 加新条 + 必要时在 ActivityEvalHelper 加新 Type 分支触发钩子(设计 39 §3.5)。
     /// 生产可直接以本表运营(运营改 textId / Reward id 改本声明 + 重启 → ReconcileDefs upsert 写入已存 MongoDB 文档)。
@@ -44,7 +45,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Type = 1,            // Login
             Cycle = 1,           // Daily
             Target = 1,          // 登录一次即达标
-            Reward = 1005,       // 礼包随机库 id;1005 与排行榜 2-10 名档复用同库(MailServiceComponentSystem.GiftPoolSeeds 已注册)
+            Rewards = Item(30002, 2),   // 每日登录奖:内联道具样例(生产按运营口径替换)
             SenderTextId = 110700,
             TitleTextId = 110732,
             ContentTextId = 110733,
@@ -60,7 +61,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Type = 1,             // Login(每次登录 +1)
             Cycle = 3,            // OneShot(永发一次性)
             Target = 7,           // 累计登录 7 次达标
-            Reward = 6101,        // EVENT 礼包 id(GiftPoolSeeds 已注册:Index=6101 → ItemId=30101 × 1, Rate=100 单项必中)
+            Rewards = Item(30101, 1),   // EVENT 头像解锁道具 30101 × 1(客户端段解析 UseEffect=5 EVENT 消费)
             SenderTextId = 110700,// 沿 mail 系统占位发件人 textId(同 activity 1)
             TitleTextId = 390003, // EVENT 活动结算邮件标题 textId(占位,运营后续配多语言)
             ContentTextId = 390004,
@@ -80,7 +81,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Type = 1,             // Login
             Cycle = 3,            // OneShot 永发一次性
             Target = 7,           // 累计 7 次登录达标
-            Reward = 5003,        // 活动 3 大奖礼包(GiftPoolSeeds 已注册:Index=5003,中型钻石/材料包)
+            Rewards = Item(30002, 1),   // 活动 3 大奖:内联道具样例(生产按运营口径替换)
             SenderTextId = 110700,
             TitleTextId = 390005,
             ContentTextId = 390006,
@@ -100,7 +101,11 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Type = 1,             // Login
             Cycle = 2,            // Weekly 每周一 0:00 UTC 重置
             Target = 5,           // 本周累计 5 次登录达标
-            Reward = 5004,        // 活动 4 周奖礼包(GiftPoolSeeds 已注册:Index=5004,小-中型加权礼包)
+            Rewards = new List<RewardEntryDoc>   // 活动 4 周奖:多条道具全发样例(生产按运营口径替换)
+            {
+                new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30001, Amount = 1 },
+                new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30003, Amount = 1 }
+            },
             SenderTextId = 110700,
             TitleTextId = 390007,
             ContentTextId = 390008,
@@ -115,8 +120,8 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         //   ActivityEvalHelper.Increment + EvaluateAndClaim 编排(counter 累加 + 抢占周期键 + 发邮件,设计 39 §3.4 流程零改)。
         //   与 Login 类活动(1/2/3/4)节律入口完全独立 — Login 走登录钩子遍历 type=1、Cumulative 走 RPC + service 入口遍历 type=2,
         //   两路 type 过滤独立、复合主键 {account}_5 独立(§3.2 + 设计 47 §3.1),零回归既有 4 套活动行为。
-        //   Reward=5003 复用 43 子单已加的钻石礼包(GiftPoolSeeds 已注册:Index=5003);邮件文案复用占位 textId,
-        //   运营后续可改 textId / Reward / Target 任一字段后重启 → ReconcileDefs 写入已存 MongoDB 文档。
+        //   奖励内联道具样例;邮件文案复用占位 textId,
+        //   运营后续可改 textId / Rewards / Target 任一字段后重启 → ReconcileDefs 写入已存 MongoDB 文档。
         new ActivityDefDoc
         {
             ActivityId = 5,
@@ -125,7 +130,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Type = 2,             // Cumulative(本子单首次启用此 type;handler + service 双层校验仅放行此 type 走 RPC 路径)
             Cycle = 3,            // OneShot 永发一次性(累计 100 局后 LastClaimedCycleKey=1,永不重发)
             Target = 100,         // 累计游戏 100 局达标(中期目标;运营可调,SV4 / SV10 不依赖具体数值)
-            Reward = 5003,        // 复用 43 子单 5003 钻石礼包(GiftPoolSeeds 已注册);可砍 giftrandom 增量,沿 47 §3.4 可选
+            Rewards = Item(30002, 1),   // 累计 100 局大奖:内联道具样例(生产按运营口径替换)
             SenderTextId = 110700,
             TitleTextId = 390009,
             ContentTextId = 390010,
@@ -134,6 +139,15 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             EndAtMs = 0
         }
     };
+
+    /// <summary>构造单条道具奖励的内联列表(活动奖励验证样例用,生产按运营口径替换)。</summary>
+    private static List<RewardEntryDoc> Item(int itemId, int amount)
+    {
+        return new List<RewardEntryDoc>
+        {
+            new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = itemId, Amount = amount }
+        };
+    }
 
     protected override void Awake(ActivityServiceComponent self)
     {
@@ -183,7 +197,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
                 .Set(x => x.Type, def.Type)
                 .Set(x => x.Cycle, def.Cycle)
                 .Set(x => x.Target, def.Target)
-                .Set(x => x.Reward, def.Reward)
+                .Set(x => x.Rewards, def.Rewards)
                 .Set(x => x.SenderTextId, def.SenderTextId)
                 .Set(x => x.TitleTextId, def.TitleTextId)
                 .Set(x => x.ContentTextId, def.ContentTextId)

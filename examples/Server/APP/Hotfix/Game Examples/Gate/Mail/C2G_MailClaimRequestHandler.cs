@@ -37,13 +37,21 @@ public sealed class C2G_MailClaimRequestHandler : MessageRPC<C2G_MailClaimReques
 
         var (resultCode, rewards) = await MailDecisionHelper.Claim(service, account, request.MailId);
         response.ResultCode = resultCode;
-        // 仅成功时:服务端权威发放抽出的奖励(就地到账 + 推送,不再只回包让客户端本地落地),再附明细供客户端展示;
+        // 仅成功时:服务端权威发放邮件内嵌的奖励条目(就地到账 + 推送,不再只回包让客户端本地落地),再附明细供客户端展示;
         // 失败分支(已领过/已过期/邮件不存在/无奖励)不发、奖励列表保持空(SV4)。
         if (resultCode == MailClaimResultCode.Success)
         {
             await MailRewardGrantHelper.GrantRewardsAsync(
                 session.Scene, account, rewards, $"mail_claim:{request.MailId}");
-            response.Rewards = rewards;
+            // 内嵌 RewardEntryDoc → 领取响应项(类型 + 目标 id + 数量),供客户端展示「货币 N / 道具 N」。
+            foreach (var entry in rewards)
+            {
+                var item = MailRewardItem.Create();
+                item.RewardType = entry.RewardType;
+                item.TargetId = entry.TargetId;
+                item.Amount = entry.Amount;
+                response.Rewards.Add(item);
+            }
         }
 
         Log.Debug($"领取邮件 account={account} mailId='{request.MailId}' result={resultCode} rewardCount={rewards.Count}");

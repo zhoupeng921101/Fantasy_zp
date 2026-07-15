@@ -9,11 +9,11 @@ namespace Fantasy;
 /// <summary>
 /// 邮件裁决核心逻辑(服务端唯一权威)。
 /// 拉列表:该账号应收 = 活跃广播模板 + 该账号定向邮件,滤过期(服务端时钟),附每封领取态。
-/// 领取:定位邮件 → 过期(服务端时钟) → 无奖励短路 → 按账号防重(原子唯一写) → 服务端按附件库 id 抽礼包随机库。
+/// 领取:定位邮件 → 过期(服务端时钟) → 无奖励短路 → 按账号防重(原子唯一写) → 返回邮件内嵌附件(全部发放,不抽奖)。
 /// 并发原子性:
 ///   - 按账号防重:mail_record 以 _id="{account}|{mailId}" 唯一,重复插入抛 DuplicateKey(SV4/SV5 不双领)。
-///     「检查未领过 + 记录已领」合并为单次原子写;抽奖在记录成功之后(记录成功才认领、才抽奖发奖),
-///     不做「先抽奖发响应、再记录」(那会并发双领,设计 §五)。
+///     「检查未领过 + 记录已领」合并为单次原子写;认领在记录成功之后(记录成功才认领、才发奖),
+///     不做「先发奖响应、再记录」(那会并发双领,设计 §五)。
 /// 失败/边界分支不写记录、不抛异常,以结果码回包(SV8/SV11)。
 /// 设计基线:design-docs/32-mail-server.md §二/§三/§五。
 /// </summary>
@@ -63,7 +63,7 @@ public static class MailDecisionHelper
             var mailId = BroadcastPrefix + template.TemplateId;
             mails.Add(BuildListItem(
                 mailId, template.SenderTextId, template.TitleTextId, template.ContentTextId,
-                template.SendUnixMs, template.RewardId, claimedSet.Contains(mailId)));
+                template.SendUnixMs, template.Rewards.Count > 0, claimedSet.Contains(mailId)));
         }
 
         // 定向邮件(仅该账号应收):按 Account 查,滤过期。
@@ -78,7 +78,7 @@ public static class MailDecisionHelper
             var mailId = DirectedPrefix + doc.DirectedId;
             mails.Add(BuildListItem(
                 mailId, doc.SenderTextId, doc.TitleTextId, doc.ContentTextId,
-                doc.SendUnixMs, doc.RewardId, claimedSet.Contains(mailId)));
+                doc.SendUnixMs, doc.Rewards.Count > 0, claimedSet.Contains(mailId)));
         }
 
         return (MailClaimResultCode.Success, mails);
@@ -100,7 +100,7 @@ public static class MailDecisionHelper
     /// <summary>列表项走对象池 Create():随响应一起发送,响应 Dispose 时归还池(零 GC 范式)。</summary>
     private static MailListItem BuildListItem(
         string mailId, int senderTextId, int titleTextId, int contentTextId,
-        long sendUnixMs, int rewardId, bool claimed)
+        long sendUnixMs, bool hasReward, bool claimed)
     {
         var item = MailListItem.Create();
         item.MailId = mailId;
@@ -108,7 +108,7 @@ public static class MailDecisionHelper
         item.TitleTextId = titleTextId;
         item.ContentTextId = contentTextId;
         item.SendUnixMs = sendUnixMs;
-        item.HasReward = rewardId != 0;
+        item.HasReward = hasReward;
         item.Claimed = claimed;
         return item;
     }
@@ -117,13 +117,13 @@ public static class MailDecisionHelper
 
     /// <summary>
     /// 裁决一次领取。account 为服务端从会话取得的设备账号(非客户端自报)。mailId 为对外邮件标识(含 t/d 前缀)。
-    /// 返回结果码 + 成功时的奖励列表(失败时奖励列表为空)。
-    /// 顺序:定位(存在 + 属于该账号) → 过期(服务端时钟) → 无奖励短路 → 原子防重写 → 服务端抽奖。
+    /// 返回结果码 + 成功时的内联奖励条目列表(失败时列表为空);奖励为邮件内嵌附件,全部发放(不抽奖)。
+    /// 顺序:定位(存在 + 属于该账号) → 过期(服务端时钟) → 无奖励短路 → 原子防重写 → 取内嵌附件全发。
     /// </summary>
-    public static async FTask<(MailClaimResultCode resultCode, List<MailRewardItem> rewards)> Claim(
+    public static async FTask<(MailClaimResultCode resultCode, List<RewardEntryDoc> rewards)> Claim(
         MailServiceComponent self, string account, string mailId)
     {
-        var emptyRewards = new List<MailRewardItem>();
+        var emptyRewards = new List<RewardEntryDoc>();
 
         // 服务未就绪:返「服务不可用」,不发奖、邮件保持可领(设计 §四,不可本地放行)。
         if (self.Templates == null || self.Directed == null || self.Records == null)
@@ -132,13 +132,13 @@ public static class MailDecisionHelper
         }
         var records = self.Records;
 
-        // 1. 定位邮件(存在 + 属于该账号):取该邮件的有效期 + 附件库 id。定位不到 → 邮件不存在(SV8)。
+        // 1. 定位邮件(存在 + 属于该账号):取该邮件的有效期 + 内嵌附件。定位不到 → 邮件不存在(SV8)。
         var located = await Locate(self, account, mailId);
         if (located == null)
         {
             return (MailClaimResultCode.MailNotFound, emptyRewards);
         }
-        var (sendUnixMs, expireDays, rewardId) = located.Value;
+        var (sendUnixMs, expireDays, rewards) = located.Value;
 
         // 2. 过期判定以服务端时钟为准(SV7),下发已滤过期但下发后到期再领须再判一次。
         if (IsExpired(sendUnixMs, expireDays, self.GlobalRetainDays, TimeHelper.Now))
@@ -146,31 +146,29 @@ public static class MailDecisionHelper
             return (MailClaimResultCode.Expired, emptyRewards);
         }
 
-        // 3. 无奖励邮件(附件库 id=0):纯通知,不发奖、不记录(无奖励可双领, SV6)。
-        if (rewardId == 0)
+        // 3. 无奖励邮件(附件空):纯通知,不发奖、不记录(无奖励可双领, SV6)。
+        if (rewards.Count == 0)
         {
             return (MailClaimResultCode.NoReward, emptyRewards);
         }
 
         // 4. 按账号防重:原子唯一写。重复即「已领过」(SV4/SV5/SV11)。
-        //    记录在抽奖之前:记录成功才认领、才抽奖发奖(防并发双领, 设计 §五)。
+        //    记录在发奖之前:记录成功才认领、才发奖(防并发双领, 设计 §五)。
         if (!await TryWriteRecord(records, account, mailId))
         {
             return (MailClaimResultCode.AlreadyClaimed, emptyRewards);
         }
 
-        // 5. 服务端按附件库 id 抽礼包随机库一次,裁定奖励(客户端不申报, §五)。
-        //    库 id 未登记(抽取查无)→ 奖励列表为空但仍 Success(SV6 边界)。
-        var rewards = DrawRewards(self, rewardId);
+        // 5. 认领成功:返回邮件内嵌附件(全部发放,客户端不申报;权威到账由 Handler 调发放器完成, §五)。
         return (MailClaimResultCode.Success, rewards);
     }
 
     /// <summary>
-    /// 定位邮件:按对外标识(t=广播 / d=定向)取该邮件的(发件时间, 有效期天数, 附件库 id)。
+    /// 定位邮件:按对外标识(t=广播 / d=定向)取该邮件的(发件时间, 有效期天数, 内嵌附件列表)。
     /// 广播取缓存模板;定向查库且校验属于该账号(不属于该账号 → 视作不存在,防领他人邮件, SV8/SV9)。
     /// 定位不到返回 null。
     /// </summary>
-    private static async FTask<(long sendUnixMs, int expireDays, int rewardId)?> Locate(
+    private static async FTask<(long sendUnixMs, int expireDays, List<RewardEntryDoc> rewards)?> Locate(
         MailServiceComponent self, string account, string mailId)
     {
         if (string.IsNullOrEmpty(mailId) || mailId.Length < 2)
@@ -185,7 +183,7 @@ public static class MailDecisionHelper
         {
             if (self.TemplateCache.TryGetValue(rawId, out var template))
             {
-                return (template.SendUnixMs, template.ExpireDays, template.RewardId);
+                return (template.SendUnixMs, template.ExpireDays, template.Rewards);
             }
             return null;
         }
@@ -198,7 +196,7 @@ public static class MailDecisionHelper
             var doc = await self.Directed.Find(filter).FirstOrDefaultAsync();
             if (doc != null)
             {
-                return (doc.SendUnixMs, doc.ExpireDays, doc.RewardId);
+                return (doc.SendUnixMs, doc.ExpireDays, doc.Rewards);
             }
             return null;
         }
@@ -236,80 +234,18 @@ public static class MailDecisionHelper
         }
     }
 
-    /// <summary>
-    /// 服务端按礼包随机库 id 抽一次,返回「道具 id × 数量」。
-    /// 按 Rate 权重在同 Index 的条目中抽一条(抽中概率 = rate / 同 Index 全部 rate 之和)。
-    /// 库 id 未登记(缓存查无)或奖池为空 → 返回空列表(SV6 边界,不抛)。
-    /// 奖励项走对象池 Create():随响应发送,响应 Dispose 时归还池(零 GC 范式)。
-    /// </summary>
-    private static List<MailRewardItem> DrawRewards(MailServiceComponent self, int rewardId)
-    {
-        var rewards = new List<MailRewardItem>();
-        if (!self.GiftPoolCache.TryGetValue(rewardId, out var pool) || pool.Count == 0)
-        {
-            return rewards; // 库 id 未登记 / 空奖池 → 奖励列表为空(SV6)。
-        }
-
-        var picked = WeightedPick(pool);
-        if (picked != null)
-        {
-            var item = MailRewardItem.Create();
-            item.ItemId = picked.ItemId;
-            item.Count = picked.Num;
-            rewards.Add(item);
-        }
-        return rewards;
-    }
-
-    /// <summary>按 Rate 权重抽一条;全部 rate&lt;=0 时回退取第一条;空池返回 null。</summary>
-    private static GiftPoolEntryDoc? WeightedPick(List<GiftPoolEntryDoc> pool)
-    {
-        var totalRate = 0L;
-        foreach (var e in pool)
-        {
-            if (e.Rate > 0)
-            {
-                totalRate += e.Rate;
-            }
-        }
-        if (totalRate <= 0)
-        {
-            return pool[0]; // 无有效权重时取第一条(配置兜底,不抛)。
-        }
-
-        // [1, totalRate] 内取一个点,落在哪个区间即抽中(用 Random.Shared 避免同毫秒重复种子)。
-        var roll = (long)(Random.Shared.NextDouble() * totalRate) + 1;
-        if (roll > totalRate)
-        {
-            roll = totalRate;
-        }
-        var cumulative = 0L;
-        foreach (var e in pool)
-        {
-            if (e.Rate <= 0)
-            {
-                continue;
-            }
-            cumulative += e.Rate;
-            if (roll <= cumulative)
-            {
-                return e;
-            }
-        }
-        return pool[pool.Count - 1];
-    }
-
     // ── 进程内发奖入口(设计 §3.5) ────────────────────────────
 
     /// <summary>
-    /// 服务端进程内发奖入口:给某账号投一封定向邮件(初始未领),供未来排行榜服务端结算复用(SV10)。
-    /// 走与运营邮件同一套领取 / 防重 / 抽奖机制——只往 mail_directed 插一条,该账号下次拉列表即可见、可领。
+    /// 服务端进程内发奖入口:给某账号投一封定向邮件(初始未领),供排行榜 / 活动服务端结算复用(SV10)。
+    /// 走与运营邮件同一套领取 / 防重机制——只往 mail_directed 插一条,附件为内联奖励条目列表(领取时全部发放),
+    /// 该账号下次拉列表即可见、可领。rewards 为 null / 空 → 投一封无奖励通知邮件。
     /// 返回投递的对外邮件标识("d{guid}");服务不可用(MongoDB 未就绪)返回 null(调用方据此重试)。
     /// 注:发奖入口只负责「投一封」;结算幂等(同一次结算只投一次)是调用方的责任(设计 §五),不在本入口。
     /// </summary>
     public static async FTask<string?> SendMailTo(
         MailServiceComponent self, string account,
-        int senderTextId, int titleTextId, int contentTextId, int expireDays, int rewardId)
+        int senderTextId, int titleTextId, int contentTextId, int expireDays, IReadOnlyList<RewardEntryDoc>? rewards)
     {
         if (self.Directed == null)
         {
@@ -325,7 +261,7 @@ public static class MailDecisionHelper
             TitleTextId = titleTextId,
             ContentTextId = contentTextId,
             ExpireDays = expireDays,
-            RewardId = rewardId,
+            Rewards = rewards != null ? new List<RewardEntryDoc>(rewards) : new List<RewardEntryDoc>(),
             SendUnixMs = TimeHelper.Now
         };
         try
@@ -335,7 +271,7 @@ public static class MailDecisionHelper
         catch (MongoException e)
         {
             // 兑现契约「服务不可用返 null」:MongoDB 抖动 / 未就绪时插入抛异常,返 null 让调用方据此重试,不外泄异常。
-            Log.Warning($"MailDecisionHelper.SendMailTo 投递失败 account={account} reward={rewardId},err={e.Message}");
+            Log.Warning($"MailDecisionHelper.SendMailTo 投递失败 account={account} rewardCount={(rewards?.Count ?? 0)},err={e.Message}");
             return null;
         }
         return DirectedPrefix + directedId;

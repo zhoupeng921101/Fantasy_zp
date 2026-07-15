@@ -252,17 +252,17 @@ public static class RankSettleHelper
         for (var i = 0; i < ranked.Count; i++)
         {
             var rank = i + 1; // 顺序名次(1 起,同分各占唯一名次)。
-            var rewardId = TierRewardForRank(def, rank);
-            if (rewardId == 0)
+            var rewards = TierRewardForRank(def, rank);
+            if (rewards.Count == 0)
             {
-                // 名次未落任何档 / 档奖=0 → 该账号不发(§3.2 边界),不影响其他账号。
+                // 名次未落任何档 / 档奖为空 → 该账号不发(§3.2 边界),不影响其他账号。
                 continue;
             }
 
             // 经设计 32 服务端发奖入口投结算邮件:标题/正文/有效期取邮件模板(缺失则兜底占位, ResolveSettleMail 已处理),
-            // 发件人统一用结算占位(§3.5),附件库 id 用名次档 reward 覆盖(§3.2 旁注 / SV5)。
+            // 发件人统一用结算占位(§3.5),附件用名次档内联奖励条目(§3.2 旁注 / SV5)。
             var mailId = await MailDecisionHelper.SendMailTo(
-                mailComponent, ranked[i].Account, SettleSenderTextId, titleTextId, contentTextId, expireDays, rewardId);
+                mailComponent, ranked[i].Account, SettleSenderTextId, titleTextId, contentTextId, expireDays, rewards);
             if (mailId != null)
             {
                 sentCount++;
@@ -278,23 +278,23 @@ public static class RankSettleHelper
     }
 
     /// <summary>
-    /// 按名次查中奖档的实发奖励库 id;名次未落任何档返回 0(= 不发)。
+    /// 按名次查中奖档的内联奖励条目;名次未落任何档返回空列表(= 不发)。
     /// 名次档已按 RankMin 升序聚合(榜定义播种时排序),逐档判区间命中(rank ∈ [RankMin, RankMax])。
     /// </summary>
-    private static int TierRewardForRank(RankDefDoc def, int rank)
+    private static List<RewardEntryDoc> TierRewardForRank(RankDefDoc def, int rank)
     {
         if (def.Tiers == null)
         {
-            return 0;
+            return new List<RewardEntryDoc>();
         }
         foreach (var tier in def.Tiers)
         {
             if (rank >= tier.RankMin && rank <= tier.RankMax)
             {
-                return tier.Reward;
+                return tier.Rewards;
             }
         }
-        return 0; // 名次落档区间空隙(如档只覆盖 1/2-10/11-100,名次 101 超出)→ 无奖(§3.2 边界)。
+        return new List<RewardEntryDoc>(); // 名次落档区间空隙(如档只覆盖 1/2-10/11-100,名次 101 超出)→ 无奖(§3.2 边界)。
     }
 
     /// <summary>

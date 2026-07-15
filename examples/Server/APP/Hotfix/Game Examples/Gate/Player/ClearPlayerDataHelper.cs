@@ -16,7 +16,7 @@ namespace Fantasy;
 ///   6. 兑换记录(redeem_record,按 accountId 删多行):此前已兑码回到可再兑态。
 ///   7. 属性流水(player_attr_ledger,按 accountId 删多行):清档明示例外于「ledger 永不删」不变量。
 ///
-/// 刻意不清的全局共享集合(清了会毁所有玩家):accounts(账号身份)、各 *_def / *_template / gift_pool / redeem_code(全局配置)、
+/// 刻意不清的全局共享集合(清了会毁所有玩家):accounts(账号身份)、各 *_def / *_template / redeem_code(全局配置)、
 /// rank_settle(_id=RankId 全服结算幂等标记)、redeem_counter(_id=Code 全局发放计数)——后两者无 Account 维度、是全服共享状态。
 ///
 /// 任一步 DB 失败 / 组件缺失 → ServiceUnavailable(可能已部分生效;各步 DeleteMany / 重置幂等,调用方可提示重试)。

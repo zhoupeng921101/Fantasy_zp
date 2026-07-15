@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace Fantasy;
@@ -45,8 +46,8 @@ public sealed class ActivityDefDoc
     /// <summary>达标阈值(counter 需 ≥ target 才达标)。对应 activity.xlsx target。</summary>
     public long Target { get; set; }
 
-    /// <summary>达标发放的礼包随机库 id(指向 gift_pool 的 Index;0 = 仅记已发不投邮件)。对应 activity.xlsx reward。</summary>
-    public int Reward { get; set; }
+    /// <summary>达标发放的内联奖励条目(空列表 = 仅记已发不投邮件),达标时全部发放。对应 activity.xlsx reward。</summary>
+    public List<RewardEntryDoc> Rewards { get; set; } = new List<RewardEntryDoc>();
 
     /// <summary>活动结算邮件发件人 textId(占位口径同 mail.xlsx 110700)。对应 39 §3.1 mail_def 展开。</summary>
     public int SenderTextId { get; set; }

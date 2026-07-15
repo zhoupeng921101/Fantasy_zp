@@ -64,7 +64,7 @@ public sealed class GmController : ControllerBase
             resp => ToResult(resp.Code, new { code = resp.Code, message = resp.Message, newAmount = resp.NewAmount }));
     }
 
-    /// <summary>发邮件:给 AccountId 投一封带奖励(RewardId)的定向邮件。</summary>
+    /// <summary>发邮件:给 AccountId 投一封带奖励的定向邮件。奖励走紧凑字符串 Rewards(格式 `Currency,4,5|Item,30001,2`,空串=无奖励)。</summary>
     [HttpPost("sendMail")]
     public async FTask<IActionResult> SendMail([FromBody] GmSendMailDto dto)
     {
@@ -80,7 +80,7 @@ public sealed class GmController : ControllerBase
                 TitleTextId = dto.TitleTextId,
                 ContentTextId = dto.ContentTextId,
                 ExpireDays = dto.ExpireDays,
-                RewardId = dto.RewardId,
+                Rewards = dto.Rewards ?? string.Empty,
             },
             resp => ToResult(resp.Code, new { code = resp.Code, message = resp.Message, mailId = resp.MailId }));
     }
@@ -177,7 +177,7 @@ public sealed class GmChangeCurrencyDto
     public string? Reason { get; set; }
 }
 
-/// <summary>GM 发邮件入参(文本走 TextId,奖励走 RewardId)。</summary>
+/// <summary>GM 发邮件入参(文本走 TextId;奖励走紧凑字符串 Rewards,格式 `Currency,4,5|Item,30001,2`,空串=无奖励)。</summary>
 public sealed class GmSendMailDto
 {
     public string? AccountId { get; set; }
@@ -185,7 +185,7 @@ public sealed class GmSendMailDto
     public int TitleTextId { get; set; }
     public int ContentTextId { get; set; }
     public int ExpireDays { get; set; }
-    public int RewardId { get; set; }
+    public string? Rewards { get; set; }
 }
 
 /// <summary>GM 重置玩家入参。</summary>

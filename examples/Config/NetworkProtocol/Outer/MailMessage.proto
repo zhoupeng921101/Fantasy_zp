@@ -4,7 +4,7 @@ syntax = "proto3";
 // 邮件运营来源 + 领奖裁决协议（服务端权威）。
 // 设计基线：design-docs/32-mail-server.md §三 行为级协议契约。
 // 玩家身份由服务端从联网会话取，请求不携带账号字段（防领他人/拉他人收件箱，见 §3.1 / §3.3）。
-// 本增量只做运营推送来源 + 领奖校验（防重 + 服务端抽奖 + 过期）；收件箱表现（排序/已读/删除/红点）留客户端（§读前必看 第 5 条）。
+// 本增量只做运营推送来源 + 领奖校验（防重 + 内嵌附件全发 + 过期）；收件箱表现（排序/已读/删除/红点）留客户端（§读前必看 第 5 条）。
 
 /// 领取奖励裁决结果码（§3.4）
 enum MailClaimResultCode
@@ -23,7 +23,7 @@ enum MailClaimResultCode
 	ServiceUnavailable = 5
 }
 
-/// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
+/// 邮件列表一条：客户端画收件箱用（不含奖励明细，领取时才随响应下发，见 §3.2 注）
 message MailListItem
 {
 	string MailId = 1; /// 邮件标识（领取时回传定位；广播邮件与定向邮件用同一标识空间，客户端无需区分）
@@ -31,15 +31,16 @@ message MailListItem
 	int32 TitleTextId = 3; /// 标题（多语言 textId 占位）
 	int32 ContentTextId = 4; /// 正文（多语言 textId 占位）
 	int64 SendUnixMs = 5; /// 收件/发件时间（服务端 Unix 毫秒）
-	bool HasReward = 6; /// 是否有附件（附件库 id != 0；客户端据此画领取按钮/红点）
+	bool HasReward = 6; /// 是否有附件（内嵌附件非空；客户端据此画领取按钮/红点）
 	bool Claimed = 7; /// 该账号对此邮件的领取态（已领=true / 未领=false）
 }
 
-/// 领取响应内单条奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
+/// 领取响应内单条奖励项：类型 + 目标 id + 数量（客户端据类型分别解析货币 / 道具元数据展示）
 message MailRewardItem
 {
-	int32 ItemId = 1; /// 道具 id
-	int32 Count = 2; /// 数量
+	int32 RewardType = 1; /// 奖励类型：1=货币 / 2=道具（口径同 reward.ERewardType）
+	int32 TargetId = 2; /// 目标 id：货币指 TbNum id，道具指 TbItemDef id
+	int32 Amount = 3; /// 发放数量
 }
 
 /// 客户端拉邮件列表请求（无业务字段:身份从会话取,不携带账号;触发时机由客户端定）（§3.1）
@@ -63,5 +64,5 @@ message C2G_MailClaimRequest // IRequest,G2C_MailClaimResponse
 message G2C_MailClaimResponse // IResponse
 {
 	MailClaimResultCode ResultCode = 1; /// 裁决结果码
-	repeated MailRewardItem Rewards = 2; /// 仅 ResultCode=Success 时非空：服务端按该邮件附件库 id 抽礼包随机库一次的产物（道具 id × 数量）
+	repeated MailRewardItem Rewards = 2; /// 仅 ResultCode=Success 时非空：该邮件内嵌附件全部发放的明细（类型 + 目标 id + 数量），供客户端展示
 }

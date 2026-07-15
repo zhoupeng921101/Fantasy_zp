@@ -3,16 +3,17 @@ using System.Collections.Generic;
 using Fantasy.Async;
 using Fantasy.Entitas.Interface;
 using Fantasy.Helper;
+using GameConfig.reward;
 using MongoDB.Driver;
 
 namespace Fantasy;
 
 /// <summary>
-/// 邮件服务端组件初始化:绑定原生 MongoDB 集合句柄、建索引、播种运营模板 + 礼包随机库、载入缓存。
+/// 邮件服务端组件初始化:绑定原生 MongoDB 集合句柄、建索引、播种运营模板、载入缓存。
 /// 领取防重的并发原子性依赖 mail_record 的 _id 复合唯一键(MongoDB 主键天然唯一),见 MailDecisionHelper。
-/// 另暴露进程内发奖入口 SendMailTo(设计 32 §3.5):给某账号投一封定向邮件,供未来排行榜服务端结算复用。
-/// 服务端工程无 Luban 集成(无 TbXxx/.bytes 加载链,同设计 30/31 先例),故运营模板 / 礼包库以本声明表为权威源、
-/// 播种进 MongoDB,与客户端 mail.xlsx / gift_random 同源(值手抄客户端 xlsx 口径, SV13),不建 Luban→服务端导出路径。
+/// 另暴露进程内发奖入口 SendMailTo(设计 32 §3.5):给某账号投一封定向邮件(附件为内联奖励条目列表),供排行榜 / 活动服务端结算复用。
+/// 服务端工程无 Luban 集成(无 TbXxx/.bytes 加载链,同设计 30/31 先例),故运营模板以本声明表为权威源、
+/// 播种进 MongoDB,与客户端 mail.xlsx 同源(值手抄客户端 xlsx 口径, SV13);附件不再指向礼包随机库,直接内联奖励条目。
 /// 设计基线:design-docs/32-mail-server.md §二/§五。
 /// </summary>
 public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceComponent>
@@ -46,63 +47,42 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
         var longAgoMs = nowMs - 100L * 24 * 60 * 60 * 1000;
         return new List<MailTemplateDoc>
         {
-            // ── 与客户端 mail.xlsx 同源(id 1-5,reward_id=1002 礼包库未登记 → 领取奖励列表空, SV6) ──
-            new MailTemplateDoc { TemplateId = "1", SenderTextId = DefaultSenderTextId, TitleTextId = 110711, ContentTextId = 110721, ExpireDays = 14, RewardId = 1002, SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "2", SenderTextId = DefaultSenderTextId, TitleTextId = 110712, ContentTextId = 110722, ExpireDays = 14, RewardId = 1002, SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "3", SenderTextId = DefaultSenderTextId, TitleTextId = 110713, ContentTextId = 110723, ExpireDays = 14, RewardId = 1002, SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "4", SenderTextId = DefaultSenderTextId, TitleTextId = 110714, ContentTextId = 110724, ExpireDays = 14, RewardId = 1002, SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "5", SenderTextId = DefaultSenderTextId, TitleTextId = 110715, ContentTextId = 110725, ExpireDays = 14, RewardId = 1002, SendUnixMs = nowMs },
+            // ── 与客户端 mail.xlsx 同源(id 1-5,内联样例附件:道具 30001 × 1) ──
+            new MailTemplateDoc { TemplateId = "1", SenderTextId = DefaultSenderTextId, TitleTextId = 110711, ContentTextId = 110721, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "2", SenderTextId = DefaultSenderTextId, TitleTextId = 110712, ContentTextId = 110722, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "3", SenderTextId = DefaultSenderTextId, TitleTextId = 110713, ContentTextId = 110723, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "4", SenderTextId = DefaultSenderTextId, TitleTextId = 110714, ContentTextId = 110724, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "5", SenderTextId = DefaultSenderTextId, TitleTextId = 110715, ContentTextId = 110725, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
             // ── 服务端验证样例(生产可删) ──
-            // SV3:有实物附件(reward_id=6001 已登记礼包库),领取抽出道具。
-            new MailTemplateDoc { TemplateId = "100", SenderTextId = DefaultSenderTextId, TitleTextId = 110716, ContentTextId = 110726, ExpireDays = 14, RewardId = 6001, SendUnixMs = nowMs },
-            // SV6:无奖励邮件(reward_id=0),领取返 NoReward。
-            new MailTemplateDoc { TemplateId = "101", SenderTextId = DefaultSenderTextId, TitleTextId = 110717, ContentTextId = 110727, ExpireDays = 14, RewardId = 0, SendUnixMs = nowMs },
+            // SV3:有实物附件(多条道具全发),领取全部到账。
+            new MailTemplateDoc { TemplateId = "100", SenderTextId = DefaultSenderTextId, TitleTextId = 110716, ContentTextId = 110726, ExpireDays = 14, Rewards = SampleMultiItemReward(), SendUnixMs = nowMs },
+            // SV6:无奖励邮件(附件空),领取返 NoReward。
+            new MailTemplateDoc { TemplateId = "101", SenderTextId = DefaultSenderTextId, TitleTextId = 110717, ContentTextId = 110727, ExpireDays = 14, Rewards = new List<RewardEntryDoc>(), SendUnixMs = nowMs },
             // SV2/SV7:已过期邮件(发件时间 100 天前 + 有效期 1 天)。拉列表不下发,领取返 Expired。
-            new MailTemplateDoc { TemplateId = "102", SenderTextId = DefaultSenderTextId, TitleTextId = 110718, ContentTextId = 110728, ExpireDays = 1, RewardId = 6001, SendUnixMs = longAgoMs }
+            new MailTemplateDoc { TemplateId = "102", SenderTextId = DefaultSenderTextId, TitleTextId = 110718, ContentTextId = 110728, ExpireDays = 1, Rewards = SampleMultiItemReward(), SendUnixMs = longAgoMs }
         };
     }
 
-    /// <summary>
-    /// 服务端权威礼包随机库表(单一来源,与客户端 gift_random 同源口径, SV13):
-    ///   - AutoId ← gift_random auto_id  (行主键)
-    ///   - Index  ← gift_random index     (奖池 id;同 Index = 一个奖池)
-    ///   - ItemId ← gift_random item_id   (奖品道具 id)
-    ///   - Num    ← gift_random num        (数量)
-    ///   - Rate   ← gift_random rate        (权重)
-    /// gift_pool 是奖励礼包库的共享注册表;邮件/排行榜结算的发奖都经 SendMailTo→领取→DrawRewards 读本库缓存。
-    /// 奖池 Index=6001(4 条,与客户端 gift_random 同源)供邮件 SV3 实物抽奖验证。
-    /// 排行榜结算名次档 reward 库 id(1005/1006)在客户端 gift_random 当前未登记;为使排行榜结算 SV3/SV9 能观测实物抽奖,
-    /// 此处注册验证奖池 1005/1006(同邮件播 100-102 验证样例的先例,生产可删)。
-    /// 不注册 1002:邮件运营模板(id 1-5)用 reward_id=1002 验证「库未登记→领取成功但奖励空」(邮件 SV6),
-    /// 故排行榜第 1 名档(1002)结算后领取亦走该空奖励边界(SV5),不与邮件 SV6 冲突。
-    /// </summary>
-    private static readonly IReadOnlyList<GiftPoolEntryDoc> GiftPoolSeeds = new List<GiftPoolEntryDoc>
+    /// <summary>样例附件:道具 30001 × 1(与客户端 mail.xlsx 同源的运营模板占位附件,生产按运营口径替换)。</summary>
+    private static List<RewardEntryDoc> SampleItemReward()
     {
-        new GiftPoolEntryDoc { AutoId = 1, Index = 6001, ItemId = 30001, Num = 1, Rate = 50 },
-        new GiftPoolEntryDoc { AutoId = 2, Index = 6001, ItemId = 30002, Num = 1, Rate = 30 },
-        new GiftPoolEntryDoc { AutoId = 3, Index = 6001, ItemId = 30004, Num = 1, Rate = 15 },
-        new GiftPoolEntryDoc { AutoId = 4, Index = 6001, ItemId = 30003, Num = 2, Rate = 5 },
-        // 排行榜结算名次档验证奖池(生产可删):2-10 名档库 1005、11-100 名档库 1006。
-        new GiftPoolEntryDoc { AutoId = 1005001, Index = 1005, ItemId = 30002, Num = 2, Rate = 100 },
-        new GiftPoolEntryDoc { AutoId = 1006001, Index = 1006, ItemId = 30001, Num = 1, Rate = 100 },
-        // EVENT 头像解锁礼包(Tier 4 第 2 子单,设计 40 §3.4):
-        //   Index=6101 单项必中 ItemId=30101(EVENT 解锁道具 = 头像 id=3 avt_star)× 1。
-        //   30101 是「客户端段下一刀解析 UseEffect=5 EVENT 调 AvatarUnlockService.GrantUnlock」的道具 id 共识;
-        //   服务端工程无 Luban,只守「(道具 id 30101, 数量 1)」抵达邮件附件,不解析 UseEffect 自身。
-        //   客户端 luban item.xlsx 须含 id=30101 行(plan §3.3,本子单 server 段不交付,客户端段下一刀处理)。
-        new GiftPoolEntryDoc { AutoId = 6101001, Index = 6101, ItemId = 30101, Num = 1, Rate = 100 },
-        // ── Tier 4 第 3 子单(设计 43 §3.3)新增两套累计登录类活动的奖励礼包 ──
-        // 活动 3「累计 7 天大奖」礼包:Index=5003 单项必中 ItemId=30002(材料 × 1)。
-        //   设计 §3.3 plan O5「视现状」:client 工程 item.xlsx 当前货币道具(useEffect=1)未配,
-        //   服务端 GiftPool 取已存在 ItemId(沿 6001/1005/1006 等验证奖池范式,生产可改为钻石道具行 id)。
-        //   领奖路径走 32 §3.4 既有抽奖 + 客户端 16 useEffect 解析,辉煌钻石上线时改本行 ItemId + Num 即可,不动活动配置。
-        new GiftPoolEntryDoc { AutoId = 5003001, Index = 5003, ItemId = 30002, Num = 1, Rate = 100 },
-        // 活动 4「周累计 5 天周奖」礼包:Index=5004 多项加权(金币占位 / 体力占位 各 50%)。
-        //   plan O4 默认多项加权(验 [16 §3.6 多项权重抽样] 在活动 reward 路径仍走通,沿 [16] 礼包随机库范式);
-        //   暂用 ItemId=30001 + 30003 作金币/体力占位,等同 6001 奖池多项加权范式(沿设计 43 §3.3 + O5)。
-        new GiftPoolEntryDoc { AutoId = 5004001, Index = 5004, ItemId = 30001, Num = 1, Rate = 50 },
-        new GiftPoolEntryDoc { AutoId = 5004002, Index = 5004, ItemId = 30003, Num = 1, Rate = 50 }
-    };
+        return new List<RewardEntryDoc>
+        {
+            new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30001, Amount = 1 }
+        };
+    }
+
+    /// <summary>多条实物样例附件(全部发放),供验证模板观测多奖励一次全到账(生产可删)。</summary>
+    private static List<RewardEntryDoc> SampleMultiItemReward()
+    {
+        return new List<RewardEntryDoc>
+        {
+            new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30001, Amount = 1 },
+            new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30002, Amount = 1 },
+            new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30004, Amount = 1 },
+            new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30003, Amount = 2 }
+        };
+    }
 
     protected override void Awake(MailServiceComponent self)
     {
@@ -125,22 +105,18 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
         self.Templates = templates;
         self.Directed = mongoDatabase.GetCollection<MailDirectedDoc>("mail_directed");
         self.Records = mongoDatabase.GetCollection<MailClaimRecordDoc>("mail_record");
-        var giftPool = mongoDatabase.GetCollection<GiftPoolEntryDoc>("gift_pool");
-        self.GiftPool = giftPool;
         self.GlobalRetainDays = DefaultGlobalRetainDays;
 
         // 定向邮件按账号查询应收,建 Account 索引贴合该访问模式(拉列表筛该账号定向邮件)。
         await CreateDirectedAccountIndex(self.Directed);
 
-        // 首次启动播种运营模板 + 礼包库(已存在则跳过,不覆盖运营改动)。
+        // 首次启动播种运营模板(已存在则跳过,不覆盖运营改动)。
         await SeedBroadcastTemplates(templates);
-        await SeedGiftPool(giftPool);
 
-        // 载入模板 + 礼包库到内存缓存(只读裁决/抽奖用,领取防重始终走 MongoDB)。
+        // 载入模板到内存缓存(只读裁决用,领取防重始终走 MongoDB)。
         await ReloadTemplateCache(self);
-        await ReloadGiftPoolCache(self);
 
-        Log.Info($"MailServiceComponent 初始化完成,运营模板缓存条目数={self.TemplateCache.Count},礼包库奖池数={self.GiftPoolCache.Count}");
+        Log.Info($"MailServiceComponent 初始化完成,运营模板缓存条目数={self.TemplateCache.Count}");
     }
 
     /// <summary>建定向邮件 Account 索引(拉列表按账号筛该账号的定向邮件)。</summary>
@@ -162,26 +138,6 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
         foreach (var doc in all)
         {
             self.TemplateCache[doc.TemplateId] = doc;
-        }
-    }
-
-    /// <summary>重新载入礼包随机库缓存(按 Index 分组)。供启动与(未来)运营热改后刷新。</summary>
-    public static async FTask ReloadGiftPoolCache(MailServiceComponent self)
-    {
-        if (self.GiftPool == null)
-        {
-            return;
-        }
-        self.GiftPoolCache.Clear();
-        var all = await self.GiftPool.Find(FilterDefinition<GiftPoolEntryDoc>.Empty).ToListAsync();
-        foreach (var entry in all)
-        {
-            if (!self.GiftPoolCache.TryGetValue(entry.Index, out var list))
-            {
-                list = new List<GiftPoolEntryDoc>();
-                self.GiftPoolCache[entry.Index] = list;
-            }
-            list.Add(entry);
         }
     }
 
@@ -210,25 +166,6 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
         }
     }
 
-    /// <summary>播种礼包随机库,仅当对应 auto_id 不存在时插入(同模板播种的幂等口径)。</summary>
-    private static async FTask SeedGiftPool(IMongoCollection<GiftPoolEntryDoc> giftPool)
-    {
-        foreach (var seed in GiftPoolSeeds)
-        {
-            try
-            {
-                await giftPool.InsertOneAsync(seed);
-            }
-            catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-            {
-                // 已存在 → 跳过。
-            }
-            catch (MongoCommandException e) when (e.Code == DuplicateKeyErrorCode)
-            {
-                // 已存在 → 跳过。
-            }
-        }
-    }
 }
 
 public sealed class MailServiceComponentDestroySystem : DestroySystem<MailServiceComponent>
@@ -236,10 +173,8 @@ public sealed class MailServiceComponentDestroySystem : DestroySystem<MailServic
     protected override void Destroy(MailServiceComponent self)
     {
         self.TemplateCache.Clear();
-        self.GiftPoolCache.Clear();
         self.Templates = null;
         self.Directed = null;
         self.Records = null;
-        self.GiftPool = null;
     }
 }

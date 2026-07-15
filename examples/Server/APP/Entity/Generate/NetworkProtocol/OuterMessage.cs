@@ -2483,7 +2483,7 @@ namespace Fantasy
         public bool Loaded { get; set; }
     }
     /// <summary>
-    /// 邮件列表一条：客户端画收件箱用（不含奖励明细，奖励领取时才抽，见 §3.2 注）
+    /// 邮件列表一条：客户端画收件箱用（不含奖励明细，领取时才随响应下发，见 §3.2 注）
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -2554,7 +2554,7 @@ namespace Fantasy
         [ProtoMember(5)]
         public long SendUnixMs { get; set; }
         /// <summary>
-        /// 是否有附件（附件库 id != 0；客户端据此画领取按钮/红点）
+        /// 是否有附件（内嵌附件非空；客户端据此画领取按钮/红点）
         /// </summary>
         [ProtoMember(6)]
         public bool HasReward { get; set; }
@@ -2565,7 +2565,7 @@ namespace Fantasy
         public bool Claimed { get; set; }
     }
     /// <summary>
-    /// 领取响应内单条奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
+    /// 领取响应内单条奖励项：类型 + 目标 id + 数量（客户端据类型分别解析货币 / 道具元数据展示）
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -2601,20 +2601,26 @@ namespace Fantasy
         public void Dispose()
         {
             if (!IsPool()) return; 
-            ItemId = default;
-            Count = default;
+            RewardType = default;
+            TargetId = default;
+            Amount = default;
             MessageObjectPool<MailRewardItem>.Return(this);
         }
         /// <summary>
-        /// 道具 id
+        /// 奖励类型：1=货币 / 2=道具（口径同 reward.ERewardType）
         /// </summary>
         [ProtoMember(1)]
-        public int ItemId { get; set; }
+        public int RewardType { get; set; }
         /// <summary>
-        /// 数量
+        /// 目标 id：货币指 TbNum id，道具指 TbItemDef id
         /// </summary>
         [ProtoMember(2)]
-        public int Count { get; set; }
+        public int TargetId { get; set; }
+        /// <summary>
+        /// 发放数量
+        /// </summary>
+        [ProtoMember(3)]
+        public int Amount { get; set; }
     }
     /// <summary>
     /// 客户端拉邮件列表请求（无业务字段:身份从会话取,不携带账号;触发时机由客户端定）（§3.1）
@@ -2817,7 +2823,7 @@ namespace Fantasy
         [ProtoMember(1)]
         public MailClaimResultCode ResultCode { get; set; }
         /// <summary>
-        /// 仅 ResultCode=Success 时非空：服务端按该邮件附件库 id 抽礼包随机库一次的产物（道具 id × 数量）
+        /// 仅 ResultCode=Success 时非空：该邮件内嵌附件全部发放的明细（类型 + 目标 id + 数量），供客户端展示
         /// </summary>
         [ProtoMember(2)]
         public List<MailRewardItem> Rewards { get; set; } = new List<MailRewardItem>();

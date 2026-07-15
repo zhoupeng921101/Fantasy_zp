@@ -262,12 +262,12 @@ public static class ActivityEvalHelper
         }
 
         // 5. 抢占成功:发活动结算邮件(claim-then-act,§3.4 关键)。
-        //    reward=0 → 仅记已发不投邮件(OneShot 类活动场景);其他 → 调 32 SendMailTo 投定向邮件。
-        //    后两种「漏发窄窗」(reward=0 / mail 服务未就绪 / SendMailTo 返 null):
+        //    奖励空 → 仅记已发不投邮件(OneShot 类活动场景);非空 → 调 32 SendMailTo 投定向邮件(附件为内联奖励条目)。
+        //    后两种「漏发窄窗」(奖励空 / mail 服务未就绪 / SendMailTo 返 null):
         //    服务端账目已抢占(LastClaimedCycleKey 已写),从客户端语义角度也是「首次达标」,
         //    故返 true(让 Cumulative handler 回包 TargetReached=true,玩家 UI 仍弹达标提示;
         //    邮件投递失败由运营补 — 沿设计 §四诚实取舍「漏发可补、超发不可补」)。
-        if (def.Reward == 0)
+        if (def.Rewards == null || def.Rewards.Count == 0)
         {
             Log.Info($"ActivityEvalHelper: account={account} activity_id={def.ActivityId} 本周期已发(无奖,仅记标记)。periodKey={periodKey.Value}");
             return true;
@@ -281,7 +281,7 @@ public static class ActivityEvalHelper
         }
 
         var mailIdOrNull = await MailDecisionHelper.SendMailTo(
-            mail, account, def.SenderTextId, def.TitleTextId, def.ContentTextId, def.ExpireDays, def.Reward);
+            mail, account, def.SenderTextId, def.TitleTextId, def.ContentTextId, def.ExpireDays, def.Rewards);
         if (mailIdOrNull == null)
         {
             // SendMailTo 返 null = mail.Directed 未就绪。同样属漏发窄窗(运营可补)。
@@ -289,7 +289,7 @@ public static class ActivityEvalHelper
             return true;
         }
 
-        Log.Info($"ActivityEvalHelper: account={account} activity_id={def.ActivityId} 本周期发奖完成,mailId={mailIdOrNull},reward={def.Reward},periodKey={periodKey.Value}");
+        Log.Info($"ActivityEvalHelper: account={account} activity_id={def.ActivityId} 本周期发奖完成,mailId={mailIdOrNull},rewardCount={def.Rewards.Count},periodKey={periodKey.Value}");
         return true;
     }
 

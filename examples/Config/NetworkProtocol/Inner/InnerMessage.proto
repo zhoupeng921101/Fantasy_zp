@@ -166,7 +166,7 @@ message Http2G_GmSendMailRequest // IAddressRequest,G2Http_GmSendMailResponse
 	int32 TitleTextId = 3;
 	int32 ContentTextId = 4;
 	int32 ExpireDays = 5;
-	int32 RewardId = 6;
+	string Rewards = 6;		// 奖励紧凑字符串:Currency,4,5|Item,30001,2(空串=无奖励),Gate 侧解析为内联奖励条目
 }
 message G2Http_GmSendMailResponse // IAddressResponse
 {

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Fantasy.Async;
 using Fantasy.Entitas.Interface;
+using GameConfig.reward;
 using MongoDB.Driver;
 
 namespace Fantasy;
@@ -25,9 +26,8 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
     /// 客户端 rank.TbRank 数值改动时,改本表对应行即同源更新;启动 ReconcileRankDefs 会把改动写入已存 MongoDB 文档(消除漂移)。
     /// 服务端工程无 Luban 集成(无 TbXxx/.bytes 加载链,同设计 30 兑换码权威配置已移出 Luban、改 MongoDB 文档的先例),
     /// 故榜定义在服务端以本声明表为权威源、reconcile 进 MongoDB,不建 Luban→服务端导出路径(设计 31 O6「静态配置够用」)。
-    /// 名次档的 Reward 库 id(1002/1005/1006/1007)指向礼包随机库 Index(gift_pool);客户端 gift_random 当前只登记 6001,
-    /// 故 1002 等在库未登记时领取按设计 32 边界「成功但奖励列表空」处理(SV5)。SV3/SV9 需观测实物抽奖,
-    /// 由 GiftPoolSeeds 注册验证库(见下),不改客户端 gift_random 口径。
+    /// 名次档奖励为内联奖励条目列表(空列表 = 该档不发);结算时按名次落档取奖,经 SendMailTo 投结算邮件、领取时全部发放。
+    /// 下列名次档奖励为验证样例内容(道具 30001/30002),生产按运营口径替换。
     /// </summary>
     private static readonly IReadOnlyList<RankDefDoc> AuthoritativeDefs = new List<RankDefDoc>
     {
@@ -38,9 +38,9 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
             ValidType = 3, ValidVal = 1, MailDefId = 1,
             Tiers = new List<RankRewardTierDoc>
             {
-                new RankRewardTierDoc { RankMin = 1,  RankMax = 1,   Reward = 1002 }, // 第 1 名
-                new RankRewardTierDoc { RankMin = 2,  RankMax = 10,  Reward = 1005 }, // 第 2-10 名
-                new RankRewardTierDoc { RankMin = 11, RankMax = 100, Reward = 1006 }  // 第 11-100 名
+                new RankRewardTierDoc { RankMin = 1,  RankMax = 1,   Rewards = Item(30001, 2) }, // 第 1 名
+                new RankRewardTierDoc { RankMin = 2,  RankMax = 10,  Rewards = Item(30002, 2) }, // 第 2-10 名
+                new RankRewardTierDoc { RankMin = 11, RankMax = 100, Rewards = Item(30001, 1) }  // 第 11-100 名
             }
         },
         // 榜 2:总榜口径(客户端 BoardAlways)。入榜要求 0;持续开启(type=0 永不结算);无结算邮件;一档(第 1 名)。
@@ -50,7 +50,7 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
             ValidType = 0, ValidVal = 0, MailDefId = 0,
             Tiers = new List<RankRewardTierDoc>
             {
-                new RankRewardTierDoc { RankMin = 1, RankMax = 1, Reward = 1007 }
+                new RankRewardTierDoc { RankMin = 1, RankMax = 1, Rewards = Item(30001, 2) }
             }
         },
         // 榜 9001:小上限测试榜。入榜要求 100、入榜上限 3、展示上限 2,用于少量账号下验查榜截断(设计 31)。持续开启不结算。生产可删。
@@ -68,12 +68,21 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
             ValidType = 1, ValidVal = 0, MailDefId = 1,
             Tiers = new List<RankRewardTierDoc>
             {
-                new RankRewardTierDoc { RankMin = 1,  RankMax = 1,   Reward = 1002 },
-                new RankRewardTierDoc { RankMin = 2,  RankMax = 10,  Reward = 1005 },
-                new RankRewardTierDoc { RankMin = 11, RankMax = 100, Reward = 1006 }
+                new RankRewardTierDoc { RankMin = 1,  RankMax = 1,   Rewards = Item(30001, 2) },
+                new RankRewardTierDoc { RankMin = 2,  RankMax = 10,  Rewards = Item(30002, 2) },
+                new RankRewardTierDoc { RankMin = 11, RankMax = 100, Rewards = Item(30001, 1) }
             }
         }
     };
+
+    /// <summary>构造单条道具奖励的内联列表(名次档验证样例用,生产按运营口径替换)。</summary>
+    private static List<RewardEntryDoc> Item(int itemId, int amount)
+    {
+        return new List<RewardEntryDoc>
+        {
+            new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = itemId, Amount = amount }
+        };
+    }
 
     protected override void Awake(RankServiceComponent self)
     {

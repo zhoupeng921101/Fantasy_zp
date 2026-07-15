@@ -71,9 +71,9 @@ public sealed class RankDefDoc
 }
 
 /// <summary>
-/// 名次奖励档(榜定义内嵌项):一个名次区间对应一个奖励库 id。
+/// 名次奖励档(榜定义内嵌项):一个名次区间对应一组内联奖励条目。
 /// 对应 rank.xlsx 一行的 rank_min / rank_max / reward;同榜多行 = 多档,聚合进 RankDefDoc.Tiers。
-/// 结算时按账号名次落哪档发哪档奖(reward 为礼包随机库 id;0 = 该档无奖, 设计 33 §3.2)。
+/// 结算时按账号名次落哪档发哪档奖(空列表 = 该档无奖, 设计 33 §3.2)。
 /// </summary>
 public sealed class RankRewardTierDoc
 {
@@ -83,8 +83,8 @@ public sealed class RankRewardTierDoc
     /// <summary>名次区间上界(含)。对应 rank.xlsx rank_max。</summary>
     public int RankMax { get; set; }
 
-    /// <summary>实发奖励礼包随机库 id(指向 gift_pool 的 Index;0 = 该档无奖)。对应 rank.xlsx reward。</summary>
-    public int Reward { get; set; }
+    /// <summary>该档内联奖励条目(空列表 = 该档无奖),结算时全部发放。对应 rank.xlsx reward。</summary>
+    public List<RewardEntryDoc> Rewards { get; set; } = new List<RewardEntryDoc>();
 }
 
 /// <summary>
