@@ -41,3 +41,6 @@ Fantasy.Packages/Fantasy.Cil/Resources
 
 #dev-flow gate tickets (runtime evidence, never committed)
 .gate/
+
+# 部署发布产物(deploy.local.sh 每次 publish 全量再生;种子文件在 deploy/ 根,不受影响)
+examples/Server/APP/deploy/out/
