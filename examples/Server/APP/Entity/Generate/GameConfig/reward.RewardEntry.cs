@@ -34,7 +34,7 @@ public sealed partial class RewardEntry : Luban.BeanBase
     /// </summary>
     public readonly reward.ERewardType RewardType;
     /// <summary>
-    /// 目标id-货币指TbNum/道具指TbItemDef
+    /// 目标id-货币指TbCurrency/道具指TbItemDef
     /// </summary>
     public readonly int TargetId;
     /// <summary>

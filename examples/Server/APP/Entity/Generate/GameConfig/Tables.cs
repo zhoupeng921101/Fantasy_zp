@@ -20,7 +20,7 @@ public partial class Tables
     /// <summary>
     /// 数值底层货币表
     /// </summary>
-    public num.TbNum TbNum {get; }
+    public currency.TbCurrency TbCurrency {get; }
     /// <summary>
     /// 道具定义表
     /// </summary>
@@ -81,7 +81,7 @@ public partial class Tables
     public Tables(System.Func<string, ByteBuf> loader)
     {
         TbWeightCfg = new block.TbWeightCfg(loader("block_tbweightcfg"));
-        TbNum = new num.TbNum(loader("num_tbnum"));
+        TbCurrency = new currency.TbCurrency(loader("currency_tbcurrency"));
         TbItemDef = new item.TbItemDef(loader("item_tbitemdef"));
         TbGiftRandom = new item.TbGiftRandom(loader("item_tbgiftrandom"));
         TbGiftSelect = new item.TbGiftSelect(loader("item_tbgiftselect"));
@@ -102,7 +102,7 @@ public partial class Tables
     private void ResolveRef()
     {
         TbWeightCfg.ResolveRef(this);
-        TbNum.ResolveRef(this);
+        TbCurrency.ResolveRef(this);
         TbItemDef.ResolveRef(this);
         TbGiftRandom.ResolveRef(this);
         TbGiftSelect.ResolveRef(this);
