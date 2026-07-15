@@ -11,8 +11,8 @@ namespace Fantasy;
 /// 且奖励从不进服务端账本(违 data-authority)。
 ///
 /// 输入 = 邮件内嵌的 RewardEntryDoc 列表(类型 + 目标 id + 数量),全部发放,逐项 best-effort(单项失败记日志不抛、不影响其余):
-///   - Currency(RewardType=1):TargetId 指 TbNum 资源 id → InventoryServiceHelper.MapNumTypeToProperty 映射服务端 PropertyType
-///     → ChangeProperty(serverAuthoritative) + SendDeltaPushTo;num 未配置 / 类型无对应 PropertyType(如 EXP)→ 记 Error 跳过,绝不误发。
+///   - Currency(RewardType=1):TargetId 指 TbCurrency 资源 id → InventoryServiceHelper.MapCurrencyTypeToProperty 映射服务端 PropertyType
+///     → ChangeProperty(serverAuthoritative) + SendDeltaPushTo;cur 未配置 / 类型无对应 PropertyType(如 EXP)→ 记 Error 跳过,绝不误发。
 ///   - Item(RewardType=2):TargetId 指 TbItemDef 道具 id → ItemHoldingsServiceHelper.GrantItem 入背包;
 ///     任一入包后末尾统一 SendInventoryDeltaPush 一次。
 /// 分派口径与 RewardBoxServiceHelper(固定奖励盒,读 Luban RewardEntry)同构:两者都是「内联奖励条目列表、全部发放」,
@@ -50,18 +50,18 @@ public static class MailRewardGrantHelper
                 continue;
             }
 
-            // 货币:TargetId → TbNum → PropertyType(复用 InventoryServiceHelper 权威映射),ChangeProperty 落账 + 推送。
+            // 货币:TargetId → TbCurrency → PropertyType(复用 InventoryServiceHelper 权威映射),ChangeProperty 落账 + 推送。
             if (reward.RewardType == (int)ERewardType.Currency)
             {
-                var num = GameConfigSystem.Tables?.TbNum?.GetOrDefault(reward.TargetId);
-                if (num == null)
+                var cur = GameConfigSystem.Tables?.TbCurrency?.GetOrDefault(reward.TargetId);
+                if (cur == null)
                 {
-                    Log.Error($"邮件奖励货币:num 未配置 account={accountId} numId={reward.TargetId} reason={reason}");
+                    Log.Error($"邮件奖励货币:cur 未配置 account={accountId} currencyId={reward.TargetId} reason={reason}");
                     continue;
                 }
-                if (!InventoryServiceHelper.MapNumTypeToProperty(num.NumType, out var propType))
+                if (!InventoryServiceHelper.MapCurrencyTypeToProperty(cur.CurrencyType, out var propType))
                 {
-                    Log.Error($"邮件奖励货币:num 类型无对应 PropertyType(如 EXP) account={accountId} numId={reward.TargetId} numType={num.NumType} reason={reason}");
+                    Log.Error($"邮件奖励货币:cur 类型无对应 PropertyType(如 EXP) account={accountId} currencyId={reward.TargetId} currencyType={cur.CurrencyType} reason={reason}");
                     continue;
                 }
                 var (code, newAmount) = await PlayerPropertyServiceHelper.ChangeProperty(
@@ -73,7 +73,7 @@ public static class MailRewardGrantHelper
                 else
                 {
                     // 到顶(OverLimit)等非成功码不算错(如体力已满);仅记录供排查。
-                    Log.Debug($"邮件奖励货币未发放 account={accountId} numId={reward.TargetId} type={propType} delta={reward.Amount} code={code}");
+                    Log.Debug($"邮件奖励货币未发放 account={accountId} currencyId={reward.TargetId} type={propType} delta={reward.Amount} code={code}");
                 }
                 continue;
             }
