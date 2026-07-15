@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Fantasy.Async;
 using MongoDB.Driver;
 
@@ -22,15 +21,13 @@ public static class RedeemDecisionHelper
     /// 裁决一次兑换。account 为服务端从会话取得的设备账号(非客户端自报)。
     /// 返回结果码 + 成功时的奖励列表(失败时奖励列表为空)。
     /// </summary>
-    public static async FTask<(RedeemResultCode resultCode, List<RedeemRewardItem> rewards)> Redeem(
+    public static async FTask<(RedeemResultCode resultCode, int rewardBoxId)> Redeem(
         RedeemServiceComponent self, string account, string rawCode)
     {
-        var emptyRewards = new List<RedeemRewardItem>();
-
         // 服务未就绪(MongoDB 不可达):返「服务不可用」,不发奖、码保持可兑(设计 §四,不可本地放行)。
         if (self.CodeTable == null || self.Records == null || self.Counters == null)
         {
-            return (RedeemResultCode.ServiceUnavailable, emptyRewards);
+            return (RedeemResultCode.ServiceUnavailable, 0);
         }
         // 守卫后捕获为非空局部量,传给原子操作私有方法(空安全契约在此显式成立)。
         var records = self.Records;
@@ -42,19 +39,19 @@ public static class RedeemDecisionHelper
         // 2. 空 / 规整后为空 → 码无效(SV3 兜底,不崩)。
         if (string.IsNullOrEmpty(code))
         {
-            return (RedeemResultCode.InvalidCode, emptyRewards);
+            return (RedeemResultCode.InvalidCode, 0);
         }
 
         // 3. 查码表:不存在 → 码无效(SV3)。缓存只读静态配置。
         if (!self.CodeCache.TryGetValue(code, out var config))
         {
-            return (RedeemResultCode.InvalidCode, emptyRewards);
+            return (RedeemResultCode.InvalidCode, 0);
         }
 
         // 4. 过期判定以服务端时钟为准(SV4)。ExpireUnixMs=0 表示永不过期。
         if (config.ExpireUnixMs > 0 && Fantasy.Helper.TimeHelper.Now >= config.ExpireUnixMs)
         {
-            return (RedeemResultCode.Expired, emptyRewards);
+            return (RedeemResultCode.Expired, 0);
         }
 
         // 5. 全局限量:配了上限(>0)才校验。原子条件递增,达上限即失败(SV5/SV8)。
@@ -63,7 +60,7 @@ public static class RedeemDecisionHelper
         {
             if (!await TryConsumeGlobalSlot(counters, code, config.GlobalLimit))
             {
-                return (RedeemResultCode.LimitReached, emptyRewards);
+                return (RedeemResultCode.LimitReached, 0);
             }
             limitConsumed = true;
         }
@@ -76,21 +73,24 @@ public static class RedeemDecisionHelper
                 // 这次请求是重复兑换,却已占了一个名额,补偿性归还(失败分支不占名额, SV10)。
                 await ReleaseGlobalSlot(counters, code);
             }
-            return (RedeemResultCode.AlreadyRedeemed, emptyRewards);
+            return (RedeemResultCode.AlreadyRedeemed, 0);
         }
 
-        // 7. 裁定奖励:按码表配置回包(服务端权威,客户端不申报额度, §五)。
-        //    奖励项走对象池 Create():随响应一起发送,响应 Dispose 时归还池(零 GC 范式,同 UnitInfo)。
-        var rewards = new List<RedeemRewardItem>(config.Rewards.Count);
-        foreach (var r in config.Rewards)
+        // 7. 服务端权威发奖:按码配置的奖励盒整盒发放(货币经 num→PropertyType 落账 + 推送 / 道具入背包 + 推送),
+        //    与全局固定奖励发放同源(RewardBoxServiceHelper,「发固定奖励一律调发奖器」),不再由客户端本地发奖。
+        //    发奖 best-effort(GrantBoxAsync 内部逐项失败记 Error 不抛);记录先于发奖,极小概率丢奖窗口不做登录补领(同塔罗发奖范式)。
+        //    热路径气味:兑换低频(每玩家偶发点击),每次盒内若干笔 ChangeProperty 原子写 + 推送,量小、成本可接受,不降频(server-perf)。
+        var propertyService = self.Scene.GetComponent<PlayerPropertyServiceComponent>();
+        if (propertyService != null)
         {
-            var item = RedeemRewardItem.Create();
-            item.ItemId = r.ItemId;
-            item.Count = r.Count;
-            rewards.Add(item);
+            await RewardBoxServiceHelper.GrantBoxAsync(self.Scene, propertyService, account, config.RewardBoxId, $"redeem:{code}");
+        }
+        else
+        {
+            Log.Error($"兑换发奖:Scene 无 PlayerPropertyServiceComponent,奖励未发放 account={account} code={code} box={config.RewardBoxId}");
         }
 
-        return (RedeemResultCode.Success, rewards);
+        return (RedeemResultCode.Success, config.RewardBoxId);
     }
 
     /// <summary>

@@ -6791,58 +6791,6 @@ namespace Fantasy
         public long MyScore { get; set; }
     }
     /// <summary>
-    /// 兑换奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class RedeemRewardItem : AMessage, IDisposable
-    {
-        public static RedeemRewardItem Create(bool autoReturn = true)
-        {
-            var redeemRewardItem = MessageObjectPool<RedeemRewardItem>.Rent();
-            redeemRewardItem.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                redeemRewardItem.SetIsPool(false);
-            }
-            
-            return redeemRewardItem;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            ItemId = default;
-            Count = default;
-            MessageObjectPool<RedeemRewardItem>.Return(this);
-        }
-        /// <summary>
-        /// 道具 id
-        /// </summary>
-        [ProtoMember(1)]
-        public int ItemId { get; set; }
-        /// <summary>
-        /// 数量
-        /// </summary>
-        [ProtoMember(2)]
-        public int Count { get; set; }
-    }
-    /// <summary>
     /// 客户端提交兑换码请求（玩家身份从会话取，不在请求中携带账号）
     /// </summary>
     [Serializable]
@@ -6930,8 +6878,7 @@ namespace Fantasy
             if (!IsPool()) return; 
             ErrorCode = 0;
             ResultCode = default;
-            foreach (var __t in Rewards) __t.Dispose();
-            Rewards.Clear();
+            RewardBoxId = default;
             MessageObjectPool<G2C_RedeemCodeResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_RedeemCodeResponse; } 
@@ -6943,10 +6890,10 @@ namespace Fantasy
         [ProtoMember(1)]
         public RedeemResultCode ResultCode { get; set; }
         /// <summary>
-        /// 仅 ResultCode=Success 时非空：本次应发奖励（道具 id × 数量）
+        /// 仅 ResultCode=Success 时非 0：本次发放的奖励盒 id（服务端已权威发奖 + 推送，客户端读 TbRewardBox 展示内容）
         /// </summary>
         [ProtoMember(2)]
-        public List<RedeemRewardItem> Rewards { get; set; } = new List<RedeemRewardItem>();
+        public int RewardBoxId { get; set; }
     }
     /// <summary>
     /// 客户端请求改名(身份从会话取,不带账号 / 不带费用 / 不带次数——服务端按 PlayerDoc.RenameCount 自己算)

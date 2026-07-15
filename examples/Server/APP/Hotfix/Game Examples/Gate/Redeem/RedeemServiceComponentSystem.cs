@@ -79,23 +79,19 @@ public sealed class RedeemServiceComponentAwakeSystem : AwakeSystem<RedeemServic
     {
         var samples = new List<RedeemCodeDoc>
         {
-            // SV1:有效码,无过期、不限量,首次兑换返成功 + 奖励列表。
+            // SV1:有效码,无过期、不限量,首次兑换返成功 + 权威发放奖励盒 7002(命运能量x5 + 钻石x50)。
             new RedeemCodeDoc
             {
                 Code = "WELCOME2026",
-                Rewards = new List<RedeemRewardDoc>
-                {
-                    new RedeemRewardDoc { ItemId = 1001, Count = 100 },
-                    new RedeemRewardDoc { ItemId = 2001, Count = 5 }
-                },
+                RewardBoxId = 7002,
                 ExpireUnixMs = 0,
                 GlobalLimit = 0
             },
-            // SV4:已过期码(过期时间设为很早的 Unix 毫秒)。
+            // SV4:已过期码(过期时间设为很早的 Unix 毫秒);奖励盒任取(过期不会发)。
             new RedeemCodeDoc
             {
                 Code = "EXPIRED2020",
-                Rewards = new List<RedeemRewardDoc> { new RedeemRewardDoc { ItemId = 1001, Count = 1 } },
+                RewardBoxId = 7001,
                 ExpireUnixMs = 1577836800000, // 2020-01-01 UTC
                 GlobalLimit = 0
             },
@@ -103,7 +99,7 @@ public sealed class RedeemServiceComponentAwakeSystem : AwakeSystem<RedeemServic
             new RedeemCodeDoc
             {
                 Code = "LIMITED3",
-                Rewards = new List<RedeemRewardDoc> { new RedeemRewardDoc { ItemId = 2001, Count = 1 } },
+                RewardBoxId = 7001,
                 ExpireUnixMs = 0,
                 GlobalLimit = 3
             }

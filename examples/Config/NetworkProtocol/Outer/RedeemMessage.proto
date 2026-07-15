@@ -22,13 +22,6 @@ enum RedeemResultCode
 	ServiceUnavailable = 5
 }
 
-/// 兑换奖励项：道具 id × 数量（与既有奖励同源，客户端用道具元数据解析展示）
-message RedeemRewardItem
-{
-	int32 ItemId = 1; /// 道具 id
-	int32 Count = 2; /// 数量
-}
-
 /// 客户端提交兑换码请求（玩家身份从会话取，不在请求中携带账号）
 message C2G_RedeemCodeRequest // IRequest,G2C_RedeemCodeResponse
 {
@@ -38,5 +31,5 @@ message C2G_RedeemCodeRequest // IRequest,G2C_RedeemCodeResponse
 message G2C_RedeemCodeResponse // IResponse
 {
 	RedeemResultCode ResultCode = 1; /// 裁决结果码
-	repeated RedeemRewardItem Rewards = 2; /// 仅 ResultCode=Success 时非空：本次应发奖励（道具 id × 数量）
+	int32 RewardBoxId = 2; /// 仅 ResultCode=Success 时非 0：本次发放的奖励盒 id（服务端已权威发奖 + 推送，客户端读 TbRewardBox 展示内容）
 }

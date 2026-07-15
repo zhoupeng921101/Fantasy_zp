@@ -34,15 +34,15 @@ public sealed class C2G_RedeemCodeRequestHandler : MessageRPC<C2G_RedeemCodeRequ
             return;
         }
 
-        var (resultCode, rewards) = await RedeemDecisionHelper.Redeem(service, account, request.Code);
+        var (resultCode, rewardBoxId) = await RedeemDecisionHelper.Redeem(service, account, request.Code);
         response.ResultCode = resultCode;
-        // 仅成功时附奖励列表;失败分支奖励列表保持空(SV2:已兑过不含奖励)。
+        // 仅成功时附奖励盒 id(服务端已权威发奖 + 推送,客户端读 TbRewardBox 展示内容);失败分支保持 0。
         if (resultCode == RedeemResultCode.Success)
         {
-            response.Rewards = rewards;
+            response.RewardBoxId = rewardBoxId;
         }
 
-        Log.Debug($"兑换裁决 account={account} rawCode='{request.Code}' result={resultCode} rewardCount={rewards.Count}");
+        Log.Debug($"兑换裁决 account={account} rawCode='{request.Code}' result={resultCode} rewardBox={rewardBoxId}");
     }
 
     /// <summary>

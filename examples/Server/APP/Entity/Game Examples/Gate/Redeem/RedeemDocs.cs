@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace Fantasy;
@@ -10,30 +8,27 @@ namespace Fantasy;
 // 设计基线:design-docs/30-redeem-code-server.md §二/§五。
 
 /// <summary>
-/// 权威码表文档:运营配置的「码 → 奖励 / 有效期 / 全局上限」。
+/// 权威码表文档:运营配置的「码 → 奖励盒 / 有效期 / 全局上限」。
 /// 集合 redeem_code;_id = 规整后(trim+大写)的码字符串本身(使码成为主键,天然防重复配置)。
+/// 发奖走服务端权威奖励盒:兑换成功按 RewardBoxId 调 RewardBoxServiceHelper.GrantBoxAsync 整盒发放(货币落账 + 推送 / 道具入背包),
+/// 与全局固定奖励发放同源(不再由客户端本地发奖)。IgnoreExtraElements 容忍旧 schema 文档(曾内联 Rewards 数组)反序列化不崩,
+/// 但旧文档 RewardBoxId 缺省为 0(空盒不发)——切换后须清 redeem_code 集合重播种,或由运营改配为盒 id。
 /// </summary>
+[BsonIgnoreExtraElements]
 public sealed class RedeemCodeDoc
 {
     /// <summary>规整后(trim+大写)的兑换码,作为 _id 主键。</summary>
     [BsonId]
     public string Code { get; set; } = string.Empty;
 
-    /// <summary>该码奖励:一组「道具 id × 数量」。</summary>
-    public List<RedeemRewardDoc> Rewards { get; set; } = new List<RedeemRewardDoc>();
+    /// <summary>该码发放的奖励盒 id(指向 TbRewardBox)。0 = 无奖励盒(空盒,不发)。</summary>
+    public int RewardBoxId { get; set; }
 
     /// <summary>过期时间(Unix 毫秒, UTC)。0 = 永不过期。</summary>
     public long ExpireUnixMs { get; set; }
 
     /// <summary>全局发放上限。0 = 不限量。</summary>
     public int GlobalLimit { get; set; }
-}
-
-/// <summary>码表内单条奖励项(道具 id × 数量)。</summary>
-public sealed class RedeemRewardDoc
-{
-    public int ItemId { get; set; }
-    public int Count { get; set; }
 }
 
 /// <summary>
