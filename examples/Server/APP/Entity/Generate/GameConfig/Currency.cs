@@ -12,19 +12,19 @@ using Luban;
 
 namespace GameConfig
 {
-public sealed partial class Num : Luban.BeanBase
+public sealed partial class Currency : Luban.BeanBase
 {
-    public Num(ByteBuf _buf) 
+    public Currency(ByteBuf _buf) 
     {
         Id = _buf.ReadInt();
         Desc = _buf.ReadString();
         FuncName = _buf.ReadString();
-        NumType = (num.ENumType)_buf.ReadInt();
+        CurrencyType = (currency.ECurrencyType)_buf.ReadInt();
     }
 
-    public static Num DeserializeNum(ByteBuf _buf)
+    public static Currency DeserializeCurrency(ByteBuf _buf)
     {
-        return new Num(_buf);
+        return new Currency(_buf);
     }
 
     /// <summary>
@@ -42,9 +42,9 @@ public sealed partial class Num : Luban.BeanBase
     /// <summary>
     /// 资源类型
     /// </summary>
-    public readonly num.ENumType NumType;
+    public readonly currency.ECurrencyType CurrencyType;
    
-    public const int __ID__ = 78694;
+    public const int __ID__ = 640046129;
     public override int GetTypeId() => __ID__;
 
     public  void ResolveRef(Tables tables)
@@ -61,7 +61,7 @@ public sealed partial class Num : Luban.BeanBase
         + "id:" + Id + ","
         + "desc:" + Desc + ","
         + "funcName:" + FuncName + ","
-        + "numType:" + NumType + ","
+        + "currencyType:" + CurrencyType + ","
         + "}";
     }
 }

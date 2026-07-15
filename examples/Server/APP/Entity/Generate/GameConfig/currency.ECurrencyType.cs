@@ -9,9 +9,9 @@
 
 
 
-namespace GameConfig.num
+namespace GameConfig.currency
 { 
-    public enum ENumType
+    public enum ECurrencyType
     {
         /// <summary>
         /// 经验

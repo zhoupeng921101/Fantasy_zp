@@ -6,7 +6,7 @@ namespace Fantasy;
 
 /// <summary>
 /// 固定奖励盒发放器(服务端权威,可复用)。按 box_id 取 TbRewardBox 该盒的 Rewards,整组固定全发(不按权重抽):
-///   - Currency 条目:TargetId 指 TbNum 资源 id,经 InventoryServiceHelper.MapNumTypeToProperty 映射到服务端 PropertyType,
+///   - Currency 条目:TargetId 指 TbCurrency 资源 id,经 InventoryServiceHelper.MapCurrencyTypeToProperty 映射到服务端 PropertyType,
 ///     走 PlayerPropertyServiceHelper.ChangeProperty(serverAuthoritative)落账 + SendDeltaPushTo 推送。
 ///     num 无配置 / 类型无对应 PropertyType(如 EXP 无服务端属性)→ 记 Error 跳过,绝不误发。
 ///   - Item 条目:TargetId 指 TbItemDef 道具 id,走 ItemHoldingsServiceHelper.GrantItem 入背包;
@@ -40,15 +40,15 @@ public static class RewardBoxServiceHelper
             // 货币:num_id → PropertyType(复用 InventoryServiceHelper 的权威映射),ChangeProperty 落账 + 推送。
             if (entry.RewardType == ERewardType.Currency)
             {
-                var num = GameConfigSystem.Tables?.TbNum?.GetOrDefault(entry.TargetId);
-                if (num == null)
+                var cur = GameConfigSystem.Tables?.TbCurrency?.GetOrDefault(entry.TargetId);
+                if (cur == null)
                 {
-                    Log.Error($"RewardBox 货币奖励:num 未配置 account={accountId} box={boxId} numId={entry.TargetId}");
+                    Log.Error($"RewardBox 货币奖励:currency 未配置 account={accountId} box={boxId} currencyId={entry.TargetId}");
                     continue;
                 }
-                if (!InventoryServiceHelper.MapNumTypeToProperty(num.NumType, out var propType))
+                if (!InventoryServiceHelper.MapCurrencyTypeToProperty(cur.CurrencyType, out var propType))
                 {
-                    Log.Error($"RewardBox 货币奖励:num 类型无对应 PropertyType(如 EXP) account={accountId} box={boxId} numId={entry.TargetId} numType={num.NumType}");
+                    Log.Error($"RewardBox 货币奖励:currency 类型无对应 PropertyType(如 EXP) account={accountId} box={boxId} currencyId={entry.TargetId} currencyType={cur.CurrencyType}");
                     continue;
                 }
                 var (code, newAmount) = await PlayerPropertyServiceHelper.ChangeProperty(
