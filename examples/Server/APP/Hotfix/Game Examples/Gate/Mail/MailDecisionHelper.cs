@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Fantasy.Async;
 using Fantasy.Helper;
+using Fantasy.Network;
 using MongoDB.Driver;
 
 namespace Fantasy;
@@ -240,6 +241,7 @@ public static class MailDecisionHelper
     /// 服务端进程内发奖入口:给某账号投一封定向邮件(初始未领),供排行榜 / 活动服务端结算复用(SV10)。
     /// 走与运营邮件同一套领取 / 防重机制——只往 mail_directed 插一条,附件为内联奖励条目列表(领取时全部发放),
     /// 该账号下次拉列表即可见、可领。rewards 为 null / 空 → 投一封无奖励通知邮件。
+    /// 投递成功且目标玩家在线时,推 G2C_MailNotify 主动通知(纯信号,客户端据此拉列表刷红点);离线不推(下次登录拉列表照常)。
     /// 返回投递的对外邮件标识("d{guid}");服务不可用(MongoDB 未就绪)返回 null(调用方据此重试)。
     /// 注:发奖入口只负责「投一封」;结算幂等(同一次结算只投一次)是调用方的责任(设计 §五),不在本入口。
     /// </summary>
@@ -274,6 +276,20 @@ public static class MailDecisionHelper
             Log.Warning($"MailDecisionHelper.SendMailTo 投递失败 account={account} rewardCount={(rewards?.Count ?? 0)},err={e.Message}");
             return null;
         }
+
+        // 新邮件主动通知:目标玩家在线则推一个纯信号(客户端收到拉列表刷新收件箱 / 红点,红点仍基于服务端权威列表重算,
+        // 信号不携带邮件数据);离线丢弃——下次登录拉列表照常(不重试,同 delta-push O6)。定向推送低频(每次发信一次、
+        // 只推目标一人,非全量扇出),复用 delta-push 的在线会话定位范式(AccountManageHelper.TryGetAccount → Session.Send)。
+        // 加在 SendMailTo 内部:排行榜结算 / GM / 活动结算等发信线经此入口自动覆盖(改一处治多线)。
+        if (AccountManageHelper.TryGetAccount(self.Scene, account, out var onlineAccount))
+        {
+            Session session = onlineAccount.Session; // EntityReference<Session> 隐式解包(同 SendDeltaPushTo 范式)
+            if (session != null && !session.IsDisposed)
+            {
+                session.Send(new G2C_MailNotify());
+            }
+        }
+
         return DirectedPrefix + directedId;
     }
 

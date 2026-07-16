@@ -75,3 +75,10 @@ message G2C_MailClaimResponse // IResponse
 	MailClaimResultCode ResultCode = 1; /// 裁决结果码
 	repeated MailRewardItem Rewards = 2; /// 仅 ResultCode=Success 时非空：该邮件内嵌附件全部发放的明细（类型 + 目标 id + 数量），供客户端展示
 }
+
+/// 服务端主动通知：该账号有新的定向邮件到达（SendMailTo 投递成功且目标在线时推送）。
+/// 纯信号——不携带邮件数据；客户端收到后拉列表刷新收件箱 / 红点（红点仍基于服务端权威列表重算，不据推送内容判定）。
+/// 离线不推（下次登录拉列表照常）；单向推送、丢失不重试（同 delta-push O6）。广播运营邮件不走本推送（保持拉取，避免全量扇出）。
+message G2C_MailNotify // IMessage
+{
+}

@@ -84,7 +84,8 @@
       "C2G_TestRoamingToRoaming": 10009,
       "G2C_PlayerInfoSnapshot": 10010,
       "G2C_PropertyDeltaPush": 10011,
-      "C2G_TestEnumMessage": 10012
+      "C2G_TestEnumMessage": 10012,
+      "G2C_MailNotify": 10013
     },
     "Request": {
       "C2G_ActivityIncrement": 10001,

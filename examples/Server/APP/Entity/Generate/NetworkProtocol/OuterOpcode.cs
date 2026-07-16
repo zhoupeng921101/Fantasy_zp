@@ -79,6 +79,8 @@ namespace Fantasy
         public const uint C2G_MailClaimRequest = 268445474;
         /// <summary> 服务端领取裁决响应（结果码 + 成功时奖励列表）（§3.4） </summary>
         public const uint G2C_MailClaimResponse = 402663202;
+        /// <summary> 服务端主动通知：该账号有新的定向邮件到达（SendMailTo 投递成功且目标在线时推送）。 纯信号——不携带邮件数据；客户端收到后拉列表刷新收件箱 / 红点（红点仍基于服务端权威列表重算，不据推送内容判定）。 离线不推（下次登录拉列表照常）；单向推送、丢失不重试（同 delta-push O6）。广播运营邮件不走本推送（保持拉取，避免全量扇出）。 </summary>
+        public const uint G2C_MailNotify = 134227741;
         /// <summary> 客户端请求交付某槽位的订单(身份从会话取,不带账号 / 不带订单类型 / 不带奖励金额——服务端按 OrderCursor + DeliveredMask 自己定) </summary>
         public const uint C2G_DeliverOrderRequest = 268445475;
         /// <summary> 服务端交付裁决响应 </summary>

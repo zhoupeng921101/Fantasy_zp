@@ -2829,6 +2829,49 @@ namespace Fantasy
         public List<MailRewardItem> Rewards { get; set; } = new List<MailRewardItem>();
     }
     /// <summary>
+    /// 服务端主动通知：该账号有新的定向邮件到达（SendMailTo 投递成功且目标在线时推送）。
+    /// 纯信号——不携带邮件数据；客户端收到后拉列表刷新收件箱 / 红点（红点仍基于服务端权威列表重算，不据推送内容判定）。
+    /// 离线不推（下次登录拉列表照常）；单向推送、丢失不重试（同 delta-push O6）。广播运营邮件不走本推送（保持拉取，避免全量扇出）。
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_MailNotify : AMessage, IMessage
+    {
+        public static G2C_MailNotify Create(bool autoReturn = true)
+        {
+            var g2C_MailNotify = MessageObjectPool<G2C_MailNotify>.Rent();
+            g2C_MailNotify.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_MailNotify.SetIsPool(false);
+            }
+            
+            return g2C_MailNotify;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MessageObjectPool<G2C_MailNotify>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_MailNotify; } 
+    }
+    /// <summary>
     /// 单条订单项(= 客户端 GameLogic.BlockBlast.Order;Type 用 int32 与客户端 MergeElement 枚举 1..4 对齐,0=None=空槽)
     /// 奖励字段是服务端按 TbMergeOrder 表派生的展示投影:客户端只显示、不参与发奖计算(交付实发以响应/推送为准)。
     /// </summary>
