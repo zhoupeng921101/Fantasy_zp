@@ -24,8 +24,9 @@ public static class RedeemDecisionHelper
     public static async FTask<(RedeemResultCode resultCode, int rewardBoxId)> Redeem(
         RedeemServiceComponent self, string account, string rawCode)
     {
-        // 服务未就绪(MongoDB 不可达):返「服务不可用」,不发奖、码保持可兑(设计 §四,不可本地放行)。
-        if (self.CodeTable == null || self.Records == null || self.Counters == null)
+        // 服务未就绪(MongoDB 不可达):防重/计数无法持久,返「服务不可用」,不发奖、码保持可兑(不本地放行)。
+        // 码表(CodeCache)来自 Luban 配置,独立于 DB;码查不到自然返 InvalidCode,不在此守卫。
+        if (self.Records == null || self.Counters == null)
         {
             return (RedeemResultCode.ServiceUnavailable, 0);
         }
@@ -187,7 +188,7 @@ public static class RedeemDecisionHelper
     /// 一个账号每兑一个码各占一行(_id = "{account}|{code}"),故 1:N → DeleteMany。
     /// 删后该账号此前已兑的码回到「可再兑」态(在该码自身未过期 / 未达全局上限前提下)。
     /// **不**触碰 redeem_counter:其 _id=Code,是按码的全局发放计数(无 Account 字段),属全局共享状态——
-    /// 递减它会凭空归还其他玩家已占的全局名额(限量码被超发),不在 per-player 清档范围;redeem_code 同理(全局码表)。
+    /// 递减它会凭空归还其他玩家已占的全局名额(限量码被超发),不在 per-player 清档范围。
     /// 幂等:0 匹配(本就未兑过)同样视为成功。返回 true=成功(含本就无行);false=MongoDB 不可达 / 异常。
     /// </summary>
     public static async FTask<bool> ClearByAccount(RedeemServiceComponent self, string account)
