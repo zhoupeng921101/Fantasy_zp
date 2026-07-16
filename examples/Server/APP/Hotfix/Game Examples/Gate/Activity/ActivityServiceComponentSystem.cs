@@ -19,8 +19,6 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
     /// 服务端权威活动配置表(单一来源)。
     /// 字段口径(服务端权威,无 Luban 同源):
     ///   - ActivityId    ← activity.xlsx activity_id
-    ///   - NameTextId    ← activity.xlsx name_text_id
-    ///   - DescTextId    ← activity.xlsx desc_text_id
     ///   - Type          ← activity.xlsx type(1=Login,本子单仅接此)
     ///   - Cycle         ← activity.xlsx cycle(1=Daily 跨日重置 / 3=OneShot 永发一次性)
     ///   - Target        ← activity.xlsx target(达标阈值)
@@ -39,8 +37,6 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         new ActivityDefDoc
         {
             ActivityId = 1,
-            NameTextId = 110730,
-            DescTextId = 110731,
             Type = 1,            // Login
             Cycle = 1,           // Daily
             Target = 1,          // 登录一次即达标
@@ -55,8 +51,6 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         new ActivityDefDoc
         {
             ActivityId = 2,
-            NameTextId = 390003,  // EVENT 活动名 textId(占位,沿 §3.5)
-            DescTextId = 390004,  // EVENT 活动描述 textId(占位,沿 §3.5)
             Type = 1,             // Login(每次登录 +1)
             Cycle = 3,            // OneShot(永发一次性)
             Target = 7,           // 累计登录 7 次达标
@@ -75,8 +69,6 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         new ActivityDefDoc
         {
             ActivityId = 3,
-            NameTextId = 390005,  // 占位 textId,沿 §3.5 运营后续配多语言
-            DescTextId = 390006,
             Type = 1,             // Login
             Cycle = 3,            // OneShot 永发一次性
             Target = 7,           // 累计 7 次登录达标
@@ -95,8 +87,6 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         new ActivityDefDoc
         {
             ActivityId = 4,
-            NameTextId = 390007,
-            DescTextId = 390008,
             Type = 1,             // Login
             Cycle = 2,            // Weekly 每周一 0:00 UTC 重置
             Target = 5,           // 本周累计 5 次登录达标
@@ -124,8 +114,6 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         new ActivityDefDoc
         {
             ActivityId = 5,
-            NameTextId = 390009,
-            DescTextId = 390010,
             Type = 2,             // Cumulative(本子单首次启用此 type;handler + service 双层校验仅放行此 type 走 RPC 路径)
             Cycle = 3,            // OneShot 永发一次性(累计 100 局后 LastClaimedCycleKey=1,永不重发)
             Target = 100,         // 累计游戏 100 局达标(中期目标;运营可调,SV4 / SV10 不依赖具体数值)
@@ -191,8 +179,6 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
         {
             var filter = Builders<ActivityDefDoc>.Filter.Eq(x => x.ActivityId, def.ActivityId);
             var update = Builders<ActivityDefDoc>.Update
-                .Set(x => x.NameTextId, def.NameTextId)
-                .Set(x => x.DescTextId, def.DescTextId)
                 .Set(x => x.Type, def.Type)
                 .Set(x => x.Cycle, def.Cycle)
                 .Set(x => x.Target, def.Target)

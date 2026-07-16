@@ -27,12 +27,6 @@ public sealed class ActivityDefDoc
     [BsonId]
     public int ActivityId { get; set; }
 
-    /// <summary>活动名 textId(占位口径同 num/item/mail/rank,客户端查多语言表显示)。对应 activity.xlsx name_text_id。</summary>
-    public int NameTextId { get; set; }
-
-    /// <summary>活动描述 textId。对应 activity.xlsx desc_text_id。</summary>
-    public int DescTextId { get; set; }
-
     /// <summary>
     /// 触发类型(本子单仅接 Login,其余三类留 O3 架构接缝不实做)。对应 activity.xlsx type。
     /// 1=Login(玩家登录时 +1)/ 2=Cumulative(业务系统调进程内 API)/ 3=Schedule(服务端定时器)/ 4=Action(业务系统事件钩子)。
