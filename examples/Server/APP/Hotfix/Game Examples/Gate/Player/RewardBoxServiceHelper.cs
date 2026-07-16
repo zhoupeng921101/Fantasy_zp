@@ -8,7 +8,7 @@ namespace Fantasy;
 /// 固定奖励盒发放器(服务端权威,可复用)。按 box_id 取 TbRewardBox 该盒的 Rewards,整组固定全发(不按权重抽):
 ///   - Currency 条目:TargetId 指 TbCurrency 资源 id,经 InventoryServiceHelper.MapCurrencyTypeToProperty 映射到服务端 PropertyType,
 ///     走 PlayerPropertyServiceHelper.ChangeProperty(serverAuthoritative)落账 + SendDeltaPushTo 推送。
-///     num 无配置 / 类型无对应 PropertyType(如 EXP 无服务端属性)→ 记 Error 跳过,绝不误发。
+///     num 无配置 / 类型无对应 PropertyType(未来未建模货币类型)→ 记 Error 跳过,绝不误发。
 ///   - Item 条目:TargetId 指 TbItemDef 道具 id,走 ItemHoldingsServiceHelper.GrantItem 入背包;
 ///     本盒任一道具入包成功后,读一次玩家文档统一 SendInventoryDeltaPush 一次(GrantItem 逐项不推)。
 /// 逐项 best-effort:单项失败记 Error 不抛、不影响其余项。空盒(box_id 未配置 / Rewards 空)记 Warning 返回。
@@ -48,7 +48,7 @@ public static class RewardBoxServiceHelper
                 }
                 if (!InventoryServiceHelper.MapCurrencyTypeToProperty(cur.CurrencyType, out var propType))
                 {
-                    Log.Error($"RewardBox 货币奖励:currency 类型无对应 PropertyType(如 EXP) account={accountId} box={boxId} currencyId={entry.TargetId} currencyType={cur.CurrencyType}");
+                    Log.Error($"RewardBox 货币奖励:currency 类型无对应 PropertyType(未来未建模货币类型) account={accountId} box={boxId} currencyId={entry.TargetId} currencyType={cur.CurrencyType}");
                     continue;
                 }
                 var (code, newAmount) = await PlayerPropertyServiceHelper.ChangeProperty(

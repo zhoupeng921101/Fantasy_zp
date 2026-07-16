@@ -24,7 +24,7 @@ namespace Fantasy;
 ///   3. SettleExpiredLotsAtLogin —— 惰性过期:登录时剔除已过期批次(无补偿的删库 + 记流水;有补偿的留库待后续结算)。
 ///
 /// 有效期:过期时刻在获得时由服务端时钟固化为绝对 Unix 毫秒,之后只做比较;过期判定用服务端权威时钟,不信客户端本地时钟。
-/// 使用产出:本轮只支持货币效果(TbItemDef.UseEffect==1 num),num_id 经 TbCurrency 映射到服务端 PropertyType(Piety/Diamond/Energy)。
+/// 使用产出:本轮只支持货币效果(TbItemDef.UseEffect==1 num),num_id 经 TbCurrency 映射到服务端 PropertyType(GuardianExp/Piety/Diamond/Energy)。
 /// </summary>
 public static class InventoryServiceHelper
 {
@@ -676,7 +676,7 @@ public static class InventoryServiceHelper
 
     /// <summary>
     /// 解析货币使用效果(本轮唯一支持的效果):UseEffect==1 num → TbCurrency 映射 PropertyType,产出量 = UseNum(每个道具)。
-    /// 不是货币效果 / num 无配置 / num 类型无对应服务端 PropertyType(如 EXP)/ UseNum<=0 → 返 false(NotUsable)。
+    /// 不是货币效果 / num 无配置 / num 类型无对应服务端 PropertyType(未来未建模货币类型)/ UseNum<=0 → 返 false(NotUsable)。
     /// public:供发奖路径(如塔罗奖励 TarotRewardServiceHelper)对 automatic 货币道具「发放即转货币」复用同一 num→PropertyType 映射,不另写一份。
     /// </summary>
     public static bool TryResolveCurrencyProduce(ItemDef def, out PropertyType type, out long perItem)
@@ -705,17 +705,20 @@ public static class InventoryServiceHelper
     }
 
     /// <summary>
-    /// currency.ECurrencyType → 服务端 PropertyType。EXP(经验)无对应 PropertyType(PlayerDoc.Exp 不在 PropertyType 枚举)→ false。
+    /// currency.ECurrencyType → 服务端 PropertyType,四种货币全覆盖。
+    /// EXP(守护者经验)对应玩法侧 PropertyType.GuardianExp——与 PlayerDoc.Exp(玩家账号经验)是两回事、不复用。
     /// public:货币产出的单一映射源,供道具使用(TryResolveCurrencyProduce)与固定奖励盒发放(RewardBoxServiceHelper)共用,不另写一份。
+    /// default 保底:未来新增未建模的货币类型返 false,让调用方安全跳过、不误发。
     /// </summary>
     public static bool MapCurrencyTypeToProperty(GameConfig.currency.ECurrencyType currencyType, out PropertyType type)
     {
         switch (currencyType)
         {
+            case GameConfig.currency.ECurrencyType.EXP: type = PropertyType.GuardianExp; return true;
             case GameConfig.currency.ECurrencyType.PIETY: type = PropertyType.Piety; return true;
             case GameConfig.currency.ECurrencyType.DIAMOND: type = PropertyType.Diamond; return true;
             case GameConfig.currency.ECurrencyType.ENERGY: type = PropertyType.Energy; return true;
-            default: type = default; return false; // EXP 等:无对应 PropertyType。
+            default: type = default; return false; // 未来未建模的货币类型:保底跳过,不误发。
         }
     }
 }
