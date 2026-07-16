@@ -193,11 +193,18 @@ public static class RankDecisionHelper
             showCount = ranked.Count;
         }
         var entries = new List<RankEntryItem>(showCount);
+        // 批量取展示账号的真实昵称(一次 $in 查询;拉榜是热路径,避免逐条查库)。
+        var showAccounts = new List<string>(showCount);
+        for (var i = 0; i < showCount; i++)
+        {
+            showAccounts.Add(ranked[i].Account);
+        }
+        var nicknames = await FetchNicknames(self, showAccounts);
         for (var i = 0; i < showCount; i++)
         {
             var item = RankEntryItem.Create();
             item.Rank = i + 1;
-            item.PlayerName = DisplayName(ranked[i].Account);
+            item.PlayerName = DisplayName(ranked[i].Account, nicknames);
             item.Score = ranked[i].BestScore;
             entries.Add(item);
         }
@@ -210,8 +217,38 @@ public static class RankDecisionHelper
     /// <summary>全服分数文档 _id 复合键:"{account}|{rankId}"。</summary>
     private static string MakeKey(string account, int rankId) => $"{account}|{rankId}";
 
-    /// <summary>玩家展示名占位:账号标识加前缀(本增量无昵称库, 客户端有本地昵称则替换, §3.5 注 / O5)。</summary>
-    private static string DisplayName(string account) => DisplayNamePrefix + account;
+    /// <summary>玩家展示名:有真实昵称(改过名, PlayerDoc.Nickname 非空)用昵称,否则回退账号占位。</summary>
+    private static string DisplayName(string account, IReadOnlyDictionary<string, string> nicknames)
+        => nicknames.TryGetValue(account, out var nick) ? nick : DisplayNamePrefix + account;
+
+    /// <summary>
+    /// 批量取展示账号的真实昵称(PlayerDoc.Nickname):一次 $in 查询建 account→Nickname 字典,只放非空昵称
+    /// (未改名者不进字典 → DisplayName 回退占位)。拉榜热路径:整批一次查库、不逐条(N 账号 → 1 次有界读)。
+    /// DB 不可达 → 返空字典(全回退占位,不阻断拉榜)。
+    /// </summary>
+    private static async FTask<Dictionary<string, string>> FetchNicknames(RankServiceComponent self, List<string> accounts)
+    {
+        var map = new Dictionary<string, string>();
+        if (accounts.Count == 0)
+        {
+            return map;
+        }
+        if (self.Scene.World.Database?.GetDatabaseInstance is not IMongoDatabase mongoDatabase)
+        {
+            return map;
+        }
+        var players = mongoDatabase.GetCollection<PlayerDoc>("players");
+        var filter = Builders<PlayerDoc>.Filter.In(x => x.AccountId, accounts);
+        var docs = await players.Find(filter).ToListAsync();
+        foreach (var d in docs)
+        {
+            if (!string.IsNullOrEmpty(d.Nickname))
+            {
+                map[d.AccountId] = d.Nickname;
+            }
+        }
+        return map;
+    }
 
     // ── 清档 ──────────────────────────────────────────────────
 
