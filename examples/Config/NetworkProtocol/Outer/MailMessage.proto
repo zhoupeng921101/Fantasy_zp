@@ -32,7 +32,15 @@ enum MailSenderType
 	RankReward = 1
 }
 
-/// 邮件列表一条：客户端画收件箱用（不含奖励明细，领取时才随响应下发，见 §3.2 注）
+/// 单条奖励项：类型 + 目标 id + 数量（客户端据类型分别解析货币 / 道具元数据展示）。列表预览 MailListItem.Rewards 与领取响应 G2C_MailClaimResponse.Rewards 共用
+message MailRewardItem
+{
+	int32 RewardType = 1; /// 奖励类型：1=货币 / 2=道具（口径同 reward.ERewardType）
+	int32 TargetId = 2; /// 目标 id：货币指 TbNum id，道具指 TbItemDef id
+	int32 Amount = 3; /// 发放数量
+}
+
+/// 邮件列表一条：客户端画收件箱用（含奖励明细，供领取前预览「给什么」）
 message MailListItem
 {
 	string MailId = 1; /// 邮件标识（领取时回传定位；广播邮件与定向邮件用同一标识空间，客户端无需区分）
@@ -42,14 +50,7 @@ message MailListItem
 	int64 SendUnixMs = 5; /// 收件/发件时间（服务端 Unix 毫秒）
 	bool HasReward = 6; /// 是否有附件（内嵌附件非空；客户端据此画领取按钮/红点）
 	bool Claimed = 7; /// 该账号对此邮件的领取态（已领=true / 未领=false）
-}
-
-/// 领取响应内单条奖励项：类型 + 目标 id + 数量（客户端据类型分别解析货币 / 道具元数据展示）
-message MailRewardItem
-{
-	int32 RewardType = 1; /// 奖励类型：1=货币 / 2=道具（口径同 reward.ERewardType）
-	int32 TargetId = 2; /// 目标 id：货币指 TbNum id，道具指 TbItemDef id
-	int32 Amount = 3; /// 发放数量
+	repeated MailRewardItem Rewards = 8; /// 内嵌附件奖励明细（类型+目标id+数量；空=无奖励通知邮件），供领取前预览；领取仍以服务端裁决为准
 }
 
 /// 客户端拉邮件列表请求（无业务字段:身份从会话取,不携带账号;触发时机由客户端定）（§3.1）

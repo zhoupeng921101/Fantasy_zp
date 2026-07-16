@@ -64,7 +64,7 @@ public static class MailDecisionHelper
             var mailId = BroadcastPrefix + template.TemplateId;
             mails.Add(BuildListItem(
                 mailId, template.Sender, template.Title, template.Content,
-                template.SendUnixMs, template.Rewards.Count > 0, claimedSet.Contains(mailId)));
+                template.SendUnixMs, template.Rewards, claimedSet.Contains(mailId)));
         }
 
         // 定向邮件(仅该账号应收):按 Account 查,滤过期。
@@ -79,7 +79,7 @@ public static class MailDecisionHelper
             var mailId = DirectedPrefix + doc.DirectedId;
             mails.Add(BuildListItem(
                 mailId, doc.Sender, doc.Title, doc.Content,
-                doc.SendUnixMs, doc.Rewards.Count > 0, claimedSet.Contains(mailId)));
+                doc.SendUnixMs, doc.Rewards, claimedSet.Contains(mailId)));
         }
 
         return (MailClaimResultCode.Success, mails);
@@ -98,10 +98,15 @@ public static class MailDecisionHelper
         return set;
     }
 
-    /// <summary>列表项走对象池 Create():随响应一起发送,响应 Dispose 时归还池(零 GC 范式)。</summary>
+    /// <summary>
+    /// 列表项走对象池 Create():随响应一起发送,响应 Dispose 时归还池(零 GC 范式)。
+    /// 内嵌 RewardEntryDoc → MailListItem.Rewards(类型+目标id+数量),供客户端领取前预览「给什么」;
+    /// HasReward 由明细非空派生。奖励项同走对象池 Create(与领取响应 Rewards 填充同范式)。
+    /// 成本:每封几条明细、对象池无 GC、拉列表低频且邮件条数小,可忽略(不优化)。
+    /// </summary>
     private static MailListItem BuildListItem(
         string mailId, MailSenderType sender, string title, string content,
-        long sendUnixMs, bool hasReward, bool claimed)
+        long sendUnixMs, List<RewardEntryDoc> rewards, bool claimed)
     {
         var item = MailListItem.Create();
         item.MailId = mailId;
@@ -109,8 +114,19 @@ public static class MailDecisionHelper
         item.Title = title;
         item.Content = content;
         item.SendUnixMs = sendUnixMs;
-        item.HasReward = hasReward;
+        item.HasReward = rewards != null && rewards.Count > 0;
         item.Claimed = claimed;
+        if (rewards != null)
+        {
+            foreach (var entry in rewards)
+            {
+                var r = MailRewardItem.Create();
+                r.RewardType = entry.RewardType;
+                r.TargetId = entry.TargetId;
+                r.Amount = entry.Amount;
+                item.Rewards.Add(r);
+            }
+        }
         return item;
     }
 

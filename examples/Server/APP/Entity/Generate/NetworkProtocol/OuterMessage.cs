@@ -2483,89 +2483,7 @@ namespace Fantasy
         public bool Loaded { get; set; }
     }
     /// <summary>
-    /// 邮件列表一条：客户端画收件箱用（不含奖励明细，领取时才随响应下发，见 §3.2 注）
-    /// </summary>
-    [Serializable]
-    [ProtoContract]
-    public partial class MailListItem : AMessage, IDisposable
-    {
-        public static MailListItem Create(bool autoReturn = true)
-        {
-            var mailListItem = MessageObjectPool<MailListItem>.Rent();
-            mailListItem.AutoReturn = autoReturn;
-            
-            if (!autoReturn)
-            {
-                mailListItem.SetIsPool(false);
-            }
-            
-            return mailListItem;
-        }
-        
-        public void Return()
-        {
-            if (!AutoReturn)
-            {
-                SetIsPool(true);
-                AutoReturn = true;
-            }
-            else if (!IsPool())
-            {
-                return;
-            }
-            Dispose();
-        }
-
-        public void Dispose()
-        {
-            if (!IsPool()) return; 
-            MailId = default;
-            Sender = default;
-            Title = default;
-            Content = default;
-            SendUnixMs = default;
-            HasReward = default;
-            Claimed = default;
-            MessageObjectPool<MailListItem>.Return(this);
-        }
-        /// <summary>
-        /// 邮件标识（领取时回传定位；广播邮件与定向邮件用同一标识空间，客户端无需区分）
-        /// </summary>
-        [ProtoMember(1)]
-        public string MailId { get; set; }
-        /// <summary>
-        /// 发件人类型（服务端赋值）
-        /// </summary>
-        [ProtoMember(2)]
-        public MailSenderType Sender { get; set; }
-        /// <summary>
-        /// 标题（真实文本，来自邮件模板）
-        /// </summary>
-        [ProtoMember(3)]
-        public string Title { get; set; }
-        /// <summary>
-        /// 正文（真实文本，来自邮件模板）
-        /// </summary>
-        [ProtoMember(4)]
-        public string Content { get; set; }
-        /// <summary>
-        /// 收件/发件时间（服务端 Unix 毫秒）
-        /// </summary>
-        [ProtoMember(5)]
-        public long SendUnixMs { get; set; }
-        /// <summary>
-        /// 是否有附件（内嵌附件非空；客户端据此画领取按钮/红点）
-        /// </summary>
-        [ProtoMember(6)]
-        public bool HasReward { get; set; }
-        /// <summary>
-        /// 该账号对此邮件的领取态（已领=true / 未领=false）
-        /// </summary>
-        [ProtoMember(7)]
-        public bool Claimed { get; set; }
-    }
-    /// <summary>
-    /// 领取响应内单条奖励项：类型 + 目标 id + 数量（客户端据类型分别解析货币 / 道具元数据展示）
+    /// 单条奖励项：类型 + 目标 id + 数量（客户端据类型分别解析货币 / 道具元数据展示）。列表预览 MailListItem.Rewards 与领取响应 G2C_MailClaimResponse.Rewards 共用
     /// </summary>
     [Serializable]
     [ProtoContract]
@@ -2621,6 +2539,95 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(3)]
         public int Amount { get; set; }
+    }
+    /// <summary>
+    /// 邮件列表一条：客户端画收件箱用（含奖励明细，供领取前预览「给什么」）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class MailListItem : AMessage, IDisposable
+    {
+        public static MailListItem Create(bool autoReturn = true)
+        {
+            var mailListItem = MessageObjectPool<MailListItem>.Rent();
+            mailListItem.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                mailListItem.SetIsPool(false);
+            }
+            
+            return mailListItem;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            MailId = default;
+            Sender = default;
+            Title = default;
+            Content = default;
+            SendUnixMs = default;
+            HasReward = default;
+            Claimed = default;
+            foreach (var __t in Rewards) __t.Dispose();
+            Rewards.Clear();
+            MessageObjectPool<MailListItem>.Return(this);
+        }
+        /// <summary>
+        /// 邮件标识（领取时回传定位；广播邮件与定向邮件用同一标识空间，客户端无需区分）
+        /// </summary>
+        [ProtoMember(1)]
+        public string MailId { get; set; }
+        /// <summary>
+        /// 发件人类型（服务端赋值）
+        /// </summary>
+        [ProtoMember(2)]
+        public MailSenderType Sender { get; set; }
+        /// <summary>
+        /// 标题（真实文本，来自邮件模板）
+        /// </summary>
+        [ProtoMember(3)]
+        public string Title { get; set; }
+        /// <summary>
+        /// 正文（真实文本，来自邮件模板）
+        /// </summary>
+        [ProtoMember(4)]
+        public string Content { get; set; }
+        /// <summary>
+        /// 收件/发件时间（服务端 Unix 毫秒）
+        /// </summary>
+        [ProtoMember(5)]
+        public long SendUnixMs { get; set; }
+        /// <summary>
+        /// 是否有附件（内嵌附件非空；客户端据此画领取按钮/红点）
+        /// </summary>
+        [ProtoMember(6)]
+        public bool HasReward { get; set; }
+        /// <summary>
+        /// 该账号对此邮件的领取态（已领=true / 未领=false）
+        /// </summary>
+        [ProtoMember(7)]
+        public bool Claimed { get; set; }
+        /// <summary>
+        /// 内嵌附件奖励明细（类型+目标id+数量；空=无奖励通知邮件），供领取前预览；领取仍以服务端裁决为准
+        /// </summary>
+        [ProtoMember(8)]
+        public List<MailRewardItem> Rewards { get; set; } = new List<MailRewardItem>();
     }
     /// <summary>
     /// 客户端拉邮件列表请求（无业务字段:身份从会话取,不携带账号;触发时机由客户端定）（§3.1）
