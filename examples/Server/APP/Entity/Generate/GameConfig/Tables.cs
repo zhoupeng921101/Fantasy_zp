@@ -38,14 +38,6 @@ public partial class Tables
     /// </summary>
     public avatar.TbAvatar TbAvatar {get; }
     /// <summary>
-    /// 通用邮件模板表
-    /// </summary>
-    public mail.TbMail TbMail {get; }
-    /// <summary>
-    /// 邮件全局配置表(单行)
-    /// </summary>
-    public mail.TbMailGlobal TbMailGlobal {get; }
-    /// <summary>
     /// rank board table (multi-tier per id)
     /// </summary>
     public rank.TbRank TbRank {get; }
@@ -77,6 +69,10 @@ public partial class Tables
     /// 奖励盒子表(一行一盒/box_id取整盒奖励)
     /// </summary>
     public reward.TbRewardBox TbRewardBox {get; }
+    /// <summary>
+    /// 通用兑换码表(服务端权威码表,code为key,仅server组不进客户端包)
+    /// </summary>
+    public redeem.TbRedeemCode TbRedeemCode {get; }
 
     public Tables(System.Func<string, ByteBuf> loader)
     {
@@ -86,8 +82,6 @@ public partial class Tables
         TbGiftRandom = new item.TbGiftRandom(loader("item_tbgiftrandom"));
         TbGiftSelect = new item.TbGiftSelect(loader("item_tbgiftselect"));
         TbAvatar = new avatar.TbAvatar(loader("avatar_tbavatar"));
-        TbMail = new mail.TbMail(loader("mail_tbmail"));
-        TbMailGlobal = new mail.TbMailGlobal(loader("mail_tbmailglobal"));
         TbRank = new rank.TbRank(loader("rank_tbrank"));
         TbGlobal = new global.TbGlobal(loader("global_tbglobal"));
         TbMergeOrder = new block.TbMergeOrder(loader("block_tbmergeorder"));
@@ -96,6 +90,7 @@ public partial class Tables
         TbGoddessReward = new block.TbGoddessReward(loader("block_tbgoddessreward"));
         TbTarotChapter = new block.TbTarotChapter(loader("block_tbtarotchapter"));
         TbRewardBox = new reward.TbRewardBox(loader("reward_tbrewardbox"));
+        TbRedeemCode = new redeem.TbRedeemCode(loader("redeem_tbredeemcode"));
         ResolveRef();
     }
     
@@ -107,8 +102,6 @@ public partial class Tables
         TbGiftRandom.ResolveRef(this);
         TbGiftSelect.ResolveRef(this);
         TbAvatar.ResolveRef(this);
-        TbMail.ResolveRef(this);
-        TbMailGlobal.ResolveRef(this);
         TbRank.ResolveRef(this);
         TbGlobal.ResolveRef(this);
         TbMergeOrder.ResolveRef(this);
@@ -117,6 +110,7 @@ public partial class Tables
         TbGoddessReward.ResolveRef(this);
         TbTarotChapter.ResolveRef(this);
         TbRewardBox.ResolveRef(this);
+        TbRedeemCode.ResolveRef(this);
     }
 }
 

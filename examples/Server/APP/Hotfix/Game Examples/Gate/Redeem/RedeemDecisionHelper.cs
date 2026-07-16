@@ -24,8 +24,9 @@ public static class RedeemDecisionHelper
     public static async FTask<(RedeemResultCode resultCode, int rewardBoxId)> Redeem(
         RedeemServiceComponent self, string account, string rawCode)
     {
-        // 服务未就绪(MongoDB 不可达):返「服务不可用」,不发奖、码保持可兑(设计 §四,不可本地放行)。
-        if (self.CodeTable == null || self.Records == null || self.Counters == null)
+        // 服务未就绪(MongoDB 不可达):防重/计数无法持久,返「服务不可用」,不发奖、码保持可兑(不本地放行)。
+        // 码表(CodeCache)来自 Luban 配置,独立于 DB;码查不到自然返 InvalidCode,不在此守卫。
+        if (self.Records == null || self.Counters == null)
         {
             return (RedeemResultCode.ServiceUnavailable, 0);
         }
