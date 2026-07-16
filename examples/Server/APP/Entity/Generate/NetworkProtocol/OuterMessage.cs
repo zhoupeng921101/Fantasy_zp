@@ -6770,10 +6770,12 @@ namespace Fantasy
             Entries.Clear();
             MyRank = default;
             MyScore = default;
+            DailyClaimable = default;
+            PraiseClaimable = default;
             MessageObjectPool<G2C_RankQueryResponse>.Return(this);
         }
         public uint OpCode() { return OuterOpcode.G2C_RankQueryResponse; } 
-        [ProtoMember(5)]
+        [ProtoMember(7)]
         public uint ErrorCode { get; set; }
         /// <summary>
         /// 结果码
@@ -6795,6 +6797,121 @@ namespace Fantasy
         /// </summary>
         [ProtoMember(4)]
         public long MyScore { get; set; }
+        /// <summary>
+        /// 该榜今日每日奖是否可领（已入榜 + 名次档有每日奖 + 今日未领）；客户端画每日领取按钮/红点
+        /// </summary>
+        [ProtoMember(5)]
+        public bool DailyClaimable { get; set; }
+        /// <summary>
+        /// 该榜今日点赞奖是否可领（该榜有点赞奖 + 今日未领）；客户端画点赞领取按钮/红点
+        /// </summary>
+        [ProtoMember(6)]
+        public bool PraiseClaimable { get; set; }
+    }
+    /// <summary>
+    /// 客户端领取每日/点赞奖请求（身份从会话取，不携带账号）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class C2G_RankClaimRewardRequest : AMessage, IRequest
+    {
+        public static C2G_RankClaimRewardRequest Create(bool autoReturn = true)
+        {
+            var c2G_RankClaimRewardRequest = MessageObjectPool<C2G_RankClaimRewardRequest>.Rent();
+            c2G_RankClaimRewardRequest.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                c2G_RankClaimRewardRequest.SetIsPool(false);
+            }
+            
+            return c2G_RankClaimRewardRequest;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            RankId = default;
+            ClaimType = default;
+            MessageObjectPool<C2G_RankClaimRewardRequest>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.C2G_RankClaimRewardRequest; } 
+        [ProtoIgnore]
+        public G2C_RankClaimRewardResponse ResponseType { get; set; }
+        /// <summary>
+        /// 领哪个榜的奖
+        /// </summary>
+        [ProtoMember(1)]
+        public int RankId { get; set; }
+        /// <summary>
+        /// 领哪类奖：1=每日奖（按名次档）/ 2=点赞奖（榜级）
+        /// </summary>
+        [ProtoMember(2)]
+        public int ClaimType { get; set; }
+    }
+    /// <summary>
+    /// 服务端领取裁决响应（奖励走服务端邮件，不在回包；客户端成功后重拉收件箱见奖）
+    /// </summary>
+    [Serializable]
+    [ProtoContract]
+    public partial class G2C_RankClaimRewardResponse : AMessage, IResponse
+    {
+        public static G2C_RankClaimRewardResponse Create(bool autoReturn = true)
+        {
+            var g2C_RankClaimRewardResponse = MessageObjectPool<G2C_RankClaimRewardResponse>.Rent();
+            g2C_RankClaimRewardResponse.AutoReturn = autoReturn;
+            
+            if (!autoReturn)
+            {
+                g2C_RankClaimRewardResponse.SetIsPool(false);
+            }
+            
+            return g2C_RankClaimRewardResponse;
+        }
+        
+        public void Return()
+        {
+            if (!AutoReturn)
+            {
+                SetIsPool(true);
+                AutoReturn = true;
+            }
+            else if (!IsPool())
+            {
+                return;
+            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (!IsPool()) return; 
+            ErrorCode = 0;
+            ResultCode = default;
+            MessageObjectPool<G2C_RankClaimRewardResponse>.Return(this);
+        }
+        public uint OpCode() { return OuterOpcode.G2C_RankClaimRewardResponse; } 
+        [ProtoMember(2)]
+        public uint ErrorCode { get; set; }
+        /// <summary>
+        /// 裁决结果码
+        /// </summary>
+        [ProtoMember(1)]
+        public RankClaimResultCode ResultCode { get; set; }
     }
     /// <summary>
     /// 客户端提交兑换码请求（玩家身份从会话取，不在请求中携带账号）

@@ -67,4 +67,33 @@ message G2C_RankQueryResponse // IResponse
 	repeated RankEntryItem Entries = 2; /// 已按分数降序 + 同分达到时间升序排好、截到展示上限（show_count_max）的条目
 	int32 MyRank = 3; /// 请求者（会话账号）在全服的名次；未入榜（无成绩/低于入榜要求/超入榜上限）= 0
 	int64 MyScore = 4; /// 请求者当前最佳成绩；无成绩 = 0（名次 0 时分数照回供「距上榜差值」显示）
+	bool DailyClaimable = 5; /// 该榜今日每日奖是否可领（已入榜 + 名次档有每日奖 + 今日未领）；客户端画每日领取按钮/红点
+	bool PraiseClaimable = 6; /// 该榜今日点赞奖是否可领（该榜有点赞奖 + 今日未领）；客户端画点赞领取按钮/红点
+}
+
+/// 领取每日/点赞奖裁决结果码
+enum RankClaimResultCode
+{
+	/// 成功：服务端已投奖励邮件到收件箱、写今日已领标记（奖励在邮件领取时到账）
+	Success = 0,
+	/// 未入榜（每日奖要求在榜；名次 0 = 无成绩/低于入榜要求/超入榜上限）→ 不发
+	NotRanked = 1,
+	/// 无该类奖励（该名次档无每日奖 / 该榜无点赞奖 / 榜 id 查不到 / ClaimType 非法）→ 不发
+	NoReward = 2,
+	/// 今日已领过该类奖（服务端跨天重置，明日可再领）→ 不重复发
+	AlreadyClaimedToday = 3,
+	/// 服务不可用（会话未登录 / 组件或 MongoDB 未就绪）；客户端提示重试、不本地放行
+	ServiceUnavailable = 4
+}
+
+/// 客户端领取每日/点赞奖请求（身份从会话取，不携带账号）
+message C2G_RankClaimRewardRequest // IRequest,G2C_RankClaimRewardResponse
+{
+	int32 RankId = 1; /// 领哪个榜的奖
+	int32 ClaimType = 2; /// 领哪类奖：1=每日奖（按名次档）/ 2=点赞奖（榜级）
+}
+/// 服务端领取裁决响应（奖励走服务端邮件，不在回包；客户端成功后重拉收件箱见奖）
+message G2C_RankClaimRewardResponse // IResponse
+{
+	RankClaimResultCode ResultCode = 1; /// 裁决结果码
 }

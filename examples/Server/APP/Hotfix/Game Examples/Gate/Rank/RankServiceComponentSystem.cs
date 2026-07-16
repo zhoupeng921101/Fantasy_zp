@@ -27,7 +27,8 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
     /// 服务端工程无 Luban 集成(无 TbXxx/.bytes 加载链,同设计 30 兑换码权威配置已移出 Luban、改 MongoDB 文档的先例),
     /// 故榜定义在服务端以本声明表为权威源、reconcile 进 MongoDB,不建 Luban→服务端导出路径(设计 31 O6「静态配置够用」)。
     /// 名次档奖励为内联奖励条目列表(空列表 = 该档不发);结算时按名次落档取奖,经 SendMailTo 投结算邮件、领取时全部发放。
-    /// 下列名次档奖励为验证样例内容(道具 30001/30002),生产按运营口径替换。
+    /// 每日奖(tier.DailyRewards,按名次档)/ 点赞奖(def.PraiseRewards,榜级不分档)同为内联奖励条目,玩家每日各领一次(服务端跨天重置),经 SendMailTo 投奖励邮件。
+    /// 下列名次档 / 每日 / 点赞奖励均为验证样例占位内容(道具 30001/30002),生产按运营口径替换。
     /// </summary>
     private static readonly IReadOnlyList<RankDefDoc> AuthoritativeDefs = new List<RankDefDoc>
     {
@@ -38,10 +39,11 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
             ValidType = 3, ValidVal = 1, MailDefId = 1,
             Tiers = new List<RankRewardTierDoc>
             {
-                new RankRewardTierDoc { RankMin = 1,  RankMax = 1,   Rewards = Item(30001, 2) }, // 第 1 名
-                new RankRewardTierDoc { RankMin = 2,  RankMax = 10,  Rewards = Item(30002, 2) }, // 第 2-10 名
-                new RankRewardTierDoc { RankMin = 11, RankMax = 100, Rewards = Item(30001, 1) }  // 第 11-100 名
-            }
+                new RankRewardTierDoc { RankMin = 1,  RankMax = 1,   Rewards = Item(30001, 2), DailyRewards = Item(30001, 1) }, // 第 1 名
+                new RankRewardTierDoc { RankMin = 2,  RankMax = 10,  Rewards = Item(30002, 2), DailyRewards = Item(30002, 1) }, // 第 2-10 名
+                new RankRewardTierDoc { RankMin = 11, RankMax = 100, Rewards = Item(30001, 1), DailyRewards = Item(30001, 1) }  // 第 11-100 名
+            },
+            PraiseRewards = Item(30002, 1) // 点赞奖(榜级不分档;占位内容待运营替换)
         },
         // 榜 2:总榜口径(客户端 BoardAlways)。入榜要求 0;持续开启(type=0 永不结算);无结算邮件;一档(第 1 名)。
         new RankDefDoc
@@ -104,6 +106,7 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
         var scores = mongoDatabase.GetCollection<RankScoreDoc>("rank_score");
         self.Scores = scores;
         self.SettleMarks = mongoDatabase.GetCollection<RankSettleMarkDoc>("rank_settle");
+        self.ClaimMarks = mongoDatabase.GetCollection<RankClaimMarkDoc>("rank_claim");
         var defs = mongoDatabase.GetCollection<RankDefDoc>("rank_def");
 
         // 查榜按 (RankId 升, BestScore 降, AchievedUnixMs 升) 索引取前 N:
@@ -177,7 +180,8 @@ public sealed class RankServiceComponentAwakeSystem : AwakeSystem<RankServiceCom
                 .Set(x => x.ValidType, def.ValidType)
                 .Set(x => x.ValidVal, def.ValidVal)
                 .Set(x => x.MailDefId, def.MailDefId)
-                .Set(x => x.Tiers, def.Tiers);
+                .Set(x => x.Tiers, def.Tiers)               // DailyRewards 内嵌于各 tier,随 Tiers 一并覆盖
+                .Set(x => x.PraiseRewards, def.PraiseRewards);
             var options = new UpdateOptions { IsUpsert = true };
             await defs.UpdateOneAsync(filter, update, options);
         }

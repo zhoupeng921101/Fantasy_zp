@@ -132,7 +132,8 @@
       "C2G_ClearPlayerDataRequest": 10043,
       "C2G_ClearBoardRequest": 10044,
       "C2G_ClearInventoryRequest": 10045,
-      "C2G_GrantTestItemRequest": 10046
+      "C2G_GrantTestItemRequest": 10046,
+      "C2G_RankClaimRewardRequest": 10047
     },
     "Response": {
       "G2C_ActivityIncrementResponse": 10001,
@@ -180,7 +181,8 @@
       "G2C_ClearPlayerDataResponse": 10043,
       "G2C_ClearBoardResponse": 10044,
       "G2C_ClearInventoryResponse": 10045,
-      "G2C_GrantTestItemResponse": 10046
+      "G2C_GrantTestItemResponse": 10046,
+      "G2C_RankClaimRewardResponse": 10047
     },
     "RoamingMessage": {
       "C2Chat_TestRoamingMessage": 10001,

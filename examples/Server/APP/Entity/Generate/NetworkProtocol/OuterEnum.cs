@@ -580,6 +580,33 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 领取每日/点赞奖裁决结果码
+	/// </summary>
+	public enum RankClaimResultCode
+	{
+		/// <summary>
+		/// 成功：服务端已投奖励邮件到收件箱、写今日已领标记（奖励在邮件领取时到账）
+		/// </summary>
+		Success = 0,
+		/// <summary>
+		/// 未入榜（每日奖要求在榜；名次 0 = 无成绩/低于入榜要求/超入榜上限）→ 不发
+		/// </summary>
+		NotRanked = 1,
+		/// <summary>
+		/// 无该类奖励（该名次档无每日奖 / 该榜无点赞奖 / 榜 id 查不到 / ClaimType 非法）→ 不发
+		/// </summary>
+		NoReward = 2,
+		/// <summary>
+		/// 今日已领过该类奖（服务端跨天重置，明日可再领）→ 不重复发
+		/// </summary>
+		AlreadyClaimedToday = 3,
+		/// <summary>
+		/// 服务不可用（会话未登录 / 组件或 MongoDB 未就绪）；客户端提示重试、不本地放行
+		/// </summary>
+		ServiceUnavailable = 4
+	}
+
+	/// <summary>
 	/// 兑换裁决结果码
 	/// </summary>
 	public enum RedeemResultCode

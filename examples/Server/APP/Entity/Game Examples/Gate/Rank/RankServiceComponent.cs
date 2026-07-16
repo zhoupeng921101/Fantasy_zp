@@ -19,6 +19,9 @@ public sealed class RankServiceComponent : Entity
     /// <summary>结算幂等标记集合(rank_settle),_id = 榜 id。Init 前 / MongoDB 不可达时为 null。原子条件写防同周期重复结算(设计 33 §3.3)。</summary>
     public IMongoCollection<RankSettleMarkDoc>? SettleMarks;
 
+    /// <summary>每日/点赞领取标记集合(rank_claim),_id = "{account}|{rankId}"。Init 前 / MongoDB 不可达时为 null。原子条件写防同日重领。</summary>
+    public IMongoCollection<RankClaimMarkDoc>? ClaimMarks;
+
     /// <summary>
     /// 榜定义缓存(榜 id → 榜级配置 + 结算字段 + 名次档)。启动时从 rank_def 集合载入,运行时只读裁决/结算用。
     /// 缓存仅服务「榜存在性 / 入榜要求 / 上限 / 结算时机 / 名次档」这类静态配置查询;

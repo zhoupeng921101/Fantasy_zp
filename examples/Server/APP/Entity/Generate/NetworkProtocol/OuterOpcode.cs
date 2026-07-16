@@ -192,6 +192,10 @@ namespace Fantasy
         public const uint C2G_RankQueryRequest = 268445493;
         /// <summary> 服务端查榜响应（前 N 名条目 + 自己名次 + 自己分数）（§3.5） </summary>
         public const uint G2C_RankQueryResponse = 402663221;
+        /// <summary> 客户端领取每日/点赞奖请求（身份从会话取，不携带账号） </summary>
+        public const uint C2G_RankClaimRewardRequest = 268445503;
+        /// <summary> 服务端领取裁决响应（奖励走服务端邮件，不在回包；客户端成功后重拉收件箱见奖） </summary>
+        public const uint G2C_RankClaimRewardResponse = 402663231;
         /// <summary> 客户端提交兑换码请求（玩家身份从会话取，不在请求中携带账号） </summary>
         public const uint C2G_RedeemCodeRequest = 268445494;
         /// <summary> 服务端兑换裁决响应 </summary>

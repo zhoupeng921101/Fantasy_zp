@@ -68,6 +68,12 @@ public sealed class RankDefDoc
 
     /// <summary>名次奖励档(同榜 id 多行聚合,按 RankMin 升序)。对应 rank.xlsx 同 id 多行的 rank_min/rank_max/reward。</summary>
     public List<RankRewardTierDoc> Tiers { get; set; } = new List<RankRewardTierDoc>();
+
+    /// <summary>
+    /// 点赞奖内联奖励条目(榜级不分档,空列表 = 该榜无点赞奖)。对应 rank.xlsx reward_praise。
+    /// 每日领取一次(服务端跨天重置),经 SendMailTo 投点赞奖邮件、领取时全部发放。
+    /// </summary>
+    public List<RewardEntryDoc> PraiseRewards { get; set; } = new List<RewardEntryDoc>();
 }
 
 /// <summary>
@@ -87,6 +93,12 @@ public sealed class RankRewardTierDoc
 
     /// <summary>该档内联奖励条目(空列表 = 该档无奖),结算时全部发放。对应 rank.xlsx reward。</summary>
     public List<RewardEntryDoc> Rewards { get; set; } = new List<RewardEntryDoc>();
+
+    /// <summary>
+    /// 该档每日奖内联奖励条目(空列表 = 该档无每日奖)。对应 rank.xlsx reward_daily(每日按名次档)。
+    /// 每日领取一次(服务端跨天重置),经 SendMailTo 投每日奖邮件、领取时全部发放。
+    /// </summary>
+    public List<RewardEntryDoc> DailyRewards { get; set; } = new List<RewardEntryDoc>();
 }
 
 /// <summary>
@@ -107,4 +119,31 @@ public sealed class RankSettleMarkDoc
 
     /// <summary>实际写入该标记的服务端时刻(Unix 毫秒, UTC),供排查/审计;不参与幂等判定。</summary>
     public long SettledAtMs { get; set; }
+}
+
+/// <summary>
+/// 每日/点赞领取标记文档:某账号在某榜上次领每日奖 / 点赞奖的「当天 00:00 UTC 时刻」(幂等键,防同日重领)。
+/// 集合 rank_claim;_id = "{account}|{rankId}" 复合唯一键(每玩家每榜一条,daily 与 praise 各一字段)。
+/// 「判今日未领 + 写今日已领」用原子条件写(FindOneAndUpdate filter 存量 &lt; 今日 00:00 + upsert):今日时刻 &gt; 存量标记 → 可领、领后写今日时刻;
+/// 同日再领 filter 不匹配 + upsert 撞 _id 主键(11000)→ 判已领跳过(防重领)。持久 MongoDB 跨会话/重启。
+/// IgnoreExtraElements 容忍未来字段增减反序列化不崩(同 RankRewardTierDoc 约定)。
+/// </summary>
+[BsonIgnoreExtraElements]
+public sealed class RankClaimMarkDoc
+{
+    /// <summary>"{account}|{rankId}" 复合唯一键,作为 _id 主键。</summary>
+    [BsonId]
+    public string UniqueKey { get; set; } = string.Empty;
+
+    /// <summary>账号(从会话取的设备账号,非客户端自报)。</summary>
+    public string Account { get; set; } = string.Empty;
+
+    /// <summary>榜 id。</summary>
+    public int RankId { get; set; }
+
+    /// <summary>上次领每日奖的「当天 00:00 UTC 时刻」(服务端 Unix 毫秒;0 = 从未领)。今日 00:00 &gt; 此值 → 今日可领。</summary>
+    public long LastDailyClaimDayMs { get; set; }
+
+    /// <summary>上次领点赞奖的「当天 00:00 UTC 时刻」(服务端 Unix 毫秒;0 = 从未领)。今日 00:00 &gt; 此值 → 今日可领。</summary>
+    public long LastPraiseClaimDayMs { get; set; }
 }

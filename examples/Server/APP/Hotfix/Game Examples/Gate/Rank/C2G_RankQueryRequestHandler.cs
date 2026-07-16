@@ -40,11 +40,16 @@ public sealed class C2G_RankQueryRequestHandler : MessageRPC<C2G_RankQueryReques
         if (resultCode == RankQueryResultCode.Success)
         {
             response.Entries = entries;
+            // 每日/点赞奖今日可领态(复用已算 myRank,只多一次标记读):供客户端画领取按钮/红点。
+            var (dailyClaimable, praiseClaimable) = await RankClaimHelper.ComputeClaimable(
+                service, account, request.RankId, myRank, Fantasy.Helper.TimeHelper.Now);
+            response.DailyClaimable = dailyClaimable;
+            response.PraiseClaimable = praiseClaimable;
         }
         response.MyRank = myRank;
         response.MyScore = myScore;
 
-        Log.Debug($"排行榜查询 account={account} rankId={request.RankId} result={resultCode} entryCount={entries.Count} myRank={myRank} myScore={myScore}");
+        Log.Debug($"排行榜查询 account={account} rankId={request.RankId} result={resultCode} entryCount={entries.Count} myRank={myRank} myScore={myScore} daily={response.DailyClaimable} praise={response.PraiseClaimable}");
     }
 
     /// <summary>从会话取登录时绑定的账号名。无登录标记返回 null。</summary>
