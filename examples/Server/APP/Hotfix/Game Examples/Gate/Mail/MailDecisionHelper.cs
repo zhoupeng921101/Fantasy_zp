@@ -62,7 +62,7 @@ public static class MailDecisionHelper
             }
             var mailId = BroadcastPrefix + template.TemplateId;
             mails.Add(BuildListItem(
-                mailId, template.SenderTextId, template.TitleTextId, template.ContentTextId,
+                mailId, template.Sender, template.Title, template.Content,
                 template.SendUnixMs, template.Rewards.Count > 0, claimedSet.Contains(mailId)));
         }
 
@@ -77,7 +77,7 @@ public static class MailDecisionHelper
             }
             var mailId = DirectedPrefix + doc.DirectedId;
             mails.Add(BuildListItem(
-                mailId, doc.SenderTextId, doc.TitleTextId, doc.ContentTextId,
+                mailId, doc.Sender, doc.Title, doc.Content,
                 doc.SendUnixMs, doc.Rewards.Count > 0, claimedSet.Contains(mailId)));
         }
 
@@ -99,14 +99,14 @@ public static class MailDecisionHelper
 
     /// <summary>列表项走对象池 Create():随响应一起发送,响应 Dispose 时归还池(零 GC 范式)。</summary>
     private static MailListItem BuildListItem(
-        string mailId, int senderTextId, int titleTextId, int contentTextId,
+        string mailId, MailSenderType sender, string title, string content,
         long sendUnixMs, bool hasReward, bool claimed)
     {
         var item = MailListItem.Create();
         item.MailId = mailId;
-        item.SenderTextId = senderTextId;
-        item.TitleTextId = titleTextId;
-        item.ContentTextId = contentTextId;
+        item.Sender = sender;
+        item.Title = title;
+        item.Content = content;
         item.SendUnixMs = sendUnixMs;
         item.HasReward = hasReward;
         item.Claimed = claimed;
@@ -245,7 +245,7 @@ public static class MailDecisionHelper
     /// </summary>
     public static async FTask<string?> SendMailTo(
         MailServiceComponent self, string account,
-        int senderTextId, int titleTextId, int contentTextId, int expireDays, IReadOnlyList<RewardEntryDoc>? rewards)
+        MailSenderType sender, string title, string content, int expireDays, IReadOnlyList<RewardEntryDoc>? rewards)
     {
         if (self.Directed == null)
         {
@@ -257,9 +257,9 @@ public static class MailDecisionHelper
         {
             DirectedId = directedId,
             Account = account,
-            SenderTextId = senderTextId,
-            TitleTextId = titleTextId,
-            ContentTextId = contentTextId,
+            Sender = sender,
+            Title = title,
+            Content = content,
             ExpireDays = expireDays,
             Rewards = rewards != null ? new List<RewardEntryDoc>(rewards) : new List<RewardEntryDoc>(),
             SendUnixMs = TimeHelper.Now

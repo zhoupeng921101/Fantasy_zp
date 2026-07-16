@@ -1301,9 +1301,9 @@ namespace Fantasy
         {
             if (!IsPool()) return; 
             AccountId = default;
-            SenderTextId = default;
-            TitleTextId = default;
-            ContentTextId = default;
+            Sender = default;
+            Title = default;
+            Content = default;
             ExpireDays = default;
             Rewards = default;
             MessageObjectPool<Http2G_GmSendMailRequest>.Return(this);
@@ -1314,11 +1314,11 @@ namespace Fantasy
         [ProtoMember(1)]
         public string AccountId { get; set; }
         [ProtoMember(2)]
-        public int SenderTextId { get; set; }
+        public MailSenderType Sender { get; set; }
         [ProtoMember(3)]
-        public int TitleTextId { get; set; }
+        public string Title { get; set; }
         [ProtoMember(4)]
-        public int ContentTextId { get; set; }
+        public string Content { get; set; }
         [ProtoMember(5)]
         public int ExpireDays { get; set; }
         [ProtoMember(6)]

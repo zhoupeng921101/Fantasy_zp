@@ -25,12 +25,12 @@ public static class RankClaimHelper
     /// <summary>MongoDB 重复键错误码(同 RankSettleHelper)。</summary>
     private const int DuplicateKeyErrorCode = 11000;
 
-    /// <summary>奖励邮件发件人 textId 占位(与结算奖同用排行榜系统发件人,待运营配多语言)。</summary>
-    private const int RankRewardSenderTextId = 110805;
-    /// <summary>每日奖邮件标题 textId 占位(待运营配多语言)。</summary>
-    private const int DailyTitleTextId = 110807;
-    /// <summary>点赞奖邮件标题 textId 占位(待运营配多语言)。</summary>
-    private const int PraiseTitleTextId = 110808;
+    /// <summary>每日奖邮件文案。</summary>
+    private const string DailyTitle = "每日排行奖励";
+    private const string DailyContent = "恭喜获得每日排行奖励，请查收。";
+    /// <summary>点赞奖邮件文案。</summary>
+    private const string PraiseTitle = "点赞奖励";
+    private const string PraiseContent = "感谢您的点赞支持，奖励请查收。";
 
     /// <summary>
     /// 领取一个榜的每日/点赞奖。account 为服务端从会话取的账号(非客户端自报)。
@@ -50,7 +50,8 @@ public static class RankClaimHelper
 
         // 1. 判资格 + 取该类奖励条目。
         List<RewardEntryDoc> rewards;
-        int titleTextId;
+        string title;
+        string content;
         if (claimType == ClaimTypeDaily)
         {
             // 每日奖:须在榜(名次 > 0),按名次落档取每日奖。
@@ -64,13 +65,15 @@ public static class RankClaimHelper
                 return RankClaimResultCode.NotRanked;
             }
             rewards = DailyRewardForRank(def, myRank);
-            titleTextId = DailyTitleTextId;
+            title = DailyTitle;
+            content = DailyContent;
         }
         else if (claimType == ClaimTypePraise)
         {
             // 点赞奖:榜级不分档,不要求在榜。
             rewards = def.PraiseRewards ?? new List<RewardEntryDoc>();
-            titleTextId = PraiseTitleTextId;
+            title = PraiseTitle;
+            content = PraiseContent;
         }
         else
         {
@@ -100,7 +103,7 @@ public static class RankClaimHelper
         // 4. 抢到今日标记 → 经服务端发奖入口投奖励邮件(领取时全部到账)。
         //    发信失败(MongoDB 抖动)→ 标记已占、本日不补发(窄崩溃窗,同结算取舍);记 Warning,仍返成功(标记已记)。
         var mailId = await MailDecisionHelper.SendMailTo(
-            mailComponent, account, RankRewardSenderTextId, titleTextId, titleTextId, 0, rewards);
+            mailComponent, account, MailSenderType.RankReward, title, content, 0, rewards);
         if (mailId == null)
         {
             Log.Warning($"RankClaimHelper: 榜 {rankId} 账号 {account} 领取 type={claimType} 已占今日标记但奖励邮件投递失败(邮件服务抖动),本日不补发。");

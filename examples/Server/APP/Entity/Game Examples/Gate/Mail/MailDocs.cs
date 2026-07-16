@@ -23,14 +23,14 @@ public sealed class MailTemplateDoc
     [BsonId]
     public string TemplateId { get; set; } = string.Empty;
 
-    /// <summary>发件人(多语言 textId 占位)。mail.xlsx 无此列,服务端给固定占位。</summary>
-    public int SenderTextId { get; set; }
+    /// <summary>发件人类型(服务端赋值)。mail.xlsx 无此列。</summary>
+    public MailSenderType Sender { get; set; }
 
-    /// <summary>标题(多语言 textId)。对应 mail.xlsx title。</summary>
-    public int TitleTextId { get; set; }
+    /// <summary>标题(真实文本)。对应 mail.xlsx title。</summary>
+    public string Title { get; set; } = string.Empty;
 
-    /// <summary>正文(多语言 textId)。对应 mail.xlsx desc。</summary>
-    public int ContentTextId { get; set; }
+    /// <summary>正文(真实文本)。对应 mail.xlsx desc。</summary>
+    public string Content { get; set; } = string.Empty;
 
     /// <summary>有效期(天);&lt;=0 用全局 retain_days 兜底。对应 mail.xlsx expire_days。</summary>
     public int ExpireDays { get; set; }
@@ -59,14 +59,14 @@ public sealed class MailDirectedDoc
     /// <summary>目标账号(只有此账号应收此邮件)。</summary>
     public string Account { get; set; } = string.Empty;
 
-    /// <summary>发件人(多语言 textId 占位)。</summary>
-    public int SenderTextId { get; set; }
+    /// <summary>发件人类型(服务端赋值)。</summary>
+    public MailSenderType Sender { get; set; }
 
-    /// <summary>标题(多语言 textId)。</summary>
-    public int TitleTextId { get; set; }
+    /// <summary>标题(真实文本)。</summary>
+    public string Title { get; set; } = string.Empty;
 
-    /// <summary>正文(多语言 textId)。</summary>
-    public int ContentTextId { get; set; }
+    /// <summary>正文(真实文本)。</summary>
+    public string Content { get; set; } = string.Empty;
 
     /// <summary>有效期(天);&lt;=0 用全局 retain_days 兜底。</summary>
     public int ExpireDays { get; set; }

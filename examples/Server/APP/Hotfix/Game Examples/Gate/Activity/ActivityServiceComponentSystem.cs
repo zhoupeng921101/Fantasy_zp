@@ -25,8 +25,7 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
     ///   - Cycle         ← activity.xlsx cycle(1=Daily 跨日重置 / 3=OneShot 永发一次性)
     ///   - Target        ← activity.xlsx target(达标阈值)
     ///   - Rewards       ← activity.xlsx reward(内联奖励条目列表;空列表 = 仅记已发不投邮件)
-    ///   - 邮件字段(展开 mail_def):SenderTextId / TitleTextId / ContentTextId / ExpireDays
-    ///     验收期 textId 未必有多语言条目,客户端展示落空值,不影响 SV 真往返(看 mails 集合 + 抽奖落地)。
+    ///   - 邮件字段(展开 mail_def):Sender(枚举)/ Title / Content(真实文本)/ ExpireDays
     ///   - StartAtMs=0 / EndAtMs=0(永远开放)
     /// 行 1 = 每日登录奖(Tier 4 第 1 子单 PASS 基线,设计 39)。
     /// 行 2 = EVENT 头像解锁活动(Tier 4 第 2 子单,设计 40):累计登录 7 次永久解锁限定头像 avt_star。
@@ -46,9 +45,9 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Cycle = 1,           // Daily
             Target = 1,          // 登录一次即达标
             Rewards = Item(30002, 2),   // 每日登录奖:内联道具样例(生产按运营口径替换)
-            SenderTextId = 110700,
-            TitleTextId = 110732,
-            ContentTextId = 110733,
+            Sender = MailSenderType.System,
+            Title = "每日登录奖励",
+            Content = "感谢每日登录，奖励请查收。",
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
@@ -62,9 +61,9 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Cycle = 3,            // OneShot(永发一次性)
             Target = 7,           // 累计登录 7 次达标
             Rewards = Item(30101, 1),   // EVENT 头像解锁道具 30101 × 1(客户端段解析 UseEffect=5 EVENT 消费)
-            SenderTextId = 110700,// 沿 mail 系统占位发件人 textId(同 activity 1)
-            TitleTextId = 390003, // EVENT 活动结算邮件标题 textId(占位,运营后续配多语言)
-            ContentTextId = 390004,
+            Sender = MailSenderType.System,
+            Title = "累计登录奖励",
+            Content = "累计登录达标，奖励请查收。",
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
@@ -82,9 +81,9 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Cycle = 3,            // OneShot 永发一次性
             Target = 7,           // 累计 7 次登录达标
             Rewards = Item(30002, 1),   // 活动 3 大奖:内联道具样例(生产按运营口径替换)
-            SenderTextId = 110700,
-            TitleTextId = 390005,
-            ContentTextId = 390006,
+            Sender = MailSenderType.System,
+            Title = "累计登录大奖",
+            Content = "累计登录达标，大奖请查收。",
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
@@ -106,9 +105,9 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
                 new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30001, Amount = 1 },
                 new RewardEntryDoc { RewardType = (int)ERewardType.Item, TargetId = 30003, Amount = 1 }
             },
-            SenderTextId = 110700,
-            TitleTextId = 390007,
-            ContentTextId = 390008,
+            Sender = MailSenderType.System,
+            Title = "每周登录奖励",
+            Content = "本周登录达标，奖励请查收。",
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
@@ -131,9 +130,9 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
             Cycle = 3,            // OneShot 永发一次性(累计 100 局后 LastClaimedCycleKey=1,永不重发)
             Target = 100,         // 累计游戏 100 局达标(中期目标;运营可调,SV4 / SV10 不依赖具体数值)
             Rewards = Item(30002, 1),   // 累计 100 局大奖:内联道具样例(生产按运营口径替换)
-            SenderTextId = 110700,
-            TitleTextId = 390009,
-            ContentTextId = 390010,
+            Sender = MailSenderType.System,
+            Title = "游戏局数奖励",
+            Content = "累计游戏达标，奖励请查收。",
             ExpireDays = 14,
             StartAtMs = 0,
             EndAtMs = 0
@@ -198,9 +197,9 @@ public sealed class ActivityServiceComponentAwakeSystem : AwakeSystem<ActivitySe
                 .Set(x => x.Cycle, def.Cycle)
                 .Set(x => x.Target, def.Target)
                 .Set(x => x.Rewards, def.Rewards)
-                .Set(x => x.SenderTextId, def.SenderTextId)
-                .Set(x => x.TitleTextId, def.TitleTextId)
-                .Set(x => x.ContentTextId, def.ContentTextId)
+                .Set(x => x.Sender, def.Sender)
+                .Set(x => x.Title, def.Title)
+                .Set(x => x.Content, def.Content)
                 .Set(x => x.ExpireDays, def.ExpireDays)
                 .Set(x => x.StartAtMs, def.StartAtMs)
                 .Set(x => x.EndAtMs, def.EndAtMs);

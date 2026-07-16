@@ -23,13 +23,22 @@ enum MailClaimResultCode
 	ServiceUnavailable = 5
 }
 
+/// 邮件发件人类型（服务端赋值；客户端可按类型配图标/名称）
+enum MailSenderType
+{
+	/// 系统邮件（运营广播 / GM 默认）
+	System = 0,
+	/// 排行榜奖励（结算 / 每日 / 点赞）
+	RankReward = 1
+}
+
 /// 邮件列表一条：客户端画收件箱用（不含奖励明细，领取时才随响应下发，见 §3.2 注）
 message MailListItem
 {
 	string MailId = 1; /// 邮件标识（领取时回传定位；广播邮件与定向邮件用同一标识空间，客户端无需区分）
-	int32 SenderTextId = 2; /// 发件人（多语言 textId 占位）
-	int32 TitleTextId = 3; /// 标题（多语言 textId 占位）
-	int32 ContentTextId = 4; /// 正文（多语言 textId 占位）
+	MailSenderType Sender = 2; /// 发件人类型（服务端赋值）
+	string Title = 3; /// 标题（真实文本，来自邮件模板）
+	string Content = 4; /// 正文（真实文本，来自邮件模板）
 	int64 SendUnixMs = 5; /// 收件/发件时间（服务端 Unix 毫秒）
 	bool HasReward = 6; /// 是否有附件（内嵌附件非空；客户端据此画领取按钮/红点）
 	bool Claimed = 7; /// 该账号对此邮件的领取态（已领=true / 未领=false）

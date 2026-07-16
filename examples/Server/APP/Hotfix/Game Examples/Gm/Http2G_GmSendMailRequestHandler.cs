@@ -48,7 +48,7 @@ public sealed class Http2G_GmSendMailRequestHandler
         }
 
         var mailId = await MailDecisionHelper.SendMailTo(mailService, request.AccountId,
-            request.SenderTextId, request.TitleTextId, request.ContentTextId, request.ExpireDays, rewards);
+            request.Sender, request.Title, request.Content, request.ExpireDays, rewards);
         if (string.IsNullOrEmpty(mailId))
         {
             response.Code = -3;

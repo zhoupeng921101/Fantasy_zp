@@ -24,16 +24,10 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
     /// <summary>全局过期兜底天数默认值(对应 mail_global.xlsx retain_days=30, SV13)。</summary>
     private const int DefaultGlobalRetainDays = 30;
 
-    /// <summary>发件人 textId 占位(mail.xlsx 无发件人列,服务端给固定占位;客户端查多语言表显示)。</summary>
-    private const int DefaultSenderTextId = 110700;
-
     /// <summary>
     /// 服务端权威运营广播模板表(单一来源)。前 5 条与客户端 mail.xlsx 同源口径一致(SV13):
-    ///   - TemplateId    ← mail.xlsx id          (邮件模板 id)
-    ///   - TitleTextId   ← mail.xlsx title        (标题多语言 textId)
-    ///   - ContentTextId ← mail.xlsx desc         (正文多语言 textId)
-    ///   - ExpireDays    ← mail.xlsx expire_days   (有效期天数)
-    ///   - RewardId      ← mail.xlsx reward_id     (附件礼包随机库 id;指向 gift_pool 的 Index)
+    ///   - TemplateId ← mail.xlsx id;Title ← mail.xlsx title;Content ← mail.xlsx desc(均取真实文本);ExpireDays ← mail.xlsx expire_days。
+    ///   - 发件人 mail.xlsx 无此列,服务端统一赋 MailSenderType.System。
     /// mail.xlsx 的 reward_id=1002 在礼包库未登记(gift_pool 只有 Index=6001),领取按 SV6「成功但奖励列表为空」处理。
     /// 另加 3 条服务端验证样例(覆盖 SV3/SV6/SV2/SV7 各分支,同 redeem 播样例先例,生产可删):
     ///   - 100:reward_id=6001(已登记礼包库),领取可抽出实物(SV3)。
@@ -48,18 +42,18 @@ public sealed class MailServiceComponentAwakeSystem : AwakeSystem<MailServiceCom
         return new List<MailTemplateDoc>
         {
             // ── 与客户端 mail.xlsx 同源(id 1-5,内联样例附件:道具 30001 × 1) ──
-            new MailTemplateDoc { TemplateId = "1", SenderTextId = DefaultSenderTextId, TitleTextId = 110711, ContentTextId = 110721, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "2", SenderTextId = DefaultSenderTextId, TitleTextId = 110712, ContentTextId = 110722, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "3", SenderTextId = DefaultSenderTextId, TitleTextId = 110713, ContentTextId = 110723, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "4", SenderTextId = DefaultSenderTextId, TitleTextId = 110714, ContentTextId = 110724, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
-            new MailTemplateDoc { TemplateId = "5", SenderTextId = DefaultSenderTextId, TitleTextId = 110715, ContentTextId = 110725, ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "1", Sender = MailSenderType.System, Title = "系统奖励", Content = "亲爱的守护者，这是发放给您的奖励，请查收。", ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "2", Sender = MailSenderType.System, Title = "活动奖励", Content = "感谢您参与本次活动，奖励已送达，请及时领取。", ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "3", Sender = MailSenderType.System, Title = "补偿奖励", Content = "因近期维护给您带来不便，特送上补偿，敬请笑纳。", ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "4", Sender = MailSenderType.System, Title = "排行奖励", Content = "恭喜您在排行榜中榜上有名，这是您应得的奖励。", ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "5", Sender = MailSenderType.System, Title = "欢迎回归", Content = "欢迎回到神庙，守护者！这份礼物献给您。", ExpireDays = 14, Rewards = SampleItemReward(), SendUnixMs = nowMs },
             // ── 服务端验证样例(生产可删) ──
             // SV3:有实物附件(多条道具全发),领取全部到账。
-            new MailTemplateDoc { TemplateId = "100", SenderTextId = DefaultSenderTextId, TitleTextId = 110716, ContentTextId = 110726, ExpireDays = 14, Rewards = SampleMultiItemReward(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "100", Sender = MailSenderType.System, Title = "测试-多奖励", Content = "测试模板：多条奖励一次全到账。", ExpireDays = 14, Rewards = SampleMultiItemReward(), SendUnixMs = nowMs },
             // SV6:无奖励邮件(附件空),领取返 NoReward。
-            new MailTemplateDoc { TemplateId = "101", SenderTextId = DefaultSenderTextId, TitleTextId = 110717, ContentTextId = 110727, ExpireDays = 14, Rewards = new List<RewardEntryDoc>(), SendUnixMs = nowMs },
+            new MailTemplateDoc { TemplateId = "101", Sender = MailSenderType.System, Title = "测试-无奖励", Content = "测试模板：无附件通知邮件。", ExpireDays = 14, Rewards = new List<RewardEntryDoc>(), SendUnixMs = nowMs },
             // SV2/SV7:已过期邮件(发件时间 100 天前 + 有效期 1 天)。拉列表不下发,领取返 Expired。
-            new MailTemplateDoc { TemplateId = "102", SenderTextId = DefaultSenderTextId, TitleTextId = 110718, ContentTextId = 110728, ExpireDays = 1, Rewards = SampleMultiItemReward(), SendUnixMs = longAgoMs }
+            new MailTemplateDoc { TemplateId = "102", Sender = MailSenderType.System, Title = "测试-已过期", Content = "测试模板：已过期邮件。", ExpireDays = 1, Rewards = SampleMultiItemReward(), SendUnixMs = longAgoMs }
         };
     }
 

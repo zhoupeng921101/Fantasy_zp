@@ -32,11 +32,9 @@ public static class RankSettleHelper
     /// <summary>MongoDB 重复键错误码。</summary>
     private const int DuplicateKeyErrorCode = 11000;
 
-    /// <summary>结算邮件发件人 textId 占位(设计 22 §3.9 / 设计 33 §3.5)。</summary>
-    private const int SettleSenderTextId = 110805;
-
-    /// <summary>结算邮件标题兜底占位 textId(邮件模板缺失时用,设计 33 §3.5)。</summary>
-    private const int SettleTitleFallbackTextId = 110806;
+    /// <summary>结算邮件标题/正文兜底文案(邮件模板缺失时用,设计 33 §3.5)。</summary>
+    private const string SettleTitleFallback = "排行榜结算奖励";
+    private const string SettleContentFallback = "恭喜您在本期排行榜获得奖励，请查收。";
 
     // ── 结算检查入口(被进程内调度调用,§3.4) ────────────────────────
 
@@ -240,7 +238,7 @@ public static class RankSettleHelper
         }
 
         // 取结算邮件模板(标题/正文/有效期)。mail def id=0 → 整榜不发(§3.2 边界);非 0 但模板缺失 → 兜底占位(§3.5)。
-        var (titleTextId, contentTextId, expireDays) = ResolveSettleMail(mailComponent, def.MailDefId);
+        var (title, content, expireDays) = ResolveSettleMail(mailComponent, def.MailDefId);
         if (def.MailDefId == 0)
         {
             // 榜无结算邮件模板:整榜不发,仅已抢占标记(§3.2 ②)。
@@ -262,7 +260,7 @@ public static class RankSettleHelper
             // 经设计 32 服务端发奖入口投结算邮件:标题/正文/有效期取邮件模板(缺失则兜底占位, ResolveSettleMail 已处理),
             // 发件人统一用结算占位(§3.5),附件用名次档内联奖励条目(§3.2 旁注 / SV5)。
             var mailId = await MailDecisionHelper.SendMailTo(
-                mailComponent, ranked[i].Account, SettleSenderTextId, titleTextId, contentTextId, expireDays, rewards);
+                mailComponent, ranked[i].Account, MailSenderType.RankReward, title, content, expireDays, rewards);
             if (mailId != null)
             {
                 sentCount++;
@@ -302,14 +300,14 @@ public static class RankSettleHelper
     /// mail def id 在运营模板缓存(键为模板 id 字符串)命中 → 用模板的标题/正文/有效期;
     /// 不命中(模板缺失)→ 用兜底占位标题(§3.5),有效期取 0(由邮件入口按全局兜底天数处理)。
     /// </summary>
-    private static (int titleTextId, int contentTextId, int expireDays) ResolveSettleMail(
+    private static (string title, string content, int expireDays) ResolveSettleMail(
         MailServiceComponent mailComponent, int mailDefId)
     {
         if (mailDefId != 0 && mailComponent.TemplateCache.TryGetValue(mailDefId.ToString(), out var template))
         {
-            return (template.TitleTextId, template.ContentTextId, template.ExpireDays);
+            return (template.Title, template.Content, template.ExpireDays);
         }
-        return (SettleTitleFallbackTextId, SettleTitleFallbackTextId, 0);
+        return (SettleTitleFallback, SettleContentFallback, 0);
     }
 
     // ── 开服基准时刻(type=1 开服 X 天用) ─────────────────────────

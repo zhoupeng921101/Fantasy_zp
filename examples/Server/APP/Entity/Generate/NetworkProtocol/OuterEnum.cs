@@ -379,6 +379,21 @@ namespace Fantasy
 	}
 
 	/// <summary>
+	/// 邮件发件人类型（服务端赋值；客户端可按类型配图标/名称）
+	/// </summary>
+	public enum MailSenderType
+	{
+		/// <summary>
+		/// 系统邮件（运营广播 / GM 默认）
+		/// </summary>
+		System = 0,
+		/// <summary>
+		/// 排行榜奖励（结算 / 每日 / 点赞）
+		/// </summary>
+		RankReward = 1
+	}
+
+	/// <summary>
 	/// 交付订单裁决结果码
 	/// </summary>
 	public enum DeliverOrderResultCode

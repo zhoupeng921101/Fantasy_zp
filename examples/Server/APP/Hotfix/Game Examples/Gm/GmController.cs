@@ -76,9 +76,9 @@ public sealed class GmController : ControllerBase
             new Http2G_GmSendMailRequest
             {
                 AccountId = dto.AccountId ?? string.Empty,
-                SenderTextId = dto.SenderTextId,
-                TitleTextId = dto.TitleTextId,
-                ContentTextId = dto.ContentTextId,
+                Sender = dto.Sender,
+                Title = dto.Title ?? string.Empty,
+                Content = dto.Content ?? string.Empty,
                 ExpireDays = dto.ExpireDays,
                 Rewards = dto.Rewards ?? string.Empty,
             },
@@ -177,13 +177,13 @@ public sealed class GmChangeCurrencyDto
     public string? Reason { get; set; }
 }
 
-/// <summary>GM 发邮件入参(文本走 TextId;奖励走紧凑字符串 Rewards,格式 `Currency,4,5|Item,30001,2`,空串=无奖励)。</summary>
+/// <summary>GM 发邮件入参(标题/正文直传文本,发件人走 MailSenderType 枚举;奖励走紧凑字符串 Rewards,格式 `Currency,4,5|Item,30001,2`,空串=无奖励)。</summary>
 public sealed class GmSendMailDto
 {
     public string? AccountId { get; set; }
-    public int SenderTextId { get; set; }
-    public int TitleTextId { get; set; }
-    public int ContentTextId { get; set; }
+    public MailSenderType Sender { get; set; }
+    public string? Title { get; set; }
+    public string? Content { get; set; }
     public int ExpireDays { get; set; }
     public string? Rewards { get; set; }
 }

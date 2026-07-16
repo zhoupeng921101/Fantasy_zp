@@ -2520,9 +2520,9 @@ namespace Fantasy
         {
             if (!IsPool()) return; 
             MailId = default;
-            SenderTextId = default;
-            TitleTextId = default;
-            ContentTextId = default;
+            Sender = default;
+            Title = default;
+            Content = default;
             SendUnixMs = default;
             HasReward = default;
             Claimed = default;
@@ -2534,20 +2534,20 @@ namespace Fantasy
         [ProtoMember(1)]
         public string MailId { get; set; }
         /// <summary>
-        /// 发件人（多语言 textId 占位）
+        /// 发件人类型（服务端赋值）
         /// </summary>
         [ProtoMember(2)]
-        public int SenderTextId { get; set; }
+        public MailSenderType Sender { get; set; }
         /// <summary>
-        /// 标题（多语言 textId 占位）
+        /// 标题（真实文本，来自邮件模板）
         /// </summary>
         [ProtoMember(3)]
-        public int TitleTextId { get; set; }
+        public string Title { get; set; }
         /// <summary>
-        /// 正文（多语言 textId 占位）
+        /// 正文（真实文本，来自邮件模板）
         /// </summary>
         [ProtoMember(4)]
-        public int ContentTextId { get; set; }
+        public string Content { get; set; }
         /// <summary>
         /// 收件/发件时间（服务端 Unix 毫秒）
         /// </summary>

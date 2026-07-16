@@ -13,7 +13,7 @@ namespace Fantasy;
 /// 活动配置文档:服务端权威活动定义(配置表的一行)。
 /// 集合 activity_def;_id = activity_id。
 /// 与设计 39 §3.1 字段集对应,但 mail_def 不再是「指向 mail_template 的间接 id」,
-/// 改为直接内嵌邮件字段(SenderTextId / TitleTextId / ContentTextId / ExpireDays):
+/// 改为直接内嵌邮件字段(Sender 枚举 / Title / Content 真实文本 / ExpireDays):
 ///   — 服务端工程无 Luban 集成(同 30/31/32 先例),活动配置以本表为权威源(同 rank_def / mail_template 范式);
 ///   — 32 SendMailTo 入口签名直接吃散字段(sender/title/content/expireDays/rewardId),
 ///     不另引「activity 查 mail 模板」中间层(减少一次查表 + 避免循环依赖)。
@@ -51,14 +51,14 @@ public sealed class ActivityDefDoc
     /// <summary>达标发放的内联奖励条目(空列表 = 仅记已发不投邮件),达标时全部发放。对应 activity.xlsx reward。</summary>
     public List<RewardEntryDoc> Rewards { get; set; } = new List<RewardEntryDoc>();
 
-    /// <summary>活动结算邮件发件人 textId(占位口径同 mail.xlsx 110700)。对应 39 §3.1 mail_def 展开。</summary>
-    public int SenderTextId { get; set; }
+    /// <summary>活动结算邮件发件人类型。对应 39 §3.1 mail_def 展开。</summary>
+    public MailSenderType Sender { get; set; }
 
-    /// <summary>活动结算邮件标题 textId(多语言)。对应 39 §3.1 mail_def 展开。</summary>
-    public int TitleTextId { get; set; }
+    /// <summary>活动结算邮件标题(真实文本)。对应 39 §3.1 mail_def 展开。</summary>
+    public string Title { get; set; } = string.Empty;
 
-    /// <summary>活动结算邮件正文 textId。对应 39 §3.1 mail_def 展开。</summary>
-    public int ContentTextId { get; set; }
+    /// <summary>活动结算邮件正文(真实文本)。对应 39 §3.1 mail_def 展开。</summary>
+    public string Content { get; set; } = string.Empty;
 
     /// <summary>活动邮件有效期天数(投出后该天数内未领过期;0 = 用全局 retain_days 兜底)。对应 39 §3.1 mail_def 展开。</summary>
     public int ExpireDays { get; set; }

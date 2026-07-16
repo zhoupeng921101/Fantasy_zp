@@ -281,7 +281,7 @@ public static class ActivityEvalHelper
         }
 
         var mailIdOrNull = await MailDecisionHelper.SendMailTo(
-            mail, account, def.SenderTextId, def.TitleTextId, def.ContentTextId, def.ExpireDays, def.Rewards);
+            mail, account, def.Sender, def.Title, def.Content, def.ExpireDays, def.Rewards);
         if (mailIdOrNull == null)
         {
             // SendMailTo 返 null = mail.Directed 未就绪。同样属漏发窄窗(运营可补)。
